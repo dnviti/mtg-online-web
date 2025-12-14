@@ -45,6 +45,11 @@ spec:
             httpGet:
               path: /api/health
               port: http
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: cards-storage
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       {{- with .Values.nodeSelector }}
@@ -59,3 +64,9 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: cards-storage
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (include "mtg-draft-maker.fullname" .) }}
+        {{- end }}
