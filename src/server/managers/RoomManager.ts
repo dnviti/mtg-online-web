@@ -3,6 +3,8 @@ interface Player {
   name: string;
   isHost: boolean;
   role: 'player' | 'spectator';
+  ready?: boolean;
+  deck?: any[];
 }
 
 interface ChatMessage {
@@ -17,7 +19,7 @@ interface Room {
   hostId: string;
   players: Player[];
   packs: any[]; // Store generated packs (JSON)
-  status: 'waiting' | 'drafting' | 'deck_building' | 'finished';
+  status: 'waiting' | 'drafting' | 'deck_building' | 'playing' | 'finished';
   messages: ChatMessage[];
   maxPlayers: number;
 }
@@ -30,13 +32,25 @@ export class RoomManager {
     const room: Room = {
       id: roomId,
       hostId,
-      players: [{ id: hostId, name: hostName, isHost: true, role: 'player' }],
+      players: [{ id: hostId, name: hostName, isHost: true, role: 'player', ready: false }],
       packs,
       status: 'waiting',
       messages: [],
       maxPlayers: 8
     };
     this.rooms.set(roomId, room);
+    return room;
+  }
+
+  setPlayerReady(roomId: string, playerId: string, deck: any[]): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    const player = room.players.find(p => p.id === playerId);
+    if (player) {
+      player.ready = true;
+      player.deck = deck;
+    }
     return room;
   }
 

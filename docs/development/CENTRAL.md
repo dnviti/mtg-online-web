@@ -15,6 +15,8 @@ The project has successfully migrated from a .NET backend to a Node.js Modular M
 -   **[2025-12-14] Draft & Deck Builder**: Implemented full draft simulation (Pick/Pass) and Deck Construction with land station. [Link](./devlog/2025-12-14-223000_draft_and_deckbuilder.md)
 -   **[2025-12-14] Image Caching**: Implemented server-side image caching to ensure reliable card rendering. [Link](./devlog/2025-12-14-224500_image_caching.md)
 -   **[2025-12-14] Fix Draft Images**: Fixed image loading in Draft UI by adding proxy configuration and correcting property access. [Link](./devlog/2025-12-14-230000_fix_draft_images.md)
+-   **[2025-12-14] Fix Submit Deck**: Implemented `player_ready` handler and state transition to auto-start game when deck is submitted. [Link](./devlog/2025-12-14-233000_fix_submit_deck.md)
+-   **[2025-12-14] Fix Hooks & Waiting State**: Resolved React hook violation crash and added proper waiting screen for ready players. [Link](./devlog/2025-12-14-234500_fix_hooks_and_waiting_state.md)
 
 ## Active Modules
 1.  **Cube Manager**: Fully functional (Parsing, Fetching, Pack Generation).

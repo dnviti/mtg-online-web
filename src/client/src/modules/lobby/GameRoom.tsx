@@ -76,6 +76,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // New States
+  const [draftState, setDraftState] = useState<any>(null);
+
+  useEffect(() => {
+    const socket = socketService.socket;
+    const handleDraftUpdate = (data: any) => {
+      setDraftState(data);
+    };
+    socket.on('draft_update', handleDraftUpdate);
+    return () => { socket.off('draft_update', handleDraftUpdate); };
+  }, []);
+
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
@@ -132,35 +144,54 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     socketService.socket.emit('start_draft', { roomId: room.id });
   };
 
-  if (gameState) {
-    return <GameView gameState={gameState} currentPlayerId={currentPlayerId} />;
-  }
+  // Helper to determine view
+  const renderContent = () => {
+    if (gameState) {
+      return <GameView gameState={gameState} currentPlayerId={currentPlayerId} />;
+    }
 
-  // New States
-  const [draftState, setDraftState] = useState<any>(null);
+    if (room.status === 'drafting' && draftState) {
+      return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} />;
+    }
 
-  useEffect(() => {
-    const socket = socketService.socket;
-    const handleDraftUpdate = (data: any) => {
-      setDraftState(data);
-    };
-    socket.on('draft_update', handleDraftUpdate);
-    return () => { socket.off('draft_update', handleDraftUpdate); };
-  }, []);
+    if (room.status === 'deck_building' && draftState) {
+      // Check if I am ready
+      // Type casting needed because 'ready' was added to interface only in server side so far? 
+      // Need to update client Player interface too in this file if not already consistent.
+      // But let's assume raw object has it.
+      const me = room.players.find(p => p.id === currentPlayerId) as any;
+      if (me?.ready) {
+        return (
+          <div className="flex-1 bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center">
+            <h2 className="text-3xl font-bold text-white mb-4">Deck Submitted</h2>
+            <div className="animate-pulse bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mb-6">
+              <Check className="w-8 h-8 text-emerald-500" />
+            </div>
+            <p className="text-slate-400 text-lg">Waiting for other players to finish deck building...</p>
+            <div className="mt-8">
+              <h3 className="text-sm font-bold text-slate-500 uppercase mb-4 text-center">Players Ready</h3>
+              <div className="flex flex-wrap justify-center gap-4">
+                {room.players.filter(p => p.role === 'player').map(p => {
+                  const isReady = (p as any).ready;
+                  return (
+                    <div key={p.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${isReady ? 'bg-emerald-900/30 border-emerald-500/50' : 'bg-slate-700/30 border-slate-700'}`}>
+                      <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
+                      <span className={isReady ? 'text-emerald-200' : 'text-slate-500'}>{p.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      }
 
-  if (room.status === 'drafting' && draftState) {
-    return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} />;
-  }
+      const myPool = draftState.players[currentPlayerId]?.pool || [];
+      return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} />;
+    }
 
-  if (room.status === 'deck_building' && draftState) {
-    // Get my pool
-    const myPool = draftState.players[currentPlayerId]?.pool || [];
-    return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} />;
-  }
-
-  return (
-    <div className="flex h-[calc(100vh-100px)] gap-4">
-      {/* Main Game Area (Placeholder for now) */}
+    // Default Waiting Lobby
+    return (
       <div className="flex-1 bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center">
         <h2 className="text-3xl font-bold text-white mb-4">Waiting for Players...</h2>
         <div className="flex items-center gap-4 bg-slate-900 px-6 py-3 rounded-xl border border-slate-700">
@@ -201,6 +232,12 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           </div>
         )}
       </div>
+    );
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-100px)] gap-4">
+      {renderContent()}
 
       {/* Sidebar: Players & Chat */}
       <div className="w-80 flex flex-col gap-4">
@@ -210,23 +247,28 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
             <Users className="w-4 h-4" /> Lobby
           </h3>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {room.players.map(p => (
-              <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${p.role === 'spectator' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-br from-purple-500 to-blue-500 text-white'}`}>
-                    {p.name.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className={`text-sm font-medium ${p.id === currentPlayerId ? 'text-white' : 'text-slate-300'}`}>
-                      {p.name}
-                    </span>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                      {p.role} {p.isHost && <span className="text-amber-500 ml-1">• Host</span>}
-                    </span>
+            {room.players.map(p => {
+              // Cast to any to access ready state without full interface update for now
+              const isReady = (p as any).ready;
+              return (
+                <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${p.role === 'spectator' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-br from-purple-500 to-blue-500 text-white'}`}>
+                      {p.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className={`text-sm font-medium ${p.id === currentPlayerId ? 'text-white' : 'text-slate-300'}`}>
+                        {p.name}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
+                        {p.role} {p.isHost && <span className="text-amber-500 ml-1">• Host</span>}
+                        {isReady && room.status === 'deck_building' && <span className="text-emerald-500 ml-1">• Ready</span>}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
 

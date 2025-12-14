@@ -87,7 +87,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ roomId, curren
     // Actually, user rules say "Host ... guided ... configuring packs ... multiplayer".
 
     // I'll emit 'submit_deck' event (need to handle in server)
-    socketService.socket.emit('player_ready', { roomId, deck: fullDeck });
+    socketService.socket.emit('player_ready', { roomId, playerId: currentPlayerId, deck: fullDeck });
   };
 
   return (

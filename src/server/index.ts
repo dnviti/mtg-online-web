@@ -104,16 +104,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('pick_card', ({ roomId, cardId }) => {
-    // Find player from socket? Actually we trust clientId sent or inferred (but simpler to trust socket for now if we tracked map, but here just use helper?)
-    // We didn't store socket->player map here globally. We'll pass playerId in payload for simplicity but validation later.
-    // Wait, let's look at signature.. pickCard(roomId, playerId, cardId)
-
-    // Need playerId. Let's ask client to send it.
-    // Or we can find it if we know connection...
-    // Let's assume payload: { roomId, playerId, cardId }
-  });
-
   // Revised pick_card to actual impl
   socket.on('pick_card', ({ roomId, playerId, cardId }) => {
     const draft = draftManager.pickCard(roomId, playerId, cardId);
@@ -127,6 +117,45 @@ io.on('connection', (socket) => {
           room.status = 'deck_building';
           io.to(roomId).emit('room_update', room);
         }
+      }
+    }
+  });
+
+  socket.on('player_ready', ({ roomId, playerId, deck }) => {
+    const room = roomManager.setPlayerReady(roomId, playerId, deck);
+    if (room) {
+      io.to(roomId).emit('room_update', room);
+
+      // Check if all active players are ready
+      const activePlayers = room.players.filter(p => p.role === 'player');
+      if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
+        console.log(`All players ready in room ${roomId}. Starting game...`);
+
+        room.status = 'playing';
+        io.to(roomId).emit('room_update', room);
+
+        // Initialize Game
+        const game = gameManager.createGame(roomId, room.players);
+
+        // Load decks
+        activePlayers.forEach(p => {
+          if (p.deck) {
+            p.deck.forEach((card: any) => {
+              gameManager.addCardToGame(roomId, {
+                ownerId: p.id,
+                controllerId: p.id,
+                oracleId: card.oracle_id || card.id,
+                name: card.name,
+                // Prioritize 'image' property which might hold the cached URL
+                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                zone: 'library'
+              });
+            });
+            // TODO: Shuffle library
+          }
+        });
+
+        io.to(roomId).emit('game_update', game);
       }
     }
   });
