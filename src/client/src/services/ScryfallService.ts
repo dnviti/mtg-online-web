@@ -85,4 +85,63 @@ export class ScryfallService {
     if (identifier.name) return this.cacheByName.get(identifier.name.toLowerCase());
     return undefined;
   }
+
+  async fetchSets(): Promise<ScryfallSet[]> {
+    try {
+      const response = await fetch('https://api.scryfall.com/sets');
+      const data = await response.json();
+      if (data.data) {
+        return data.data.filter((s: any) =>
+          ['core', 'expansion', 'masters', 'draft_innovation'].includes(s.set_type)
+        ).map((s: any) => ({
+          code: s.code,
+          name: s.name,
+          set_type: s.set_type,
+          released_at: s.released_at,
+          icon_svg_uri: s.icon_svg_uri
+        }));
+      }
+    } catch (e) {
+      console.error("Error fetching sets", e);
+    }
+    return [];
+  }
+
+  async fetchSetCards(setCode: string, onProgress?: (current: number) => void): Promise<ScryfallCard[]> {
+    let cards: ScryfallCard[] = [];
+    let url = `https://api.scryfall.com/cards/search?q=set:${setCode}&unique=cards`;
+
+    while (url) {
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.data) {
+          // Should we filter here strictly? The API query 'set:code' + 'unique=cards' is usually correct.
+          // We might want to filter out Basics if we don't want them in booster generation, but standard boosters contain basics.
+          // However, user setting for "Ignore Basic Lands" is handled in PackGeneratorService.processCards.
+          // So here we should fetch everything.
+          cards.push(...data.data);
+          if (onProgress) onProgress(cards.length);
+        }
+        if (data.has_more && data.next_page) {
+          url = data.next_page;
+          await new Promise(r => setTimeout(r, 100)); // Respect API limits
+        } else {
+          url = '';
+        }
+      } catch (e) {
+        console.error(e);
+        break;
+      }
+    }
+    return cards;
+  }
+}
+
+export interface ScryfallSet {
+  code: string;
+  name: string;
+  set_type: string;
+  released_at: string;
+  icon_svg_uri: string;
 }

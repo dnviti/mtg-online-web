@@ -217,6 +217,77 @@ export class PackGeneratorService {
     return { selected, remainingPool, success: selected.length === count };
   }
 
+  generateBoosterBox(setCards: ProcessedPools, numberOfPacks: number, settings: PackGenerationSettings): Pack[] {
+    const packs: Pack[] = [];
+    for (let i = 1; i <= numberOfPacks; i++) {
+      const newPack = this.buildTokenizedPack(setCards, i, 'Booster', settings.rarityMode);
+      if (newPack) packs.push(newPack);
+    }
+    return packs;
+  }
+
+  private buildTokenizedPack(pools: ProcessedPools, packId: number, setName: string, rarityMode: 'peasant' | 'standard'): Pack | null {
+    const packCards: DraftCard[] = [];
+    const namesInThisPack = new Set<string>();
+
+    const COMMONS_COUNT = 10;
+    const UNCOMMONS_COUNT = 3;
+
+    if (rarityMode === 'standard') {
+      // Rare/Mythic logic
+      const isMythic = Math.random() < 0.125;
+      let rPool = isMythic ? pools.mythics : pools.rares;
+      if (rPool.length === 0) rPool = pools.rares; // Fallback
+      if (rPool.length === 0) rPool = pools.mythics; // Fallback
+
+      if (rPool.length > 0) {
+        const pick = this.sampleUnique(rPool, 1, namesInThisPack);
+        if (pick.length) {
+          packCards.push(...pick);
+          namesInThisPack.add(pick[0].name);
+        }
+      }
+    }
+
+    // Uncommons
+    const uPicks = this.sampleUnique(pools.uncommons, UNCOMMONS_COUNT, namesInThisPack);
+    packCards.push(...uPicks);
+    uPicks.forEach(p => namesInThisPack.add(p.name));
+
+    // Commons
+    const cPicks = this.sampleUnique(pools.commons, COMMONS_COUNT, namesInThisPack);
+    packCards.push(...cPicks);
+
+    if (packCards.length < (rarityMode === 'standard' ? 14 : 13)) return null;
+
+    // Sort
+    const rarityWeight: { [key: string]: number } = { 'mythic': 4, 'rare': 3, 'uncommon': 2, 'common': 1 };
+    packCards.sort((a, b) => (rarityWeight[b.rarity] || 0) - (rarityWeight[a.rarity] || 0));
+
+    return { id: packId, setName: setName, cards: packCards };
+  }
+
+  private sampleUnique(pool: DraftCard[], count: number, excludeNames: Set<string>): DraftCard[] {
+    // Filter out excluded names
+    const candidates = pool.filter(c => !excludeNames.has(c.name));
+    if (candidates.length < count) {
+      // Not enough unique cards, just take what we have
+      return candidates;
+    }
+
+    const picked: DraftCard[] = [];
+    const indices = new Set<number>();
+
+    while (picked.length < count) {
+      const idx = Math.floor(Math.random() * candidates.length);
+      if (!indices.has(idx)) {
+        indices.add(idx);
+        picked.push(candidates[idx]);
+      }
+    }
+    return picked;
+  }
+
   private shuffle(array: any[]) {
     let currentIndex = array.length, randomIndex;
     const newArray = [...array];
