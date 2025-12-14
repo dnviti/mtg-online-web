@@ -36,6 +36,13 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Serve Frontend in Production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.resolve(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+
+}
+
 app.post('/api/cards/cache', async (req: Request, res: Response) => {
   try {
     const { cards } = req.body;
@@ -200,6 +207,19 @@ io.on('connection', (socket) => {
     // TODO: Handle player disconnect (mark as offline but don't kick immediately)
   });
 });
+
+
+// Handle Client-Side Routing (Catch-All) - Must be last
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (_req: Request, res: Response) => {
+    // Check if request is for API
+    if (_req.path.startsWith('/api') || _req.path.startsWith('/socket.io')) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const distPath = path.resolve(process.cwd(), 'dist');
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 import os from 'os';
 

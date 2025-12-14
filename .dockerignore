@@ -1,0 +1,8 @@
+.git
+node_modules
+src/node_modules
+src/dist
+src/client/dist
+.env
+.DS_Store
+coverage
