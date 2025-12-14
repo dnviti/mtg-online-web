@@ -1,7 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Play, Copy, Check } from 'lucide-react';
+import { Users, MessageSquare, Send, Play, Copy, Check, Layers } from 'lucide-react';
+import { GameView } from '../game/GameView';
+import { DraftView } from '../draft/DraftView';
+import { DeckBuilderView } from '../draft/DeckBuilderView';
 
 interface Player {
   id: string;
@@ -35,6 +38,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(initialRoom.messages || []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [gameState, setGameState] = useState<any>(null);
 
   useEffect(() => {
     setRoom(initialRoom);
@@ -53,12 +57,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       setMessages(prev => [...prev, msg]);
     };
 
+    const handleGameUpdate = (game: any) => {
+      setGameState(game);
+    };
+
     socket.on('room_update', handleRoomUpdate);
     socket.on('new_message', handleNewMessage);
+    socket.on('game_update', handleGameUpdate);
 
     return () => {
       socket.off('room_update', handleRoomUpdate);
       socket.off('new_message', handleNewMessage);
+      socket.off('game_update', handleGameUpdate);
     };
   }, []);
 
@@ -80,9 +90,73 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   };
 
   const copyRoomId = () => {
-    navigator.clipboard.writeText(room.id);
-    // Could show a toast here
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(room.id).catch(err => {
+        console.error('Failed to copy: ', err);
+        // Fallback could go here
+      });
+    } else {
+      // Fallback for non-secure context or older browsers
+      console.warn('Clipboard API not available');
+      const textArea = document.createElement("textarea");
+      textArea.value = room.id;
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+      } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+      }
+      document.body.removeChild(textArea);
+    }
   };
+
+  const handleStartGame = () => {
+    // Create a test deck for each player for now
+    const testDeck = Array.from({ length: 40 }).map((_, i) => ({
+      id: `card-${i}`,
+      name: i % 2 === 0 ? "Mountain" : "Lightning Bolt",
+      image_uris: {
+        normal: i % 2 === 0
+          ? "https://cards.scryfall.io/normal/front/1/9/194459f0-2586-444a-be7d-786d5e7e9bc4.jpg" // Mountain
+          : "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb211a7.jpg" // Bolt
+      }
+    }));
+
+    const decks = room.players.reduce((acc, p) => ({ ...acc, [p.id]: testDeck }), {});
+
+    socketService.socket.emit('start_game', { roomId: room.id, decks });
+  };
+
+  const handleStartDraft = () => {
+    socketService.socket.emit('start_draft', { roomId: room.id });
+  };
+
+  if (gameState) {
+    return <GameView gameState={gameState} currentPlayerId={currentPlayerId} />;
+  }
+
+  // New States
+  const [draftState, setDraftState] = useState<any>(null);
+
+  useEffect(() => {
+    const socket = socketService.socket;
+    const handleDraftUpdate = (data: any) => {
+      setDraftState(data);
+    };
+    socket.on('draft_update', handleDraftUpdate);
+    return () => { socket.off('draft_update', handleDraftUpdate); };
+  }, []);
+
+  if (room.status === 'drafting' && draftState) {
+    return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} />;
+  }
+
+  if (room.status === 'deck_building' && draftState) {
+    // Get my pool
+    const myPool = draftState.players[currentPlayerId]?.pool || [];
+    return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} />;
+  }
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
@@ -108,13 +182,23 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
         </div>
 
         {room.players.find(p => p.id === currentPlayerId)?.isHost && (
-          <button
-            onClick={() => socketService.socket.emit('start_game', { roomId: room.id })}
-            disabled={room.status !== 'waiting'}
-            className="mt-8 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Play className="w-5 h-5" /> {room.status === 'waiting' ? 'Start Draft' : 'Draft in Progress'}
-          </button>
+          <div className="flex flex-col gap-2 mt-8">
+            <button
+              onClick={handleStartDraft}
+              disabled={room.status !== 'waiting'}
+              className="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Layers className="w-5 h-5" /> Start Real Draft
+            </button>
+            <span className="text-xs text-slate-500 text-center">- OR -</span>
+            <button
+              onClick={handleStartGame}
+              disabled={room.status !== 'waiting'}
+              className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs uppercase tracking-wider"
+            >
+              <Play className="w-4 h-4" /> Quick Play (Test Decks)
+            </button>
+          </div>
         )}
       </div>
 

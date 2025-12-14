@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { socketService } from '../../services/SocketService';
 import { GameRoom } from './GameRoom';
 import { Pack } from '../../services/PackGeneratorService';
-import { Users, PlusCircle, LogIn, AlertCircle } from 'lucide-react';
+import { Users, PlusCircle, LogIn, AlertCircle, Loader2 } from 'lucide-react';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
@@ -38,10 +38,48 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
     connect();
 
     try {
+      // Collect all cards
+      const allCards = generatedPacks.flatMap(p => p.cards);
+      // Deduplicate by Scryfall ID
+      const uniqueCards = Array.from(new Map(allCards.map(c => [c.scryfallId, c])).values());
+
+      // Prepare payload for server (generic structure expected by CardService)
+      const cardsToCache = uniqueCards.map(c => ({
+        id: c.scryfallId,
+        image_uris: { normal: c.image }
+      }));
+
+      // Cache images on server
+      const cacheResponse = await fetch('/api/cards/cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards: cardsToCache })
+      });
+
+      if (!cacheResponse.ok) {
+        throw new Error('Failed to cache images');
+      }
+
+      const cacheResult = await cacheResponse.json();
+      console.log('Cached result:', cacheResult);
+
+      // Transform packs to use local URLs
+      // Note: For multiplayer, clients need to access this URL.
+      const baseUrl = `${window.location.protocol}//${window.location.host}/cards`;
+
+      const updatedPacks = generatedPacks.map(pack => ({
+        ...pack,
+        cards: pack.cards.map(c => ({
+          ...c,
+          // Update the single image property used by DraftCard
+          image: `${baseUrl}/${c.scryfallId}.jpg`
+        }))
+      }));
+
       const response = await socketService.emitPromise('create_room', {
         hostId: playerId,
         hostName: playerName,
-        packs: generatedPacks
+        packs: updatedPacks
       });
 
       if (response.success) {
@@ -50,6 +88,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
         setError(response.message || 'Failed to create room');
       }
     } catch (err: any) {
+      console.error(err);
       setError(err.message || 'Connection error');
     } finally {
       setLoading(false);
@@ -130,7 +169,8 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
                 disabled={loading || generatedPacks.length === 0}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-lg transform transition hover:scale-[1.02] flex justify-center items-center gap-2 disabled:cursor-not-allowed disabled:grayscale"
               >
-                <PlusCircle className="w-5 h-5" /> {loading ? 'Creating...' : 'Create Private Room'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
+                {loading ? 'Creating...' : 'Create Private Room'}
               </button>
               {generatedPacks.length === 0 && (
                 <p className="text-xs text-amber-500 text-center font-bold">Requires packs from Draft Management tab.</p>

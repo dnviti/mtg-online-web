@@ -11,6 +11,10 @@ The project has successfully migrated from a .NET backend to a Node.js Modular M
 -   **[2025-12-14] UI Tweak**: Auto-configured generation mode based on source selection. [Link](./devlog/2025-12-14-212000_ui_simplification.md)
 -   **[2025-12-14] Multiplayer Game Plan**: Plan for Real Game & Online Multiplayer. [Link](./devlog/2025-12-14-212500_multiplayer_game_plan.md)
 -   **[2025-12-14] Bug Fix**: Fixed `crypto.randomUUID` error for non-secure contexts. [Link](./devlog/2025-12-14-214400_fix_uuid_error.md)
+-   **[2025-12-14] Game Interactions**: Implemented basic game loop, zone management, and drag-and-drop gameplay. [Link](./devlog/2025-12-14-220000_game_interactions.md)
+-   **[2025-12-14] Draft & Deck Builder**: Implemented full draft simulation (Pick/Pass) and Deck Construction with land station. [Link](./devlog/2025-12-14-223000_draft_and_deckbuilder.md)
+-   **[2025-12-14] Image Caching**: Implemented server-side image caching to ensure reliable card rendering. [Link](./devlog/2025-12-14-224500_image_caching.md)
+-   **[2025-12-14] Fix Draft Images**: Fixed image loading in Draft UI by adding proxy configuration and correcting property access. [Link](./devlog/2025-12-14-230000_fix_draft_images.md)
 
 ## Active Modules
 1.  **Cube Manager**: Fully functional (Parsing, Fetching, Pack Generation).

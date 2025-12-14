@@ -17,7 +17,7 @@ interface Room {
   hostId: string;
   players: Player[];
   packs: any[]; // Store generated packs (JSON)
-  status: 'waiting' | 'drafting' | 'finished';
+  status: 'waiting' | 'drafting' | 'deck_building' | 'finished';
   messages: ChatMessage[];
   maxPlayers: number;
 }
