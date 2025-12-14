@@ -1,11 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users } from 'lucide-react';
 import { CardParserService } from '../../services/CardParserService';
 import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
 
-export const CubeManager: React.FC = () => {
+interface CubeManagerProps {
+  packs: Pack[];
+  setPacks: React.Dispatch<React.SetStateAction<Pack[]>>;
+  onGoToLobby: () => void;
+}
+
+export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoToLobby }) => {
   // --- Services ---
   // --- Services ---
   // Memoize services to persist cache across renders
@@ -26,8 +32,6 @@ export const CubeManager: React.FC = () => {
     ignoreCommander: true,
     ignoreTokens: true
   });
-
-  const [packs, setPacks] = useState<Pack[]>([]);
 
   // UI State
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('list');
@@ -378,10 +382,22 @@ export const CubeManager: React.FC = () => {
             </h2>
           </div>
 
-          <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
-            <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
-            <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
-            <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>
+          <div className="flex gap-2">
+            {/* Play Button */}
+            {packs.length > 0 && (
+              <button
+                onClick={onGoToLobby}
+                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+              >
+                <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
+              </button>
+            )}
+
+            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+              <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>
+            </div>
           </div>
         </div>
 

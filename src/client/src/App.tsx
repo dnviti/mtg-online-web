@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { Layers, Box, Trophy } from 'lucide-react';
+import { Layers, Box, Trophy, Users } from 'lucide-react';
 import { CubeManager } from './modules/cube/CubeManager';
 import { TournamentManager } from './modules/tournament/TournamentManager';
+import { LobbyManager } from './modules/lobby/LobbyManager';
+import { Pack } from './services/PackGeneratorService';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'draft' | 'bracket'>('draft');
+  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby'>('draft');
+  const [generatedPacks, setGeneratedPacks] = useState<Pack[]>([]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-20">
@@ -21,22 +24,35 @@ export const App: React.FC = () => {
           <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
             <button
               onClick={() => setActiveTab('draft')}
-              className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'draft' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'draft' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
-              <Box className="w-4 h-4" /> Draft Management
+              <Box className="w-4 h-4" /> <span className="hidden md:inline">Draft Management</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('lobby')}
+              className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'lobby' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              <Users className="w-4 h-4" /> <span className="hidden md:inline">Online Lobby</span>
             </button>
             <button
               onClick={() => setActiveTab('bracket')}
-              className={`px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'bracket' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'bracket' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
-              <Trophy className="w-4 h-4" /> Tournament / Bracket
+              <Trophy className="w-4 h-4" /> <span className="hidden md:inline">Tournament</span>
             </button>
           </div>
         </div>
       </header>
 
       <main>
-        {activeTab === 'draft' && <CubeManager />}
+        {activeTab === 'draft' && (
+          <CubeManager
+            packs={generatedPacks}
+            setPacks={setGeneratedPacks}
+            onGoToLobby={() => setActiveTab('lobby')}
+          />
+        )}
+        {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} />}
         {activeTab === 'bracket' && <TournamentManager />}
       </main>
     </div>
