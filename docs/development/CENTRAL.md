@@ -10,6 +10,7 @@ The project has successfully migrated from a .NET backend to a Node.js Modular M
 -   **[2025-12-14] Cleanup**: Removed Tournament Mode and simplified pack display as requested. [Link](./devlog/2025-12-14-211500_remove_tournament_mode.md)
 -   **[2025-12-14] UI Tweak**: Auto-configured generation mode based on source selection. [Link](./devlog/2025-12-14-212000_ui_simplification.md)
 -   **[2025-12-14] Multiplayer Game Plan**: Plan for Real Game & Online Multiplayer. [Link](./devlog/2025-12-14-212500_multiplayer_game_plan.md)
+-   **[2025-12-14] Bug Fix**: Fixed `crypto.randomUUID` error for non-secure contexts. [Link](./devlog/2025-12-14-214400_fix_uuid_error.md)
 
 ## Active Modules
 1.  **Cube Manager**: Fully functional (Parsing, Fetching, Pack Generation).
