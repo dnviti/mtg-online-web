@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, Eye, EyeOff, LayoutGrid, List, Sliders, Settings } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings } from 'lucide-react';
 import { CardParserService } from '../../services/CardParserService';
 import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
-import { TournamentPackView } from '../../components/TournamentPackView';
 
 export const CubeManager: React.FC = () => {
   // --- Services ---
@@ -32,7 +31,6 @@ export const CubeManager: React.FC = () => {
 
   // UI State
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('list');
-  const [tournamentMode, setTournamentMode] = useState(false);
 
   // Generation Settings
   const [genSettings, setGenSettings] = useState<PackGenerationSettings>({
@@ -106,7 +104,6 @@ export const CubeManager: React.FC = () => {
     setLoading(true);
     setPacks([]);
     setProgress(sourceMode === 'set' ? 'Fetching set data...' : 'Parsing text...');
-    setTournamentMode(false);
 
     try {
       let expandedCards: ScryfallCard[] = [];
@@ -164,7 +161,6 @@ export const CubeManager: React.FC = () => {
           alert(`Not enough cards to generate valid packs.`);
         } else {
           setPacks(newPacks);
-          setTournamentMode(false);
         }
       } catch (e) {
         console.error("Generation failed", e);
@@ -372,20 +368,13 @@ export const CubeManager: React.FC = () => {
               <span className="bg-slate-700 text-purple-400 px-3 py-1 rounded-lg text-sm border border-slate-600">{packs.length}</span>
               Packs
             </h2>
-            {packs.length > 0 && (
-              <button onClick={() => setTournamentMode(!tournamentMode)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold border transition-all ${tournamentMode ? 'bg-amber-500/20 border-amber-500 text-amber-500 animate-pulse' : 'bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-400'}`}>
-                {tournamentMode ? <><EyeOff className="w-4 h-4" /> Tournament Mode</> : <><Eye className="w-4 h-4" /> Editor Mode</>}
-              </button>
-            )}
           </div>
 
-          {!tournamentMode && (
-            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
-              <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
-              <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>
-            </div>
-          )}
+          <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+            <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
+            <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
+            <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>
+          </div>
         </div>
 
         {packs.length === 0 ? (
@@ -394,15 +383,11 @@ export const CubeManager: React.FC = () => {
             <p>No packs generated.</p>
           </div>
         ) : (
-          tournamentMode ? (
-            <TournamentPackView packs={packs} />
-          ) : (
-            <div className="grid grid-cols-1 gap-6 pb-20">
-              {packs.map((pack) => (
-                <PackCard key={pack.id} pack={pack} viewMode={viewMode} />
-              ))}
-            </div>
-          )
+          <div className="grid grid-cols-1 gap-6 pb-20">
+            {packs.map((pack) => (
+              <PackCard key={pack.id} pack={pack} viewMode={viewMode} />
+            ))}
+          </div>
         )}
       </div>
 
