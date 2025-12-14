@@ -184,13 +184,19 @@ export const CubeManager: React.FC = () => {
           {/* Source Toggle */}
           <div className="flex p-1 bg-slate-900 rounded-lg mb-4 border border-slate-700">
             <button
-              onClick={() => setSourceMode('upload')}
+              onClick={() => {
+                setSourceMode('upload');
+                setGenSettings(prev => ({ ...prev, mode: 'mixed' }));
+              }}
               className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sourceMode === 'upload' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
             >
               Custom List
             </button>
             <button
-              onClick={() => setSourceMode('set')}
+              onClick={() => {
+                setSourceMode('set');
+                setGenSettings(prev => ({ ...prev, mode: 'by_set' }));
+              }}
               className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${sourceMode === 'set' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
             >
               From Expansion
@@ -301,20 +307,22 @@ export const CubeManager: React.FC = () => {
                 <Settings className="w-4 h-4 text-emerald-400" /> Configuration
               </h3>
 
-              {/* Mode */}
-              <div className="mb-4">
-                <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Card Source</label>
-                <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                    <input type="radio" name="genMode" value="mixed" checked={genSettings.mode === 'mixed'} onChange={() => setGenSettings({ ...genSettings, mode: 'mixed' })} className="accent-purple-500" />
-                    <span>Chaos Draft (Mix All)</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                    <input type="radio" name="genMode" value="by_set" checked={genSettings.mode === 'by_set'} onChange={() => setGenSettings({ ...genSettings, mode: 'by_set' })} className="accent-purple-500" />
-                    <span>Split by Expansion</span>
-                  </label>
+              {/* Mode - Only show for Custom List */}
+              {sourceMode === 'upload' && (
+                <div className="mb-4">
+                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Card Source</label>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input type="radio" name="genMode" value="mixed" checked={genSettings.mode === 'mixed'} onChange={() => setGenSettings({ ...genSettings, mode: 'mixed' })} className="accent-purple-500" />
+                      <span>Chaos Draft (Mix All)</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                      <input type="radio" name="genMode" value="by_set" checked={genSettings.mode === 'by_set'} onChange={() => setGenSettings({ ...genSettings, mode: 'by_set' })} className="accent-purple-500" />
+                      <span>Split by Expansion</span>
+                    </label>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Rarity */}
               <div className="mb-4">

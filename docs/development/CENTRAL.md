@@ -8,6 +8,7 @@ The project has successfully migrated from a .NET backend to a Node.js Modular M
 -   **[2025-12-14] Parser Robustness**: Improving `CardParserService` to handle formats without Scryfall IDs (e.g., Arena exports). [Link](./devlog/2025-12-14-210000_fix_parser_robustness.md)
 -   **[2025-12-14] Set Generation**: Implemented full set fetching and booster box generation (Completed). [Link](./devlog/2025-12-14-211000_set_based_generation.md)
 -   **[2025-12-14] Cleanup**: Removed Tournament Mode and simplified pack display as requested. [Link](./devlog/2025-12-14-211500_remove_tournament_mode.md)
+-   **[2025-12-14] UI Tweak**: Auto-configured generation mode based on source selection. [Link](./devlog/2025-12-14-212000_ui_simplification.md)
 
 ## Active Modules
 1.  **Cube Manager**: Fully functional (Parsing, Fetching, Pack Generation).
