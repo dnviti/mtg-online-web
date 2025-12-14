@@ -18,7 +18,13 @@
     - `GameView.tsx`: Removed unused `myCommand`, `oppGraveyard`.
     - `DraftManager.ts`: Removed unused `numPlayers`, `cardIndex`.
     - `GameManager.ts`: Renamed unused args in `shuffleLibrary`.
+- **Helm Chart**: Created a complete Helm chart configuration in `helm/mtg-draft-maker`:
+    - `Chart.yaml`: Defined chart metadata.
+    - `values.yaml`: Configured defaults (Image `mtg-draft-maker:latest`, Port 3000).
+    - `templates/`: Added Deployment, Service, Ingress, and ServiceAccount manifests.
+    - Linted successfully.
 
 ## Status
 - Docker build successful (`docker build -t mtg-draft-maker .`).
-- Image ready for deployment.
+- Helm chart created and linted.
+- Ready for K8s deployment.
