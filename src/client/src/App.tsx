@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Layers, Box, Trophy, Users } from 'lucide-react';
+import { Layers, Box, Trophy, Users, Play } from 'lucide-react';
 import { CubeManager } from './modules/cube/CubeManager';
 import { TournamentManager } from './modules/tournament/TournamentManager';
 import { LobbyManager } from './modules/lobby/LobbyManager';
+import { DeckTester } from './modules/tester/DeckTester';
 import { Pack } from './services/PackGeneratorService';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby'>('draft');
+  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'tester'>('draft');
   const [generatedPacks, setGeneratedPacks] = useState<Pack[]>([]);
 
   return (
@@ -35,6 +36,12 @@ export const App: React.FC = () => {
               <Users className="w-4 h-4" /> <span className="hidden md:inline">Online Lobby</span>
             </button>
             <button
+              onClick={() => setActiveTab('tester')}
+              className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'tester' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              <Play className="w-4 h-4" /> <span className="hidden md:inline">Deck Tester</span>
+            </button>
+            <button
               onClick={() => setActiveTab('bracket')}
               className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'bracket' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
@@ -53,6 +60,7 @@ export const App: React.FC = () => {
           />
         )}
         {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} />}
+        {activeTab === 'tester' && <DeckTester />}
         {activeTab === 'bracket' && <TournamentManager />}
       </main>
     </div>

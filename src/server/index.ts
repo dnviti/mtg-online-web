@@ -167,6 +167,39 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('start_solo_test', ({ playerId, playerName, deck }, callback) => {
+    // Create new room in 'playing' state (empty packs as not drafting)
+    const room = roomManager.createRoom(playerId, playerName, []);
+    room.status = 'playing';
+
+    // Join socket
+    socket.join(room.id);
+    console.log(`Solo Game started for ${room.id} by ${playerName}`);
+
+    // Init Game
+    const game = gameManager.createGame(room.id, room.players);
+
+    // Load Deck (Expects expanded array of cards)
+    if (Array.isArray(deck)) {
+      deck.forEach((card: any) => {
+        gameManager.addCardToGame(room.id, {
+          ownerId: playerId,
+          controllerId: playerId,
+          oracleId: card.id,
+          name: card.name,
+          imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+          zone: 'library'
+        });
+      });
+    }
+
+    // Send Init Updates
+    callback({ success: true, room, game });
+    // Emit updates to ensure client is in sync
+    io.to(room.id).emit('room_update', room);
+    io.to(room.id).emit('game_update', game);
+  });
+
   socket.on('start_game', ({ roomId, decks }) => {
     const room = roomManager.startGame(roomId);
     if (room) {

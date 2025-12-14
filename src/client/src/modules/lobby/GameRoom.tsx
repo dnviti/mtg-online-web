@@ -31,14 +31,15 @@ interface Room {
 interface GameRoomProps {
   room: Room;
   currentPlayerId: string;
+  initialGameState?: any;
 }
 
-export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId }) => {
+export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId, initialGameState }) => {
   const [room, setRoom] = useState<Room>(initialRoom);
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(initialRoom.messages || []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [gameState, setGameState] = useState<any>(null);
+  const [gameState, setGameState] = useState<any>(initialGameState || null);
 
   useEffect(() => {
     setRoom(initialRoom);

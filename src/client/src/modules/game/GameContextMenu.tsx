@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { CardInstance } from '../../types/game';
 
 interface ContextMenuRequest {
@@ -16,7 +16,6 @@ interface GameContextMenuProps {
 }
 
 export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClose, onAction }) => {
-  const [submenu, setSubmenu] = useState<string | null>(null);
 
   useEffect(() => {
     const handleClickOutside = () => onClose();
@@ -59,7 +58,7 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
           <MenuItem label={request.card.faceDown ? "Flip Face Up" : "Flip Face Down"} onClick={() => handleAction('FLIP_CARD', { cardId: request.targetId })} />
 
           <div className="relative group">
-            <MenuItem label="Add Counter ▸" onClick={() => { }} onMouseEnter={() => setSubmenu('counter')} />
+            <MenuItem label="Add Counter ▸" onClick={() => { }} />
             {/* Submenu */}
             <div className="absolute left-full top-0 ml-1 w-40 bg-slate-900 border border-slate-700 rounded shadow-lg hidden group-hover:block">
               <MenuItem label="+1/+1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: request.targetId, counterType: '+1/+1', amount: 1 })} />

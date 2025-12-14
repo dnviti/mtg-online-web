@@ -2,6 +2,7 @@
 
 ## Active Plans
 - [Enhance 3D Game View](./devlog/2025-12-14-235500_enhance_3d_game_view.md): Active. Transforming the battlefield into a fully immersive 3D environment.
+- [Deck Tester Feature](./devlog/2025-12-15-002500_deck_tester_feature.md): Completed. Implemented a dedicated view to parse custom decks and instantly launch the 3D game sandbox.
 - [Game Context Menu & Immersion](./devlog/2025-12-14-235000_game_context_menu.md): Completed. Implemented custom right-click menus and game-feel enhancements.
 
 ## Recent Completions
