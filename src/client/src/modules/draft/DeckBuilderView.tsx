@@ -79,9 +79,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ roomId, curren
     // Host will gather decks? No, that's P2P.
     // Let's emit 'submit_deck' payload.
 
-    const payload = {
-      [currentPlayerId]: fullDeck
-    };
     // We need a way to accumulate decks on server.
     // Let's assume we just log it for now and Host starts game with dummy decks or we add logic.
     // Actually, user rules say "Host ... guided ... configuring packs ... multiplayer".

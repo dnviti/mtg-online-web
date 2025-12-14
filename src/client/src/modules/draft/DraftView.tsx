@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { CardComponent } from '../game/CardComponent';
 
 interface DraftViewProps {
   draftState: any;

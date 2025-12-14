@@ -138,7 +138,7 @@ export class GameManager {
     }
   }
 
-  private shuffleLibrary(game: GameState, action: { playerId: string }) {
+  private shuffleLibrary(_game: GameState, _action: { playerId: string }) {
     // In a real implementation we would shuffle the order array.
     // Since we retrieve by filtering currently, we don't have order. 
     // We need to implement order index if we want shuffling.

@@ -55,11 +55,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const myGraveyard = getCards(currentPlayerId, 'graveyard');
   const myLibrary = getCards(currentPlayerId, 'library');
   const myExile = getCards(currentPlayerId, 'exile');
-  const myCommand = getCards(currentPlayerId, 'command');
 
   const oppBattlefield = getCards(opponentId, 'battlefield');
   const oppHand = getCards(opponentId, 'hand'); // Should be hidden/count only
-  const oppGraveyard = getCards(opponentId, 'graveyard');
   const oppLibrary = getCards(opponentId, 'library');
 
   return (

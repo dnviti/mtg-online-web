@@ -38,7 +38,6 @@ export class DraftManager extends EventEmitter {
 
   createDraft(roomId: string, players: string[], allPacks: Pack[]): DraftState {
     // Distribute 3 packs to each player
-    const numPlayers = players.length;
     // Assume allPacks contains (3 * numPlayers) packs
 
     // Shuffle packs just in case (optional, but good practice)
@@ -83,7 +82,6 @@ export class DraftManager extends EventEmitter {
     if (!playerState || !playerState.activePack) return null;
 
     // Find card
-    const cardIndex = playerState.activePack.cards.findIndex(c => c.id === cardId || (c as any).uniqueId === cardId);
     // uniqueId check implies if cards have unique instance IDs in pack, if not we rely on strict equality or assume 1 instance per pack
 
     // Fallback: If we can't find by ID (if Scryfall ID generic), just pick the first matching ID? 
