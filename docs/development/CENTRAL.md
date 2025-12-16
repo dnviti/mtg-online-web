@@ -37,3 +37,4 @@
 - [Cube Sticky Sidebar](./devlog/2025-12-17-003000_cube_sticky_sidebar.md): Completed. Made the Cube Manager left sidebar sticky to improve usability with long pack lists.
 - [Cube Full Width Layout](./devlog/2025-12-17-003500_cube_full_width.md): Completed. Updated Cube Manager to use the full screen width.
 - [Cube Archidekt View](./devlog/2025-12-17-004500_archidekt_view.md): Completed. Implemented column-based stacked view for packs.
+- [Cube Mobile UI Fixes](./devlog/2025-12-17-005000_mobile_ui_fixes.md): Completed. Fixed overlapping elements and disabled hover previews on mobile.

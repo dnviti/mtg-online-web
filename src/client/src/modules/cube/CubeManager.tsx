@@ -327,7 +327,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     <div className="h-full overflow-y-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
-      <div className="lg:col-span-4 flex flex-col gap-4 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar p-1">
+      <div className="lg:col-span-4 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar p-1">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl">
           {/* Source Toggle */}
           <div className="flex p-1 bg-slate-900 rounded-lg mb-4 border border-slate-700">
@@ -627,21 +627,21 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
       {/* --- RIGHT COLUMN: PACKS --- */}
       <div className="lg:col-span-8">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 sticky top-4 z-40 bg-slate-900/90 backdrop-blur-sm p-3 rounded-xl border border-white/5 shadow-2xl">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 sticky top-4 z-40 bg-slate-900/95 backdrop-blur-xl p-3 rounded-xl border border-white/10 shadow-2xl">
+          <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <span className="bg-slate-700 text-purple-400 px-3 py-1 rounded-lg text-sm border border-slate-600">{packs.length}</span>
               Packs
             </h2>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto justify-end overflow-x-auto pb-1 sm:pb-0">
             {/* Play Button */}
             {packs.length > 0 && (
               <>
                 <button
                   onClick={onGoToLobby}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in whitespace-nowrap"
                 >
                   <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
                 </button>
@@ -663,7 +663,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
               </>
             )}
 
-            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700 shrink-0">
               <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
               <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>

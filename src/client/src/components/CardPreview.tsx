@@ -57,6 +57,8 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024; // Disable on tablet/mobile
+
   return (
     <div
       className={className}
@@ -65,7 +67,7 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
       onMouseMove={handleMouseMove}
     >
       {children}
-      {isHovering && hasImage && (
+      {isHovering && hasImage && !isMobile && (
         <FloatingPreview card={card} x={mousePos.x} y={mousePos.y} />
       )}
     </div>
