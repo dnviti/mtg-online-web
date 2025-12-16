@@ -63,7 +63,7 @@ export const db = {
       const store = transaction.objectStore(STORE_NAME);
 
       transaction.oncomplete = () => resolve();
-      transaction.onerror = (event) => reject(transaction.error);
+      transaction.onerror = (_event) => reject(transaction.error);
 
       cards.forEach(card => store.put(card));
     });

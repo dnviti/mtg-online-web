@@ -146,6 +146,21 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     setPacks([]);
     setProgress(sourceMode === 'set' ? 'Fetching set data...' : 'Parsing text...');
 
+    const cacheCardsToServer = async (cardsToCache: ScryfallCard[]) => {
+      if (cardsToCache.length === 0) return;
+      try {
+        // Deduplicate for shipping to server
+        const uniqueCards = Array.from(new Map(cardsToCache.map(c => [c.id, c])).values());
+        await fetch('/api/cards/cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards: uniqueCards })
+        });
+      } catch (e) {
+        console.error("Failed to cache chunk to server:", e);
+      }
+    };
+
     try {
       let expandedCards: ScryfallCard[] = [];
 
@@ -154,14 +169,17 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
         for (const [index, setCode] of selectedSets.entries()) {
           // Update progress for set
-          const setInfo = availableSets.find(s => s.code === setCode);
-          const setName = setInfo ? setInfo.name : setCode;
+          // const setInfo = availableSets.find(s => s.code === setCode);
 
-          setProgress(`Fetching ${setName}... (${index + 1}/${selectedSets.length})`);
+          setProgress(`Loading sets... (${index + 1}/${selectedSets.length})`);
 
           const cards = await scryfallService.fetchSetCards(setCode, (_count) => {
-            // Progress handled by outer loop mostly, but we could update strictly if needed.
+            // Progress handled by outer loop mostly
           });
+
+          // Incrementally cache this set to server
+          await cacheCardsToServer(cards);
+
           expandedCards.push(...cards);
         }
       } else {
@@ -198,26 +216,16 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
         if (missing > 0) {
           alert(`Warning: ${missing} cards could not be identified or fetched.`);
-        } else {
-          // Optional: Feedback on cache
-          // console.log(`Parsed ${expandedCards.length} cards. (${cachedCount} / ${fetchList.length} unique identifiers were pre-cached)`);
+        }
+
+        // Cache custom list to server
+        if (expandedCards.length > 0) {
+          setProgress('Caching to server...');
+          await cacheCardsToServer(expandedCards);
         }
       }
 
       setRawScryfallData(expandedCards);
-
-      // Cache to server
-      if (expandedCards.length > 0) {
-        setProgress('Loading...');
-        // Deduplicate for shipping to server
-        const uniqueCards = Array.from(new Map(expandedCards.map(c => [c.id, c])).values());
-
-        await fetch('/api/cards/cache', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cards: uniqueCards }) // Send full metadata
-        });
-      }
 
       setLoading(false);
       setProgress('');
