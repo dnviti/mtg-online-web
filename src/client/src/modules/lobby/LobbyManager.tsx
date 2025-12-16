@@ -139,6 +139,50 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
     }
   };
 
+  // Persist session logic
+  React.useEffect(() => {
+    if (activeRoom) {
+      localStorage.setItem('active_room_id', activeRoom.id);
+    }
+  }, [activeRoom]);
+
+  // Reconnection logic
+  React.useEffect(() => {
+    const savedRoomId = localStorage.getItem('active_room_id');
+    if (savedRoomId && !activeRoom && playerId) {
+      setLoading(true);
+      connect();
+      socketService.emitPromise('rejoin_room', { roomId: savedRoomId })
+        .then(() => {
+          // We don't get the room back directly in this event usually, but let's assume socket events 'room_update' handles it?
+          // The backend 'rejoin_room' doesn't return a callback with room data in the current implementation, it emits updates.
+          // However, let's try to invoke 'join_room' logic as a fallback or assume room_update catches it.
+          // Actually, backend 'rejoin_room' DOES emit 'room_update'.
+          // Let's rely on the socket listener in GameRoom... wait, GameRoom is not mounted yet!
+          // We need to listen to 'room_update' HERE to switch state.
+        })
+        .catch(err => {
+          console.warn("Reconnection failed", err);
+          localStorage.removeItem('active_room_id'); // Clear invalid session
+          setLoading(false);
+        });
+    }
+  }, []);
+
+  // Listener for room updates to switch view
+  React.useEffect(() => {
+    const socket = socketService.socket;
+    const onRoomUpdate = (room: any) => {
+      if (room && room.players.find((p: any) => p.id === playerId)) {
+        setActiveRoom(room);
+        setLoading(false);
+      }
+    };
+    socket.on('room_update', onRoomUpdate);
+    return () => { socket.off('room_update', onRoomUpdate); };
+  }, [playerId]);
+
+
   if (activeRoom) {
     return <GameRoom room={activeRoom} currentPlayerId={playerId} />;
   }

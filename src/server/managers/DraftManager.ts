@@ -169,6 +169,23 @@ export class DraftManager extends EventEmitter {
     }
   }
 
+  autoPick(roomId: string, playerId: string): DraftState | null {
+    const draft = this.drafts.get(roomId);
+    if (!draft) return null;
+
+    const playerState = draft.players[playerId];
+    if (!playerState || !playerState.activePack || playerState.activePack.cards.length === 0) return null;
+
+    // Pick Random Card
+    const randomCardIndex = Math.floor(Math.random() * playerState.activePack.cards.length);
+    const card = playerState.activePack.cards[randomCardIndex];
+
+    //console.log(`Auto-picking card for ${playerId}: ${card.name}`);
+
+    // Reuse existing logic
+    return this.pickCard(roomId, playerId, card.id);
+  }
+
   private checkRoundCompletion(draft: DraftState) {
     const allWaiting = Object.values(draft.players).every(p => p.isWaiting);
     if (allWaiting) {

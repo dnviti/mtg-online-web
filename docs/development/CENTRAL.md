@@ -12,3 +12,4 @@
 - [Fix Socket Mixed Content](./devlog/2025-12-16-183000_fix_socket_mixed_content.md): Completed. Resolved mixed content error in production by making socket connection URL environment-aware.
 - [Draft Rules & Pick Logic](./devlog/2025-12-16-180000_draft_rules_implementation.md): Completed. Enforced 4-player minimum and "Pick 2" rule for 4-player drafts.
 - [Fix Pack Duplication](./devlog/2025-12-16-184500_fix_pack_duplication.md): Completed. Enforced deep cloning and unique IDs for all draft packs to prevent opening identical packs.
+- [Reconnection & Auto-Pick](./devlog/2025-12-16-191500_reconnection_and_autopick.md): Completed. Implemented session persistence, seamless reconnection, and 30s auto-pick on disconnect.

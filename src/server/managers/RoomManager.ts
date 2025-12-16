@@ -5,6 +5,8 @@ interface Player {
   role: 'player' | 'spectator';
   ready?: boolean;
   deck?: any[];
+  socketId?: string; // Current or last known socket
+  isOffline?: boolean;
 }
 
 interface ChatMessage {
@@ -27,12 +29,12 @@ interface Room {
 export class RoomManager {
   private rooms: Map<string, Room> = new Map();
 
-  createRoom(hostId: string, hostName: string, packs: any[]): Room {
+  createRoom(hostId: string, hostName: string, packs: any[], socketId?: string): Room {
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const room: Room = {
       id: roomId,
       hostId,
-      players: [{ id: hostId, name: hostName, isHost: true, role: 'player', ready: false }],
+      players: [{ id: hostId, name: hostName, isHost: true, role: 'player', ready: false, socketId, isOffline: false }],
       packs,
       status: 'waiting',
       messages: [],
@@ -54,13 +56,15 @@ export class RoomManager {
     return room;
   }
 
-  joinRoom(roomId: string, playerId: string, playerName: string): Room | null {
+  joinRoom(roomId: string, playerId: string, playerName: string, socketId?: string): Room | null {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
     // Rejoin if already exists
     const existingPlayer = room.players.find(p => p.id === playerId);
     if (existingPlayer) {
+      existingPlayer.socketId = socketId;
+      existingPlayer.isOffline = false;
       return room;
     }
 
@@ -70,8 +74,31 @@ export class RoomManager {
       role = 'spectator';
     }
 
-    room.players.push({ id: playerId, name: playerName, isHost: false, role });
+    room.players.push({ id: playerId, name: playerName, isHost: false, role, socketId, isOffline: false });
     return room;
+  }
+
+  updatePlayerSocket(roomId: string, playerId: string, socketId: string): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    const player = room.players.find(p => p.id === playerId);
+    if (player) {
+      player.socketId = socketId;
+      player.isOffline = false;
+    }
+    return room;
+  }
+
+  setPlayerOffline(socketId: string): { room: Room, playerId: string } | null {
+    // Find room and player by socketId (inefficient but works for now)
+    for (const room of this.rooms.values()) {
+      const player = room.players.find(p => p.socketId === socketId);
+      if (player) {
+        player.isOffline = true;
+        return { room, playerId: player.id };
+      }
+    }
+    return null;
   }
 
   leaveRoom(roomId: string, playerId: string): Room | null {
