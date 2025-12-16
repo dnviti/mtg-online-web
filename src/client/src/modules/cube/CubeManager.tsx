@@ -152,10 +152,17 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         const identifiers = parserService.parse(inputText);
         const fetchList = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
 
+        // Identify how many are already cached for feedback
+        let cachedCount = 0;
+        fetchList.forEach(req => {
+          if (scryfallService.getCachedCard(req)) cachedCount++;
+        });
+
         await scryfallService.fetchCollection(fetchList, (current, total) => {
           setProgress(`Fetching Scryfall data... (${current}/${total})`);
         });
 
+        // Re-check cache to get all objects
         identifiers.forEach(id => {
           const card = scryfallService.getCachedCard(id.type === 'id' ? { id: id.value } : { name: id.value });
           if (card) {
@@ -169,6 +176,16 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
             }
           }
         });
+
+        const totalRequested = identifiers.reduce((acc, curr) => acc + curr.quantity, 0);
+        const missing = totalRequested - expandedCards.length;
+
+        if (missing > 0) {
+          alert(`Warning: ${missing} cards could not be identified or fetched.`);
+        } else {
+          // Optional: Feedback on cache
+          // console.log(`Parsed ${expandedCards.length} cards. (${cachedCount} / ${fetchList.length} unique identifiers were pre-cached)`);
+        }
       }
 
       setRawScryfallData(expandedCards);

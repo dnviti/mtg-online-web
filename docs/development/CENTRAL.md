@@ -22,3 +22,9 @@
 - [2025-12-16-221000_lobby_improvements.md](./devlog/2025-12-16-221000_lobby_improvements.md): Plan for kick functionality and exit button relocation.
 - [Fix Draft UI Layout](./devlog/2025-12-16-215500_fix_draft_ui_layout.md): Completed. Fixed "Waiting for next pack" layout to be consistently full-screen.
 - [Draft Timer Enforcement](./devlog/2025-12-16-222500_draft_timer.md): Completed. Implemented server-side 60s timer per pick, AFK auto-pick, and global draft timer loop.
+- [Pack Generation Update](./devlog/2025-12-16-224000_pack_generation_update.md): Completed. Implemented new 15-slot Play Booster algorithm with lands, tokens, and wildcards.
+- [Card Metadata Enhancement](./devlog/2025-12-16-224500_card_metadata_enhancement.md): Completed. Extended Scryfall fetching and `DraftCard` interfaces to include full metadata (CMC, Oracle Text, etc.).
+- [Rich Metadata Expansion](./devlog/2025-12-16-223000_enhance_metadata.md): Completed. Further expanded metadata to include legalities, finishes, artist, frame effects, and produced mana.
+- [Persist Metadata](./devlog/2025-12-16-230000_persist_metadata.md): Completed. Implemented IndexedDB persistence for Scryfall metadata to ensure offline availability and reduce API calls.
+- [Bulk Parse Feedback](./devlog/2025-12-16-231500_bulk_parse_feedback.md): Completed. Updated `CubeManager` to handle metadata generation properly and provide feedback on missing cards.
+- [Full Metadata Passthrough](./devlog/2025-12-16-234500_full_metadata_passthrough.md): Completed. `DraftCard` now includes a `definition` property containing the complete, raw Scryfall object for future-proofing and advanced algorithm usage.

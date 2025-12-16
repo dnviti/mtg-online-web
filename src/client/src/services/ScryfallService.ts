@@ -1,3 +1,14 @@
+export interface ScryfallCardFace {
+  name: string;
+  type_line?: string;
+  mana_cost?: string;
+  oracle_text?: string;
+  colors?: string[];
+  power?: string;
+  toughness?: string;
+  image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
+}
+
 export interface ScryfallCard {
   id: string;
   name: string;
@@ -8,16 +19,69 @@ export interface ScryfallCard {
   layout: string;
   type_line: string;
   colors?: string[];
-  image_uris?: { normal: string };
-  card_faces?: { image_uris: { normal: string } }[];
+  image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
+  card_faces?: ScryfallCardFace[];
   finish?: 'foil' | 'normal'; // Manual override from import
+  // Extended Metadata
+  cmc?: number;
+  mana_cost?: string;
+  oracle_text?: string;
+  power?: string;
+  toughness?: string;
+  collector_number?: string;
+  color_identity?: string[];
+  keywords?: string[];
+  booster?: boolean;
+  promo?: boolean;
+  reprint?: boolean;
+
+  // Rich Metadata for precise generation
+  legalities?: { [format: string]: 'legal' | 'not_legal' | 'restricted' | 'banned' };
+  finishes?: string[]; // e.g. ["foil", "nonfoil"]
+  games?: string[]; // e.g. ["paper", "arena", "mtgo"]
+  produced_mana?: string[];
+  artist?: string;
+  released_at?: string;
+  frame_effects?: string[];
+  security_stamp?: string;
+  promo_types?: string[];
+  full_art?: boolean;
+  textless?: boolean;
+  variation?: boolean;
+  variation_of?: string;
+  scryfall_uri?: string;
+
+  // Index signature to allow all other properties from API
+  [key: string]: any;
 }
+
+import { db } from '../utils/db';
 
 export class ScryfallService {
   private cacheById = new Map<string, ScryfallCard>();
   private cacheByName = new Map<string, ScryfallCard>();
+  private initPromise: Promise<void> | null = null;
+
+  constructor() {
+    this.initPromise = this.initializeCache();
+  }
+
+  private async initializeCache() {
+    try {
+      const cards = await db.getAllCards();
+      cards.forEach(card => {
+        this.cacheById.set(card.id, card);
+        if (card.name) this.cacheByName.set(card.name.toLowerCase(), card);
+      });
+      console.log(`[ScryfallService] Loaded ${cards.length} cards from persistence.`);
+    } catch (e) {
+      console.error("[ScryfallService] Failed to load cache", e);
+    }
+  }
 
   async fetchCollection(identifiers: { id?: string; name?: string }[], onProgress?: (current: number, total: number) => void): Promise<ScryfallCard[]> {
+    if (this.initPromise) await this.initPromise;
+
     // Deduplicate
     const uniqueRequests: { id?: string; name?: string }[] = [];
     const seen = new Set<string>();
@@ -66,6 +130,11 @@ export class ScryfallService {
       await new Promise(r => setTimeout(r, 75)); // Rate limit respect
     }
 
+    // Persist new cards
+    if (fetchedCards.length > 0) {
+      await db.bulkPutCards(fetchedCards);
+    }
+
     // Return everything requested (from cache included)
     const result: ScryfallCard[] = [];
     identifiers.forEach(item => {
@@ -109,6 +178,12 @@ export class ScryfallService {
   }
 
   async fetchSetCards(setCode: string, onProgress?: (current: number) => void): Promise<ScryfallCard[]> {
+    if (this.initPromise) await this.initPromise;
+
+    // Check if we already have a significant number of cards from this set in cache?
+    // Hard to know strict completeness without tracking sets. 
+    // But for now, we just fetch and merge.
+
     let cards: ScryfallCard[] = [];
     let url = `https://api.scryfall.com/cards/search?q=set:${setCode}&unique=cards`;
 
@@ -117,10 +192,6 @@ export class ScryfallService {
         const res = await fetch(url);
         const data = await res.json();
         if (data.data) {
-          // Should we filter here strictly? The API query 'set:code' + 'unique=cards' is usually correct.
-          // We might want to filter out Basics if we don't want them in booster generation, but standard boosters contain basics.
-          // However, user setting for "Ignore Basic Lands" is handled in PackGeneratorService.processCards.
-          // So here we should fetch everything.
           cards.push(...data.data);
           if (onProgress) onProgress(cards.length);
         }
@@ -135,6 +206,16 @@ export class ScryfallService {
         break;
       }
     }
+
+    // Cache everything
+    if (cards.length > 0) {
+      cards.forEach(card => {
+        this.cacheById.set(card.id, card);
+        if (card.name) this.cacheByName.set(card.name.toLowerCase(), card);
+      });
+      await db.bulkPutCards(cards);
+    }
+
     return cards;
   }
 }
