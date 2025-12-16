@@ -27,6 +27,7 @@ interface DraftState {
     pool: Card[]; // Picked cards
     unopenedPacks: Pack[]; // Pack 2 and 3 kept aside
     isWaiting: boolean; // True if finished current pack round
+    pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
   }>;
 
   status: 'drafting' | 'deck_building' | 'complete';
@@ -40,8 +41,16 @@ export class DraftManager extends EventEmitter {
     // Distribute 3 packs to each player
     // Assume allPacks contains (3 * numPlayers) packs
 
-    // Shuffle packs just in case (optional, but good practice)
-    const shuffledPacks = [...allPacks].sort(() => Math.random() - 0.5);
+    // DEEP CLONE PACKS to ensure no shared references
+    // And assign unique internal IDs to avoid collisions
+    const sanitizedPacks = allPacks.map((p, idx) => ({
+      ...p,
+      id: `draft-pack-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+      cards: p.cards.map(c => ({ ...c })) // Shallow clone cards to protect against mutation if needed
+    }));
+
+    // Shuffle packs
+    const shuffledPacks = sanitizedPacks.sort(() => Math.random() - 0.5);
 
     const draftState: DraftState = {
       roomId,
@@ -62,7 +71,8 @@ export class DraftManager extends EventEmitter {
         activePack: firstPack || null,
         pool: [],
         unopenedPacks: playerPacks,
-        isWaiting: false
+        isWaiting: false,
+        pickedInCurrentStep: 0
       };
     });
 
@@ -100,8 +110,26 @@ export class DraftManager extends EventEmitter {
     // 2. Remove from pack
     playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);
 
+    // Increment pick count for this step
+    playerState.pickedInCurrentStep = (playerState.pickedInCurrentStep || 0) + 1;
+
+    // Determine Picks Required
+    // Rule: 4 players -> Pick 2. Others -> Pick 1.
+    const picksRequired = draft.seats.length === 4 ? 2 : 1;
+
+    // Check if we should pass the pack
+    // Pass if: Picked enough cards OR Pack is empty
+    const shouldPass = playerState.pickedInCurrentStep >= picksRequired || playerState.activePack.cards.length === 0;
+
+    if (!shouldPass) {
+      // Do not pass yet. Returns state so UI updates pool and removes card from view.
+      return draft;
+    }
+
+    // PASSED
     const passedPack = playerState.activePack;
     playerState.activePack = null;
+    playerState.pickedInCurrentStep = 0; // Reset for next pack
 
     // 3. Logic for Passing or Discarding (End of Pack)
     if (passedPack.cards.length > 0) {
@@ -137,6 +165,7 @@ export class DraftManager extends EventEmitter {
     const p = draft.players[playerId];
     if (!p.activePack && p.queue.length > 0) {
       p.activePack = p.queue.shift()!;
+      p.pickedInCurrentStep = 0; // Reset for new pack
     }
   }
 
@@ -152,6 +181,7 @@ export class DraftManager extends EventEmitter {
           const nextPack = p.unopenedPacks.shift();
           if (nextPack) {
             p.activePack = nextPack;
+            p.pickedInCurrentStep = 0; // Reset
           }
         });
       } else {

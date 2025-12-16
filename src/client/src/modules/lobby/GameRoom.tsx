@@ -85,8 +85,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     const handleDraftUpdate = (data: any) => {
       setDraftState(data);
     };
+
+    const handleDraftError = (error: { message: string }) => {
+      alert(error.message); // Simple alert for now
+    };
+
     socket.on('draft_update', handleDraftUpdate);
-    return () => { socket.off('draft_update', handleDraftUpdate); };
+    socket.on('draft_error', handleDraftError);
+
+    return () => {
+      socket.off('draft_update', handleDraftUpdate);
+      socket.off('draft_error', handleDraftError);
+    };
   }, []);
 
   const sendMessage = (e: React.FormEvent) => {

@@ -87,7 +87,13 @@ io.on('connection', (socket) => {
     // Just rejoin the socket channel if validation passes (not fully secure yet)
     socket.join(roomId);
     const room = roomManager.getRoom(roomId);
-    if (room) socket.emit('room_update', room);
+    if (room) {
+      socket.emit('room_update', room);
+      if (room.status === 'drafting') {
+        const draft = draftManager.getDraft(roomId);
+        if (draft) socket.emit('draft_update', draft);
+      }
+    }
   });
 
   socket.on('send_message', ({ roomId, sender, text }) => {
@@ -100,6 +106,13 @@ io.on('connection', (socket) => {
   socket.on('start_draft', ({ roomId }) => {
     const room = roomManager.getRoom(roomId);
     if (room && room.status === 'waiting') {
+      const activePlayers = room.players.filter(p => p.role === 'player');
+      if (activePlayers.length < 4) {
+        // Emit error to the host or room
+        socket.emit('draft_error', { message: 'Draft cannot start. It requires at least 4 players.' });
+        return;
+      }
+
       // Create Draft
       // All packs in room.packs need to be flat list or handled
       // room.packs is currently JSON.
