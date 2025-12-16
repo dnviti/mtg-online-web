@@ -8,3 +8,4 @@
 ## Recent Completions
 - [Game Battlefield & Manual Mode](./devlog/2025-12-14-234500_game_battlefield_plan.md): Completed.
 - [Helm Chart Config](./devlog/2025-12-14-214500_helm_config.md): Completed.
+- [CSV Import Robustness](./devlog/2025-12-16-152253_csv_import_robustness.md): Completed. Enhanced CSV parser to dynamically map columns from headers, supporting custom user imports.
