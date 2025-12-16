@@ -28,3 +28,4 @@
 - [Persist Metadata](./devlog/2025-12-16-230000_persist_metadata.md): Completed. Implemented IndexedDB persistence for Scryfall metadata to ensure offline availability and reduce API calls.
 - [Bulk Parse Feedback](./devlog/2025-12-16-231500_bulk_parse_feedback.md): Completed. Updated `CubeManager` to handle metadata generation properly and provide feedback on missing cards.
 - [Full Metadata Passthrough](./devlog/2025-12-16-234500_full_metadata_passthrough.md): Completed. `DraftCard` now includes a `definition` property containing the complete, raw Scryfall object for future-proofing and advanced algorithm usage.
+- [Server-Side Caching](./devlog/2025-12-16-235900_server_side_caching.md): Completed. Implemented logic to cache images and metadata on the server upon bulk parsing, and updated client to use local assets.

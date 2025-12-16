@@ -79,7 +79,7 @@ export interface PackGenerationSettings {
 
 export class PackGeneratorService {
 
-  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }): { pools: ProcessedPools, sets: SetsMap } {
+  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }, useLocalImages: boolean = false): { pools: ProcessedPools, sets: SetsMap } {
     const pools: ProcessedPools = { commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [] };
     const setsMap: SetsMap = {};
 
@@ -104,7 +104,9 @@ export class PackGeneratorService {
         typeLine: typeLine,
         layout: layout,
         colors: cardData.colors || [],
-        image: cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || '',
+        image: useLocalImages
+          ? `${window.location.origin}/cards/images/${cardData.id}.jpg`
+          : (cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || ''),
         set: cardData.set_name,
         setCode: cardData.set,
         setType: setType,

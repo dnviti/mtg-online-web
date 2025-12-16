@@ -28,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' })); // Increase limit for large card lists
 
-// Serve static images
+// Serve static images (Nested)
 app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
 
 // API Routes
@@ -51,9 +51,10 @@ app.post('/api/cards/cache', async (req: Request, res: Response) => {
       return;
     }
 
-    console.log(`Caching images for ${cards.length} cards...`);
-    const count = await cardService.cacheImages(cards);
-    res.json({ success: true, downloaded: count });
+    console.log(`Caching images and metadata for ${cards.length} cards...`);
+    const imgCount = await cardService.cacheImages(cards);
+    const metaCount = await cardService.cacheMetadata(cards);
+    res.json({ success: true, downloadedImages: imgCount, savedMetadata: metaCount });
   } catch (err: any) {
     console.error('Error in cache route:', err);
     res.status(500).json({ error: err.message });

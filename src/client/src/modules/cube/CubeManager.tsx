@@ -111,7 +111,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   // --- Effects ---
   useEffect(() => {
     if (rawScryfallData) {
-      const result = generatorService.processCards(rawScryfallData, filters);
+      // Use local images: true
+      const result = generatorService.processCards(rawScryfallData, filters, true);
       setProcessedData(result);
     }
   }, [filters, rawScryfallData]);
@@ -189,6 +190,20 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
       }
 
       setRawScryfallData(expandedCards);
+
+      // Cache to server
+      if (expandedCards.length > 0) {
+        setProgress('Loading...');
+        // Deduplicate for shipping to server
+        const uniqueCards = Array.from(new Map(expandedCards.map(c => [c.id, c])).values());
+
+        await fetch('/api/cards/cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards: uniqueCards }) // Send full metadata
+        });
+      }
+
       setLoading(false);
       setProgress('');
 

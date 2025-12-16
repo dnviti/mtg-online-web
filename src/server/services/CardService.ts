@@ -8,9 +8,18 @@ const __dirname = path.dirname(__filename);
 const CARDS_DIR = path.join(__dirname, '../public/cards');
 
 export class CardService {
+  private imagesDir: string;
+  private metadataDir: string;
+
   constructor() {
-    if (!fs.existsSync(CARDS_DIR)) {
-      fs.mkdirSync(CARDS_DIR, { recursive: true });
+    this.imagesDir = path.join(CARDS_DIR, 'images');
+    this.metadataDir = path.join(CARDS_DIR, 'metadata');
+
+    if (!fs.existsSync(this.imagesDir)) {
+      fs.mkdirSync(this.imagesDir, { recursive: true });
+    }
+    if (!fs.existsSync(this.metadataDir)) {
+      fs.mkdirSync(this.metadataDir, { recursive: true });
     }
   }
 
@@ -38,7 +47,7 @@ export class CardService {
 
         if (!imageUrl) continue;
 
-        const filePath = path.join(CARDS_DIR, `${uuid}.jpg`);
+        const filePath = path.join(this.imagesDir, `${uuid}.jpg`);
 
         if (fs.existsSync(filePath)) {
           // Already cached
@@ -66,5 +75,22 @@ export class CardService {
     await Promise.all(workers);
 
     return downloadedCount;
+  }
+
+  async cacheMetadata(cards: any[]): Promise<number> {
+    let cachedCount = 0;
+    for (const card of cards) {
+      if (!card.id) continue;
+      const filePath = path.join(this.metadataDir, `${card.id}.json`);
+      if (!fs.existsSync(filePath)) {
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(card, null, 2));
+          cachedCount++;
+        } catch (e) {
+          console.error(`Failed to save metadata for ${card.id}`, e);
+        }
+      }
+    }
+    return cachedCount;
   }
 }

@@ -78,7 +78,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
 
       // Transform packs to use local URLs
       // Note: For multiplayer, clients need to access this URL.
-      const baseUrl = `${window.location.protocol}//${window.location.host}/cards`;
+      const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
 
       const updatedPacks = generatedPacks.map(pack => ({
         ...pack,
