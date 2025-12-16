@@ -289,7 +289,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   };
 
   return (
-    <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
+    <div className="h-full overflow-y-auto max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
       <div className="lg:col-span-4 flex flex-col gap-4">

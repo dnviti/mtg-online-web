@@ -35,8 +35,8 @@ export const App: React.FC = () => {
   }, [generatedPacks]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-20">
-      <header className="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50 shadow-lg">
+    <div className="h-screen flex flex-col bg-slate-900 text-slate-100 font-sans overflow-hidden">
+      <header className="bg-slate-800 border-b border-slate-700 p-4 shrink-0 z-50 shadow-lg">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-purple-600 p-2 rounded-lg"><Layers className="w-6 h-6 text-white" /></div>
@@ -75,7 +75,7 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      <main>
+      <main className="flex-1 overflow-hidden relative">
         {activeTab === 'draft' && (
           <CubeManager
             packs={generatedPacks}

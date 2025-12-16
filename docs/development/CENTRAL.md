@@ -13,3 +13,6 @@
 - [Draft Rules & Pick Logic](./devlog/2025-12-16-180000_draft_rules_implementation.md): Completed. Enforced 4-player minimum and "Pick 2" rule for 4-player drafts.
 - [Fix Pack Duplication](./devlog/2025-12-16-184500_fix_pack_duplication.md): Completed. Enforced deep cloning and unique IDs for all draft packs to prevent opening identical packs.
 - [Reconnection & Auto-Pick](./devlog/2025-12-16-191500_reconnection_and_autopick.md): Completed. Implemented session persistence, seamless reconnection, and 30s auto-pick on disconnect.
+- [Draft Interface UI Polish](./devlog/2025-12-16-195000_draft_ui_polish.md): Completed. Redesigned the draft view for a cleaner, immersive, game-like experience with no unnecessary scrolls.
+- [Resizable Draft Interface](./devlog/2025-12-16-200500_resizable_draft_ui.md): Completed. Implemented user-resizable pool panel and card sizes with persistence.
+- [Card Zoom (Dedicated Zone)](./devlog/2025-12-16-203000_zoom_zone.md): Completed. Refactored layout to show zoomed card in a dedicated side panel.

@@ -247,7 +247,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   };
 
   return (
-    <div className="flex h-[calc(100vh-100px)] gap-4">
+    <div className="flex h-full gap-4">
       {renderContent()}
 
       {/* Sidebar: Players & Chat */}
