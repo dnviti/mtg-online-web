@@ -38,3 +38,6 @@
 - [Cube Full Width Layout](./devlog/2025-12-17-003500_cube_full_width.md): Completed. Updated Cube Manager to use the full screen width.
 - [Cube Archidekt View](./devlog/2025-12-17-004500_archidekt_view.md): Completed. Implemented column-based stacked view for packs.
 - [Cube Mobile UI Fixes](./devlog/2025-12-17-005000_mobile_ui_fixes.md): Completed. Fixed overlapping elements and disabled hover previews on mobile.
+- [Mobile Long-Press Preview](./devlog/2025-12-17-005500_mobile_long_press.md): Completed. Implemented long-press trigger for card magnification on small screens.
+- [Mobile Fullscreen Preview](./devlog/2025-12-17-010000_mobile_fullscreen_preview.md): Completed. Updated mobile preview to be a centered fullscreen overlay.
+- [Mobile Preview Animations](./devlog/2025-12-17-010500_mobile_preview_animations.md): Completed. Implemented phase-in layout and phase-out animations for mobile preview.

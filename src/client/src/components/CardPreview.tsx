@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
 
 // --- Floating Preview Component ---
-export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }> = ({ card, x, y }) => {
+export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number; isMobile?: boolean; isClosing?: boolean }> = ({ card, x, y, isMobile, isClosing }) => {
   const isFoil = card.finish === 'foil';
   const imgRef = useRef<HTMLImageElement>(null);
 
@@ -10,6 +10,8 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }
   const [adjustedPos, setAdjustedPos] = useState({ top: y, left: x });
 
   useEffect(() => {
+    if (isMobile) return;
+
     const OFFSET = 20;
     const CARD_WIDTH = 300;
     const CARD_HEIGHT = 420;
@@ -27,7 +29,18 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }
 
     setAdjustedPos({ top: newY, left: newX });
 
-  }, [x, y]);
+  }, [x, y, isMobile]);
+
+  if (isMobile) {
+    return (
+      <div className={`fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center bg-black/60 backdrop-blur-[2px] transition-all duration-300 ${isClosing ? 'animate-out fade-out' : 'animate-in fade-in'}`}>
+        <div className={`relative w-[85vw] max-w-sm rounded-2xl overflow-hidden shadow-2xl ring-4 ring-black/50 transition-all duration-300 ${isClosing ? 'animate-out zoom-out-95' : 'animate-in zoom-in-95'}`}>
+          <img src={card.image} alt={card.name} className="w-full h-auto" />
+          {isFoil && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 mix-blend-overlay animate-pulse"></div>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -48,27 +61,119 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }
 // --- Hover Wrapper to handle mouse events ---
 export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.ReactNode; className?: string }> = ({ card, children, className }) => {
   const [isHovering, setIsHovering] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [isLongPressing, setIsLongPressing] = useState(false);
+  const [renderPreview, setRenderPreview] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const initialTouchRef = useRef<{ x: number, y: number } | null>(null);
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const hasImage = !!card.image;
+  // Use a stable value for isMobile to avoid hydration mismatches if using SSR, 
+  // but since this is client-side mostly, window check is okay.
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+
+  const shouldShow = (isHovering && !isMobile) || isLongPressing;
+
+  // Handle mounting/unmounting animation
+  useEffect(() => {
+    if (shouldShow) {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      setRenderPreview(true);
+    } else {
+      // Delay unmount for mobile animation
+      if (isMobile && renderPreview) {
+        closeTimerRef.current = setTimeout(() => {
+          setRenderPreview(false);
+        }, 300); // 300ms matches duration-300
+      } else {
+        setRenderPreview(false);
+      }
+    }
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, [shouldShow, isMobile, renderPreview]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!hasImage) return;
-    setMousePos({ x: e.clientX, y: e.clientY });
+    if (!hasImage || isMobile) return;
+    setCoords({ x: e.clientX, y: e.clientY });
   };
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024; // Disable on tablet/mobile
+  const handleMouseEnter = () => {
+    if (!isMobile) setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!hasImage || !isMobile) return;
+    const touch = e.touches[0];
+    const { clientX, clientY } = touch;
+
+    initialTouchRef.current = { x: clientX, y: clientY };
+    setCoords({ x: clientX, y: clientY });
+
+    timerRef.current = setTimeout(() => {
+      setIsLongPressing(true);
+    }, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setIsLongPressing(false);
+    initialTouchRef.current = null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!initialTouchRef.current) return;
+
+    const touch = e.touches[0];
+    const moveX = Math.abs(touch.clientX - initialTouchRef.current.x);
+    const moveY = Math.abs(touch.clientY - initialTouchRef.current.y);
+
+    // Cancel if moved more than 10px
+    if (moveX > 10 || moveY > 10) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      setIsLongPressing(false);
+    }
+  };
 
   return (
     <div
       className={className}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       onMouseMove={handleMouseMove}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+      onContextMenu={(e) => {
+        // Prevent context menu if we are long pressing to view card
+        if (isLongPressing) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
     >
       {children}
-      {isHovering && hasImage && !isMobile && (
-        <FloatingPreview card={card} x={mousePos.x} y={mousePos.y} />
+      {hasImage && renderPreview && (
+        <FloatingPreview
+          card={card}
+          x={coords.x}
+          y={coords.y}
+          isMobile={isMobile}
+          isClosing={!shouldShow}
+        />
       )}
     </div>
   );
