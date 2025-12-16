@@ -105,7 +105,7 @@ export class PackGeneratorService {
         layout: layout,
         colors: cardData.colors || [],
         image: useLocalImages
-          ? `${window.location.origin}/cards/images/${cardData.id}.jpg`
+          ? `${window.location.origin}/cards/images/${cardData.set}/${cardData.id}.jpg`
           : (cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || ''),
         set: cardData.set_name,
         setCode: cardData.set,

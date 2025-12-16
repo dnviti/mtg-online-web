@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X } from 'lucide-react';
-import { CardParserService } from '../../services/CardParserService';
-import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
+import { ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
 
@@ -15,8 +14,6 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   // --- Services ---
   // --- Services ---
   // Memoize services to persist cache across renders
-  const parserService = React.useMemo(() => new CardParserService(), []);
-  const scryfallService = React.useMemo(() => new ScryfallService(), []);
   const generatorService = React.useMemo(() => new PackGeneratorService(), []);
 
   // --- State ---
@@ -124,10 +121,13 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   }, [filters, rawScryfallData]);
 
   useEffect(() => {
-    scryfallService.fetchSets().then(sets => {
-      setAvailableSets(sets.sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime()));
-    });
-  }, [scryfallService]);
+    fetch('/api/sets')
+      .then(res => res.json())
+      .then((sets: ScryfallSet[]) => {
+        setAvailableSets(sets.sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime()));
+      })
+      .catch(console.error);
+  }, []);
 
   // --- Handlers ---
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,87 +146,40 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     setPacks([]);
     setProgress(sourceMode === 'set' ? 'Fetching set data...' : 'Parsing text...');
 
-    const cacheCardsToServer = async (cardsToCache: ScryfallCard[]) => {
-      if (cardsToCache.length === 0) return;
-      try {
-        // Deduplicate for shipping to server
-        const uniqueCards = Array.from(new Map(cardsToCache.map(c => [c.id, c])).values());
-        await fetch('/api/cards/cache', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cards: uniqueCards })
-        });
-      } catch (e) {
-        console.error("Failed to cache chunk to server:", e);
-      }
-    };
-
     try {
       let expandedCards: ScryfallCard[] = [];
 
       if (sourceMode === 'set') {
         if (selectedSets.length === 0) throw new Error("Please select at least one set.");
 
+        // We fetch set by set to show progress
         for (const [index, setCode] of selectedSets.entries()) {
-          // Update progress for set
-          // const setInfo = availableSets.find(s => s.code === setCode);
+          setProgress(`Fetching set ${setCode.toUpperCase()} (${index + 1}/${selectedSets.length})...`);
 
-          setProgress(`Loading sets... (${index + 1}/${selectedSets.length})`);
+          const response = await fetch(`/api/sets/${setCode}/cards`);
+          if (!response.ok) throw new Error(`Failed to fetch set ${setCode}`);
 
-          const cards = await scryfallService.fetchSetCards(setCode, (_count) => {
-            // Progress handled by outer loop mostly
-          });
-
-          // Incrementally cache this set to server
-          await cacheCardsToServer(cards);
-
+          const cards: ScryfallCard[] = await response.json();
           expandedCards.push(...cards);
         }
       } else {
-        const identifiers = parserService.parse(inputText);
-        const fetchList = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
-
-        // Identify how many are already cached for feedback
-        let cachedCount = 0;
-        fetchList.forEach(req => {
-          if (scryfallService.getCachedCard(req)) cachedCount++;
+        // Parse Text
+        setProgress('Parsing and fetching from server...');
+        const response = await fetch('/api/cards/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: inputText })
         });
 
-        await scryfallService.fetchCollection(fetchList, (current, total) => {
-          setProgress(`Fetching Scryfall data... (${current}/${total})`);
-        });
-
-        // Re-check cache to get all objects
-        identifiers.forEach(id => {
-          const card = scryfallService.getCachedCard(id.type === 'id' ? { id: id.value } : { name: id.value });
-          if (card) {
-            for (let i = 0; i < id.quantity; i++) {
-              // Clone card to attach unique properties like finish
-              const expandedCard = { ...card };
-              if (id.finish) {
-                expandedCard.finish = id.finish;
-              }
-              expandedCards.push(expandedCard);
-            }
-          }
-        });
-
-        const totalRequested = identifiers.reduce((acc, curr) => acc + curr.quantity, 0);
-        const missing = totalRequested - expandedCards.length;
-
-        if (missing > 0) {
-          alert(`Warning: ${missing} cards could not be identified or fetched.`);
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || "Failed to parse cards");
         }
 
-        // Cache custom list to server
-        if (expandedCards.length > 0) {
-          setProgress('Caching to server...');
-          await cacheCardsToServer(expandedCards);
-        }
+        expandedCards = await response.json();
       }
 
       setRawScryfallData(expandedCards);
-
       setLoading(false);
       setProgress('');
 
@@ -237,34 +190,60 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     }
   };
 
-  const generatePacks = () => {
-    if (!processedData) return;
+  const generatePacks = async () => {
+    // if (!processedData) return; // Logic moved to server, but we still use processedData for UI check
+    if (!rawScryfallData || rawScryfallData.length === 0) {
+      if (sourceMode === 'set' && selectedSets.length > 0) {
+        // Allowed to proceed if sets selected (server fetches)
+      } else {
+        return;
+      }
+    }
 
     setLoading(true);
+    setProgress('Generating packs on server...');
 
-    // Use setTimeout to allow UI to show loading spinner before sync calculation blocks
-    setTimeout(() => {
-      try {
-        let newPacks: Pack[] = [];
-        if (sourceMode === 'set') {
-          const totalPacks = numBoxes * 36;
-          newPacks = generatorService.generateBoosterBox(processedData.pools, totalPacks, genSettings);
-        } else {
-          newPacks = generatorService.generatePacks(processedData.pools, processedData.sets, genSettings);
-        }
+    try {
+      const payload = {
+        cards: sourceMode === 'upload' ? rawScryfallData : [],
+        sourceMode,
+        selectedSets,
+        settings: genSettings,
+        numBoxes,
+        numPacks: sourceMode === 'set' ? (numBoxes * 36) : undefined,
+        filters
+      };
 
-        if (newPacks.length === 0) {
-          alert(`Not enough cards to generate valid packs.`);
-        } else {
-          setPacks(newPacks);
-        }
-      } catch (e) {
-        console.error("Generation failed", e);
-        alert("Error generating packs: " + e);
-      } finally {
-        setLoading(false);
+      // Use fetch from server logic
+      if (sourceMode === 'set') {
+        payload.cards = [];
       }
-    }, 50);
+
+      const response = await fetch('/api/packs/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Generation failed");
+      }
+
+      const newPacks: Pack[] = await response.json();
+
+      if (newPacks.length === 0) {
+        alert(`No packs generated. Check your card pool settings.`);
+      } else {
+        setPacks(newPacks);
+      }
+    } catch (e: any) {
+      console.error("Generation failed", e);
+      alert("Error generating packs: " + e.message);
+    } finally {
+      setLoading(false);
+      setProgress('');
+    }
   };
 
   const handleExportCsv = () => {

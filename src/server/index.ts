@@ -7,6 +7,9 @@ import { RoomManager } from './managers/RoomManager';
 import { GameManager } from './managers/GameManager';
 import { DraftManager } from './managers/DraftManager';
 import { CardService } from './services/CardService';
+import { ScryfallService } from './services/ScryfallService';
+import { PackGeneratorService } from './services/PackGeneratorService';
+import { CardParserService } from './services/CardParserService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +27,9 @@ const roomManager = new RoomManager();
 const gameManager = new GameManager();
 const draftManager = new DraftManager();
 const cardService = new CardService();
+const scryfallService = new ScryfallService();
+const packGeneratorService = new PackGeneratorService();
+const cardParserService = new CardParserService();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' })); // Increase limit for large card lists
@@ -58,6 +64,93 @@ app.post('/api/cards/cache', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error in cache route:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- NEW ROUTES ---
+
+app.get('/api/sets', async (_req: Request, res: Response) => {
+  const sets = await scryfallService.fetchSets();
+  res.json(sets);
+});
+
+app.get('/api/sets/:code/cards', async (req: Request, res: Response) => {
+  try {
+    const cards = await scryfallService.fetchSetCards(req.params.code);
+    res.json(cards);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/cards/parse', async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    const identifiers = cardParserService.parse(text);
+
+    // Resolve
+    const uniqueIds = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
+    const uniqueCards = await scryfallService.fetchCollection(uniqueIds);
+
+    // Expand
+    const expanded: any[] = [];
+    const cardMap = new Map();
+    uniqueCards.forEach(c => {
+      cardMap.set(c.id, c);
+      if (c.name) cardMap.set(c.name.toLowerCase(), c);
+    });
+
+    identifiers.forEach(req => {
+      let card = null;
+      if (req.type === 'id') card = cardMap.get(req.value);
+      else card = cardMap.get(req.value.toLowerCase());
+
+      if (card) {
+        for (let i = 0; i < req.quantity; i++) {
+          const clone = { ...card };
+          if (req.finish) clone.finish = req.finish;
+          // Add quantity to object? No, we duplicate objects in the list as requested by client flow usually
+          expanded.push(clone);
+        }
+      }
+    });
+
+    res.json(expanded);
+  } catch (e: any) {
+    console.error("Parse error", e);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/packs/generate', async (req: Request, res: Response) => {
+  try {
+    const { cards, settings, numPacks, sourceMode, selectedSets, filters } = req.body;
+
+    let poolCards = cards || [];
+
+    // If server-side expansion fetching is requested
+    if (sourceMode === 'set' && selectedSets && Array.isArray(selectedSets)) {
+      console.log(`[API] Fetching sets for generation: ${selectedSets.join(', ')}`);
+      for (const code of selectedSets) {
+        const setCards = await scryfallService.fetchSetCards(code);
+        poolCards.push(...setCards);
+      }
+    }
+
+    // Default filters if missing
+    const activeFilters = filters || {
+      ignoreBasicLands: true,
+      ignoreCommander: true,
+      ignoreTokens: true
+    };
+
+    const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters);
+
+    const packs = packGeneratorService.generatePacks(pools, sets, settings, numPacks || 108);
+    res.json(packs);
+  } catch (e: any) {
+    console.error("Generation error", e);
+    res.status(500).json({ error: e.message });
   }
 });
 
