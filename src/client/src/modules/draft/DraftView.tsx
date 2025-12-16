@@ -15,12 +15,24 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
   const [timer, setTimer] = useState(60);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
 
+  const myPlayer = draftState.players[currentPlayerId];
+  const pickExpiresAt = myPlayer?.pickExpiresAt;
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimer(t => t > 0 ? t - 1 : 0);
-    }, 1000);
+    if (!pickExpiresAt) {
+      setTimer(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const remainingMs = pickExpiresAt - Date.now();
+      setTimer(Math.max(0, Math.ceil(remainingMs / 1000)));
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 500); // Check twice a second for smoother updates
     return () => clearInterval(interval);
-  }, []); // Reset timer on new pack? Simplified for now.
+  }, [pickExpiresAt]);
 
   // --- UI State & Persistence ---
   const [poolHeight, setPoolHeight] = useState<number>(() => {

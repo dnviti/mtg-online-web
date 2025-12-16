@@ -60,58 +60,59 @@ app.post('/api/cards/cache', async (req: Request, res: Response) => {
   }
 });
 
+// Global Draft Timer Loop
+setInterval(() => {
+  const updates = draftManager.checkTimers();
+  updates.forEach(({ roomId, draft }) => {
+    io.to(roomId).emit('draft_update', draft);
+
+    // Check for forced game start (Deck Building Timeout)
+    if (draft.status === 'complete') {
+      const room = roomManager.getRoom(roomId);
+      // Only trigger if room exists and not already playing
+      if (room && room.status !== 'playing') {
+        console.log(`Deck building timeout for Room ${roomId}. Forcing start.`);
+
+        // Force ready for unready players
+        const activePlayers = room.players.filter(p => p.role === 'player');
+        activePlayers.forEach(p => {
+          if (!p.ready) {
+            const pool = draft.players[p.id]?.pool || [];
+            roomManager.setPlayerReady(roomId, p.id, pool);
+          }
+        });
+
+        // Start Game Logic
+        room.status = 'playing';
+        io.to(roomId).emit('room_update', room);
+
+        const game = gameManager.createGame(roomId, room.players);
+        activePlayers.forEach(p => {
+          if (p.deck) {
+            p.deck.forEach((card: any) => {
+              gameManager.addCardToGame(roomId, {
+                ownerId: p.id,
+                controllerId: p.id,
+                oracleId: card.oracle_id || card.id,
+                name: card.name,
+                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                zone: 'library'
+              });
+            });
+          }
+        });
+        io.to(roomId).emit('game_update', game);
+      }
+    }
+  });
+}, 1000);
+
 // Socket.IO logic
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 
   // Timer management
-  const playerTimers = new Map<string, NodeJS.Timeout>();
-
-  const startAutoPickTimer = (roomId: string, playerId: string) => {
-    // Clear existing if any (debounce)
-    if (playerTimers.has(playerId)) {
-      clearTimeout(playerTimers.get(playerId)!);
-    }
-
-    const timer = setTimeout(() => {
-      console.log(`Timeout for player ${playerId}. Auto-picking...`);
-      const draft = draftManager.autoPick(roomId, playerId);
-      if (draft) {
-        io.to(roomId).emit('draft_update', draft);
-        // We only pick once. If they stay offline, the next pick depends on the next turn cycle.
-        // If we wanted continuous auto-pick, we'd need to check if it's still their turn and recurse.
-        // For now, this unblocks the current step.
-      }
-      playerTimers.delete(playerId);
-    }, 30000); // 30s
-
-    playerTimers.set(playerId, timer);
-  };
-
-  const stopAutoPickTimer = (playerId: string) => {
-    if (playerTimers.has(playerId)) {
-      clearTimeout(playerTimers.get(playerId)!);
-      playerTimers.delete(playerId);
-    }
-  };
-
-  const stopAllRoomTimers = (roomId: string) => {
-    const room = roomManager.getRoom(roomId);
-    if (room) {
-      room.players.forEach(p => stopAutoPickTimer(p.id));
-    }
-  };
-
-  const resumeRoomTimers = (roomId: string) => {
-    const room = roomManager.getRoom(roomId);
-    if (room && room.status === 'drafting') {
-      room.players.forEach(p => {
-        if (p.isOffline && p.role === 'player') {
-          startAutoPickTimer(roomId, p.id);
-        }
-      });
-    }
-  };
+  // Timer management removed (Global loop handled)
 
   socket.on('create_room', ({ hostId, hostName, packs }, callback) => {
     const room = roomManager.createRoom(hostId, hostName, packs, socket.id); // Add socket.id
@@ -124,8 +125,8 @@ io.on('connection', (socket) => {
     const room = roomManager.joinRoom(roomId, playerId, playerName, socket.id); // Add socket.id
     if (room) {
       // Clear timeout if exists (User reconnected)
-      stopAutoPickTimer(playerId);
-      console.log(`Player ${playerName} reconnected. Auto-pick cancelled.`);
+      // stopAutoPickTimer(playerId); // Global timer handles this now
+      console.log(`Player ${playerName} reconnected.`);
 
       socket.join(room.id);
       console.log(`Player ${playerName} joined room ${roomId}`);
@@ -134,7 +135,7 @@ io.on('connection', (socket) => {
       // Check if Host Reconnected -> Resume Game
       if (room.hostId === playerId) {
         console.log(`Host ${playerName} reconnected. Resuming draft timers.`);
-        resumeRoomTimers(roomId);
+        draftManager.setPaused(roomId, false);
       }
 
       // If drafting, send state immediately and include in callback
@@ -160,7 +161,7 @@ io.on('connection', (socket) => {
 
       if (room) {
         // Clear Timer
-        stopAutoPickTimer(playerId);
+        // stopAutoPickTimer(playerId);
         console.log(`Player ${playerId} reconnected via rejoin.`);
 
         // Notify others (isOffline false)
@@ -169,7 +170,7 @@ io.on('connection', (socket) => {
         // Check if Host Reconnected -> Resume Game
         if (room.hostId === playerId) {
           console.log(`Host ${playerId} reconnected. Resuming draft timers.`);
-          resumeRoomTimers(roomId);
+          draftManager.setPaused(roomId, false);
         }
 
         // Prepare Draft State if exists
@@ -394,10 +395,9 @@ io.on('connection', (socket) => {
 
         if (hostOffline) {
           console.log("Host is offline. Pausing game (stopping all timers).");
-          stopAllRoomTimers(room.id);
+          draftManager.setPaused(room.id, true);
         } else {
-          // Host is online, but THIS player disconnected. Start timer for them.
-          startAutoPickTimer(room.id, playerId);
+          // Host is online, but THIS player disconnected. Timer continues automatically.
         }
       }
     }

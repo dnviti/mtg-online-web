@@ -28,9 +28,11 @@ interface DraftState {
     unopenedPacks: Pack[]; // Pack 2 and 3 kept aside
     isWaiting: boolean; // True if finished current pack round
     pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
+    pickExpiresAt: number; // Timestamp when auto-pick occurs
   }>;
 
   status: 'drafting' | 'deck_building' | 'complete';
+  isPaused: boolean;
   startTime?: number; // For timer
 }
 
@@ -58,6 +60,7 @@ export class DraftManager extends EventEmitter {
       packNumber: 1,
       players: {},
       status: 'drafting',
+      isPaused: false,
       startTime: Date.now()
     };
 
@@ -72,7 +75,8 @@ export class DraftManager extends EventEmitter {
         pool: [],
         unopenedPacks: playerPacks,
         isWaiting: false,
-        pickedInCurrentStep: 0
+        pickedInCurrentStep: 0,
+        pickExpiresAt: Date.now() + 60000 // 60 seconds for first pack
       };
     });
 
@@ -92,15 +96,6 @@ export class DraftManager extends EventEmitter {
     if (!playerState || !playerState.activePack) return null;
 
     // Find card
-    // uniqueId check implies if cards have unique instance IDs in pack, if not we rely on strict equality or assume 1 instance per pack
-
-    // Fallback: If we can't find by ID (if Scryfall ID generic), just pick the first matching ID? 
-    // We should ideally assume the frontend sends the exact card object or unique index.
-    // For now assuming cardId is unique enough or we pick first match.
-    // Better: In a draft, a pack might have 2 duplicates. We need index or unique ID.
-    // Let's assume the pack generation gave unique IDs or we just pick by index.
-    // I'll stick to ID for now, assuming unique.
-
     const card = playerState.activePack.cards.find(c => c.id === cardId);
     if (!card) return null;
 
@@ -166,6 +161,57 @@ export class DraftManager extends EventEmitter {
     if (!p.activePack && p.queue.length > 0) {
       p.activePack = p.queue.shift()!;
       p.pickedInCurrentStep = 0; // Reset for new pack
+      p.pickExpiresAt = Date.now() + 60000; // Reset timer for new pack
+    }
+  }
+
+  checkTimers(): { roomId: string, draft: DraftState }[] {
+    const updates: { roomId: string, draft: DraftState }[] = [];
+    const now = Date.now();
+
+    for (const [roomId, draft] of this.drafts.entries()) {
+      if (draft.isPaused) continue;
+
+      if (draft.status === 'drafting') {
+        let draftUpdated = false;
+        // Iterate over players
+        for (const playerId of Object.keys(draft.players)) {
+          const playerState = draft.players[playerId];
+          // Check if player is thinking (has active pack) and time expired
+          if (playerState.activePack && now > playerState.pickExpiresAt) {
+            const result = this.autoPick(roomId, playerId);
+            if (result) {
+              draftUpdated = true;
+            }
+          }
+        }
+        if (draftUpdated) {
+          updates.push({ roomId, draft });
+        }
+      } else if (draft.status === 'deck_building') {
+        // Check global deck building timer (e.g., 120 seconds)
+        const DECK_BUILDING_Duration = 120000;
+        if (draft.startTime && (now > draft.startTime + DECK_BUILDING_Duration)) {
+          draft.status = 'complete'; // Signal that time is up
+          updates.push({ roomId, draft });
+        }
+      }
+    }
+    return updates;
+  }
+
+  setPaused(roomId: string, paused: boolean) {
+    const draft = this.drafts.get(roomId);
+    if (draft) {
+      draft.isPaused = paused;
+      if (!paused) {
+        // Reset timers to 60s
+        Object.values(draft.players).forEach(p => {
+          if (p.activePack) {
+            p.pickExpiresAt = Date.now() + 60000;
+          }
+        });
+      }
     }
   }
 
@@ -179,8 +225,6 @@ export class DraftManager extends EventEmitter {
     // Pick Random Card
     const randomCardIndex = Math.floor(Math.random() * playerState.activePack.cards.length);
     const card = playerState.activePack.cards[randomCardIndex];
-
-    //console.log(`Auto-picking card for ${playerId}: ${card.name}`);
 
     // Reuse existing logic
     return this.pickCard(roomId, playerId, card.id);
@@ -199,6 +243,7 @@ export class DraftManager extends EventEmitter {
           if (nextPack) {
             p.activePack = nextPack;
             p.pickedInCurrentStep = 0; // Reset
+            p.pickExpiresAt = Date.now() + 60000; // Reset timer
           }
         });
       } else {

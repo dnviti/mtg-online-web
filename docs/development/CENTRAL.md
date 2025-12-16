@@ -21,3 +21,4 @@
 - [2025-12-16-220000_session_persistence.md](./devlog/2025-12-16-220000_session_persistence.md): Plan for session persistence and safer room exit logic.
 - [2025-12-16-221000_lobby_improvements.md](./devlog/2025-12-16-221000_lobby_improvements.md): Plan for kick functionality and exit button relocation.
 - [Fix Draft UI Layout](./devlog/2025-12-16-215500_fix_draft_ui_layout.md): Completed. Fixed "Waiting for next pack" layout to be consistently full-screen.
+- [Draft Timer Enforcement](./devlog/2025-12-16-222500_draft_timer.md): Completed. Implemented server-side 60s timer per pick, AFK auto-pick, and global draft timer loop.
