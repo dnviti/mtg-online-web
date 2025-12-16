@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import { GameState, CardInstance } from '../../types/game';
 import { socketService } from '../../services/SocketService';
 import { CardComponent } from './CardComponent';
-import { GameContextMenu } from './GameContextMenu';
+import { GameContextMenu, ContextMenuRequest } from './GameContextMenu';
+import { ZoneOverlay } from './ZoneOverlay';
 
 interface GameViewProps {
   gameState: GameState;
@@ -11,7 +12,8 @@ interface GameViewProps {
 
 export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }) => {
   const battlefieldRef = useRef<HTMLDivElement>(null);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'background' | 'card'; targetId?: string; card?: CardInstance } | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
+  const [viewingZone, setViewingZone] = useState<string | null>(null);
 
   useEffect(() => {
     // Disable default context menu
@@ -20,30 +22,46 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     return () => document.removeEventListener('contextmenu', handleContext);
   }, []);
 
-  const handleContextMenu = (e: React.MouseEvent, type: 'background' | 'card', targetId?: string) => {
+  const handleContextMenu = (e: React.MouseEvent, type: 'background' | 'card' | 'zone', targetId?: string, zoneName?: string) => {
     e.preventDefault();
-    const card = targetId ? gameState.cards[targetId] : undefined;
+    e.stopPropagation();
+
+    const card = (type === 'card' && targetId) ? gameState.cards[targetId] : undefined;
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       type,
       targetId,
-      card
+      card,
+      zone: zoneName
     });
   };
 
   const handleMenuAction = (actionType: string, payload: any) => {
-    // If creating token, inject current player ID as owner if not present
-    if (actionType === 'CREATE_TOKEN' && !payload.ownerId) {
-      payload.ownerId = currentPlayerId;
+
+    if (actionType === 'VIEW_ZONE') {
+      setViewingZone(payload.zone);
+      return;
+    }
+
+    // Default payload to object if undefined
+    const safePayload = payload || {};
+
+    // Inject currentPlayerId if not present (acts as actor)
+    if (!safePayload.playerId) {
+      safePayload.playerId = currentPlayerId;
+    }
+    // Inject ownerId if not present (useful for token creation etc)
+    if (!safePayload.ownerId) {
+      safePayload.ownerId = currentPlayerId;
     }
 
     socketService.socket.emit('game_action', {
       roomId: gameState.roomId,
       action: {
         type: actionType,
-        ...payload
+        ...safePayload
       }
     });
   };
@@ -135,6 +153,15 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         onAction={handleMenuAction}
       />
 
+      {viewingZone && (
+        <ZoneOverlay
+          zoneName={viewingZone}
+          cards={getCards(currentPlayerId, viewingZone)}
+          onClose={() => setViewingZone(null)}
+          onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId)}
+        />
+      )}
+
       {/* Top Area: Opponent */}
       <div className="flex-[2] relative flex flex-col pointer-events-none">
         {/* Opponent Hand (Visual) */}
@@ -224,7 +251,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
                 onClick={toggleTap}
                 onContextMenu={(id, e) => {
-                  e.stopPropagation(); // Stop bubbling to background
                   handleContextMenu(e, 'card', id);
                 }}
               />
@@ -247,6 +273,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           <div
             className="group relative w-16 h-24 bg-slate-800 rounded border border-slate-600 cursor-pointer shadow-lg transition-transform hover:-translate-y-1 hover:shadow-cyan-500/20"
             onClick={() => socketService.socket.emit('game_action', { roomId: gameState.roomId, action: { type: 'DRAW_CARD', playerId: currentPlayerId } })}
+            onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'library')}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 rounded"></div>
             {/* Deck look */}
@@ -263,6 +290,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             className="w-16 h-24 border-2 border-dashed border-slate-600 rounded flex items-center justify-center mt-2 transition-colors hover:border-slate-400 hover:bg-white/5"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, 'graveyard')}
+            onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'graveyard')}
           >
             <div className="text-center">
               <span className="block text-slate-500 text-[10px] uppercase">Graveyard</span>
@@ -291,7 +319,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   card={card}
                   onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
                   onClick={toggleTap}
-                  onContextMenu={(id) => toggleFlip(id)}
+                  onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
                   style={{ transformOrigin: 'bottom center' }}
                 />
               </div>
@@ -326,6 +354,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             className="w-full text-center border-t border-white/5 pt-2 cursor-pointer hover:bg-white/5 rounded p-1"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, 'exile')}
+            onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'exile')}
           >
             <span className="text-xs text-slate-500 block">Exile Drop Zone</span>
             <span className="text-lg font-bold text-slate-400">{myExile.length}</span>

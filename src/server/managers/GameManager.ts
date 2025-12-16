@@ -104,6 +104,18 @@ export class GameManager {
       case 'SHUFFLE_LIBRARY':
         this.shuffleLibrary(game, action);
         break;
+      case 'SHUFFLE_GRAVEYARD':
+        this.shuffleGraveyard(game, action);
+        break;
+      case 'SHUFFLE_EXILE':
+        this.shuffleExile(game, action);
+        break;
+      case 'MILL_CARD':
+        this.millCard(game, action);
+        break;
+      case 'EXILE_GRAVEYARD':
+        this.exileGraveyard(game, action);
+        break;
     }
 
     return game;
@@ -218,6 +230,37 @@ export class GameManager {
 
   private shuffleLibrary(_game: GameState, _action: { playerId: string }) {
     // No-op in current logic since we pick randomly
+  }
+
+  private shuffleGraveyard(_game: GameState, _action: { playerId: string }) {
+    // No-op
+  }
+
+  private shuffleExile(_game: GameState, _action: { playerId: string }) {
+    // No-op
+  }
+
+  private millCard(game: GameState, action: { playerId: string; amount: number }) {
+    // Similar to draw but to graveyard
+    const amount = action.amount || 1;
+    for (let i = 0; i < amount; i++) {
+      const libraryCards = Object.values(game.cards).filter(c => c.ownerId === action.playerId && c.zone === 'library');
+      if (libraryCards.length > 0) {
+        const randomIndex = Math.floor(Math.random() * libraryCards.length);
+        const card = libraryCards[randomIndex];
+        card.zone = 'graveyard';
+        card.faceDown = false;
+        card.position.z = ++game.maxZ;
+      }
+    }
+  }
+
+  private exileGraveyard(game: GameState, action: { playerId: string }) {
+    const graveyardCards = Object.values(game.cards).filter(c => c.ownerId === action.playerId && c.zone === 'graveyard');
+    graveyardCards.forEach(card => {
+      card.zone = 'exile';
+      card.position.z = ++game.maxZ;
+    });
   }
 
   // Helper to add cards (e.g. at game start)
