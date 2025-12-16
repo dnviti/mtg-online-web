@@ -10,6 +10,7 @@ export interface DraftCard {
   set: string;
   setCode: string;
   setType: string;
+  finish?: 'foil' | 'normal';
 }
 
 export interface Pack {
@@ -71,7 +72,8 @@ export class PackGeneratorService {
         image: cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || '',
         set: cardData.set_name,
         setCode: cardData.set,
-        setType: setType
+        setType: setType,
+        finish: cardData.finish
       };
 
       // Add to pools

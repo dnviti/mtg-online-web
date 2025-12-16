@@ -129,7 +129,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         identifiers.forEach(id => {
           const card = scryfallService.getCachedCard(id.type === 'id' ? { id: id.value } : { name: id.value });
           if (card) {
-            for (let i = 0; i < id.quantity; i++) expandedCards.push(card);
+            for (let i = 0; i < id.quantity; i++) {
+              // Clone card to attach unique properties like finish
+              const expandedCard = { ...card };
+              if (id.finish) {
+                expandedCard.finish = id.finish;
+              }
+              expandedCards.push(expandedCard);
+            }
           }
         });
       }

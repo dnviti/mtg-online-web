@@ -9,6 +9,8 @@ interface PackCardProps {
 }
 
 const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
+  const isFoil = (card: DraftCard) => card.finish === 'foil';
+
   const getRarityColorClass = (rarity: string) => {
     switch (rarity) {
       case 'common': return 'bg-black text-white border-slate-600';
@@ -22,15 +24,21 @@ const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
   return (
     <li className="relative group">
       <div className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer">
-        <span className={`font-medium ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
+        <span className={`font-medium flex items-center gap-2 ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
           {card.name}
+          {isFoil(card) && (
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-400 animate-pulse text-xs font-bold border border-purple-500/50 rounded px-1">
+              FOIL
+            </span>
+          )}
         </span>
         <span className={`w-2 h-2 rounded-full border ${getRarityColorClass(card.rarity)} !p-0 !text-[0px]`}></span>
       </div>
       {card.image && (
         <div className="hidden group-hover:block absolute left-0 top-full z-50 mt-1 pointer-events-none">
-          <div className="bg-black p-1 rounded-lg border border-slate-500 shadow-2xl w-48">
-            <img src={card.image} alt={card.name} className="w-full rounded" />
+          <div className="bg-black p-1 rounded-lg border border-slate-500 shadow-2xl w-48 relative overflow-hidden">
+            {isFoil(card) && <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/10 opacity-50 z-10 pointer-events-none mix-blend-overlay animate-pulse" />}
+            <img src={card.image} alt={card.name} className="w-full rounded relative z-0" />
           </div>
         </div>
       )}
@@ -43,6 +51,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
   const rares = pack.cards.filter(c => c.rarity === 'rare');
   const uncommons = pack.cards.filter(c => c.rarity === 'uncommon');
   const commons = pack.cards.filter(c => c.rarity === 'common');
+  const isFoil = (card: DraftCard) => card.finish === 'foil';
 
   const copyPackToClipboard = () => {
     const text = pack.cards.map(c => c.name).join('\n');
@@ -95,7 +104,10 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
         {viewMode === 'grid' && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {pack.cards.map((card) => (
-              <div key={card.id} className="relative aspect-[2.5/3.5] bg-slate-900 rounded-lg overflow-hidden group hover:scale-105 transition-transform duration-200 shadow-xl border border-slate-800">
+              <div key={card.id} className={`relative aspect-[2.5/3.5] bg-slate-900 rounded-lg overflow-hidden group hover:scale-105 transition-transform duration-200 shadow-xl border ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+                {isFoil(card) && <div className="absolute inset-0 z-20 bg-gradient-to-tr from-purple-500/10 via-transparent to-pink-500/10 mix-blend-color-dodge pointer-events-none" />}
+                {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
+
                 {card.image ? (
                   <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
                 ) : (

@@ -10,6 +10,7 @@ export interface ScryfallCard {
   colors?: string[];
   image_uris?: { normal: string };
   card_faces?: { image_uris: { normal: string } }[];
+  finish?: 'foil' | 'normal'; // Manual override from import
 }
 
 export class ScryfallService {
