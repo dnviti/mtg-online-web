@@ -1,7 +1,8 @@
+/// <reference types="vite/client" />
 
 import { io, Socket } from 'socket.io-client';
 
-const URL = `http://${window.location.hostname}:3000`;
+const URL = import.meta.env.PROD ? undefined : `http://${window.location.hostname}:3000`;
 
 class SocketService {
   public socket: Socket;
