@@ -29,3 +29,5 @@
 - [Bulk Parse Feedback](./devlog/2025-12-16-231500_bulk_parse_feedback.md): Completed. Updated `CubeManager` to handle metadata generation properly and provide feedback on missing cards.
 - [Full Metadata Passthrough](./devlog/2025-12-16-234500_full_metadata_passthrough.md): Completed. `DraftCard` now includes a `definition` property containing the complete, raw Scryfall object for future-proofing and advanced algorithm usage.
 - [Server-Side Caching](./devlog/2025-12-16-235900_server_side_caching.md): Completed. Implemented logic to cache images and metadata on the server upon bulk parsing, and updated client to use local assets.
+- [Peasant Algorithm Implementation](./devlog/2025-12-16-225700_peasant_algorithm.md): Completed. Implemented Peasant-specific pack generation rules including slot logic for commons, uncommons, lands, and wildcards.
+- [Multi-Expansion Selection](./devlog/2025-12-16-230500_multi_expansion_selection.md): Completed. Implemented searchable multi-select interface for "From Expansion" pack generation, allowing mixed-set drafts.

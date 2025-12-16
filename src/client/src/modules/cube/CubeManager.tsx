@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2 } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X } from 'lucide-react';
 import { CardParserService } from '../../services/CardParserService';
 import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
@@ -92,7 +92,11 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     (localStorage.getItem('cube_sourceMode') as 'upload' | 'set') || 'upload'
   );
   const [availableSets, setAvailableSets] = useState<ScryfallSet[]>([]);
-  const [selectedSet, setSelectedSet] = useState(() => localStorage.getItem('cube_selectedSet') || '');
+  const [selectedSets, setSelectedSets] = useState<string[]>(() => {
+    const saved = localStorage.getItem('cube_selectedSets');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [searchTerm, setSearchTerm] = useState('');
   const [numBoxes, setNumBoxes] = useState<number>(() => {
     const saved = localStorage.getItem('cube_numBoxes');
     return saved ? parseInt(saved) : 3;
@@ -103,7 +107,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   useEffect(() => localStorage.setItem('cube_filters', JSON.stringify(filters)), [filters]);
   useEffect(() => localStorage.setItem('cube_genSettings', JSON.stringify(genSettings)), [genSettings]);
   useEffect(() => localStorage.setItem('cube_sourceMode', sourceMode), [sourceMode]);
-  useEffect(() => localStorage.setItem('cube_selectedSet', selectedSet), [selectedSet]);
+  useEffect(() => localStorage.setItem('cube_selectedSets', JSON.stringify(selectedSets)), [selectedSets]);
   useEffect(() => localStorage.setItem('cube_numBoxes', numBoxes.toString()), [numBoxes]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,11 +148,20 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
       let expandedCards: ScryfallCard[] = [];
 
       if (sourceMode === 'set') {
-        if (!selectedSet) throw new Error("Please select a set.");
-        const cards = await scryfallService.fetchSetCards(selectedSet, (count) => {
-          setProgress(`Fetching set cards... (${count})`);
-        });
-        expandedCards = cards;
+        if (selectedSets.length === 0) throw new Error("Please select at least one set.");
+
+        for (const [index, setCode] of selectedSets.entries()) {
+          // Update progress for set
+          const setInfo = availableSets.find(s => s.code === setCode);
+          const setName = setInfo ? setInfo.name : setCode;
+
+          setProgress(`Fetching ${setName}... (${index + 1}/${selectedSets.length})`);
+
+          const cards = await scryfallService.fetchSetCards(setCode, (_count) => {
+            // Progress handled by outer loop mostly, but we could update strictly if needed.
+          });
+          expandedCards.push(...cards);
+        }
       } else {
         const identifiers = parserService.parse(inputText);
         const fetchList = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
@@ -312,10 +325,11 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
       setInputText('');
       setRawScryfallData(null);
       setProcessedData(null);
-      setSelectedSet('');
+      setProcessedData(null);
+      setSelectedSets([]);
       localStorage.removeItem('cube_inputText');
       localStorage.removeItem('cube_rawScryfallData');
-      localStorage.removeItem('cube_selectedSet');
+      localStorage.removeItem('cube_selectedSets');
       // We keep filters and settings as they are user preferences
     }
   };
@@ -405,20 +419,85 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
           ) : (
             <>
               <div className="mb-4">
-                <label className="block text-sm font-semibold text-slate-300 mb-2">Select Expansion</label>
-                <select
-                  value={selectedSet}
-                  onChange={(e) => setSelectedSet(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-slate-300 focus:ring-2 focus:ring-purple-500 outline-none"
-                  disabled={loading}
-                >
-                  <option value="">-- Choose Set --</option>
-                  {availableSets.map(s => (
-                    <option key={s.code} value={s.code}>
-                      {s.name} ({s.code.toUpperCase()}) - {s.set_type}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-semibold text-slate-300 mb-2">Select Expansions</label>
+
+                <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                  {/* Search Header */}
+                  <div className="flex items-center gap-2 p-2 border-b border-slate-700 bg-slate-800/50">
+                    <Search className="w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Search sets..."
+                      className="bg-transparent text-xs w-full outline-none text-white placeholder-slate-500 font-medium"
+                      disabled={loading}
+                    />
+                    {searchTerm && (
+                      <button onClick={() => setSearchTerm('')}>
+                        <X className="w-3 h-3 text-slate-500 hover:text-white" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div className="max-h-60 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
+                    {availableSets
+                      .filter(s =>
+                        !searchTerm ||
+                        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        s.code.toLowerCase().includes(searchTerm.toLowerCase())
+                      )
+                      .map(s => {
+                        const isSelected = selectedSets.includes(s.code);
+                        return (
+                          <label
+                            key={s.code}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${isSelected ? 'bg-purple-900/30 text-purple-200' : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedSets(prev =>
+                                  prev.includes(s.code)
+                                    ? prev.filter(c => c !== s.code)
+                                    : [...prev, s.code]
+                                )
+                              }}
+                              className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                              disabled={loading}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium leading-none">{s.name}</span>
+                              <span className="text-[10px] opacity-60 font-mono">{s.code.toUpperCase()} • {s.set_type} • {s.released_at?.slice(0, 4)}</span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    {availableSets.filter(s => !searchTerm || s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.code.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
+                      <div className="p-3 text-center text-xs text-slate-600 italic">
+                        No sets found matching "{searchTerm}"
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer Stats */}
+                  <div className="bg-slate-950 p-2 border-t border-slate-800 flex justify-between items-center">
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {selectedSets.length} selected
+                    </span>
+                    {selectedSets.length > 0 && (
+                      <button
+                        onClick={() => setSelectedSets([])}
+                        className="text-[10px] text-red-400 hover:text-red-300 hover:underline"
+                        disabled={loading}
+                      >
+                        Clear Selection
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="mb-4">
@@ -439,10 +518,10 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
               <button
                 onClick={fetchAndParse}
-                disabled={loading || !selectedSet}
+                disabled={loading || selectedSets.length === 0}
                 className={`w-full py-2 mb-4 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${loading ? 'bg-slate-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
               >
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}</> : <><Check className="w-4 h-4" /> 1. Fetch Set</>}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}</> : <><Check className="w-4 h-4" /> 1. Fetch {selectedSets.length > 1 ? 'Sets' : 'Set'}</>}
               </button>
             </>
           )}
