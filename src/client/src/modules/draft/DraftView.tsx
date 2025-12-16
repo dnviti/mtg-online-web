@@ -11,7 +11,7 @@ interface DraftViewProps {
   onExit?: () => void;
 }
 
-export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, currentPlayerId, onExit }) => {
+export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerId, onExit }) => {
   const [timer, setTimer] = useState(60);
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
 
@@ -79,13 +79,14 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
   const pickedCards = draftState.players[currentPlayerId]?.pool || [];
 
   const handlePick = (cardId: string) => {
-    socketService.socket.emit('pick_card', { roomId, playerId: currentPlayerId, cardId });
+    // roomId and playerId are now inferred by the server from socket session
+    socketService.socket.emit('pick_card', { cardId });
   };
 
   // ... inside DraftView return ...
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden relative select-none" onContextMenu={(e) => e.preventDefault()}>
+    <div className="flex-1 w-full flex flex-col h-full bg-slate-950 text-white overflow-hidden relative select-none" onContextMenu={(e) => e.preventDefault()}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-50 pointer-events-none"></div>
 
       {/* Top Header: Timer & Pack Info */}

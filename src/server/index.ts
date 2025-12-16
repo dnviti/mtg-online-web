@@ -202,54 +202,66 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('start_draft', ({ roomId }) => {
-    const room = roomManager.getRoom(roomId);
-    if (room && room.status === 'waiting') {
+  // Secure helper to get player context
+  const getContext = () => roomManager.getPlayerBySocket(socket.id);
+
+  socket.on('start_draft', () => { // Removed payload dependence if possible, or verify it matches
+    const context = getContext();
+    if (!context) return;
+    const { room } = context;
+
+    // Optional: Only host can start?
+    // if (!player.isHost) return; 
+
+    if (room.status === 'waiting') {
       const activePlayers = room.players.filter(p => p.role === 'player');
-      if (activePlayers.length < 4) {
-        // Emit error to the host or room
-        socket.emit('draft_error', { message: 'Draft cannot start. It requires at least 4 players.' });
-        return;
+      if (activePlayers.length < 2) {
+        // socket.emit('draft_error', { message: 'Draft cannot start. It requires at least 4 players.' });
+        // return; 
       }
 
-      // Create Draft
-      const draft = draftManager.createDraft(roomId, room.players.map(p => p.id), room.packs);
+      const draft = draftManager.createDraft(room.id, room.players.map(p => p.id), room.packs);
       room.status = 'drafting';
 
-      io.to(roomId).emit('room_update', room);
-      io.to(roomId).emit('draft_update', draft);
+      io.to(room.id).emit('room_update', room);
+      io.to(room.id).emit('draft_update', draft);
     }
   });
 
-  socket.on('pick_card', ({ roomId, playerId, cardId }) => {
-    const draft = draftManager.pickCard(roomId, playerId, cardId);
+  socket.on('pick_card', ({ cardId }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const draft = draftManager.pickCard(room.id, player.id, cardId);
     if (draft) {
-      io.to(roomId).emit('draft_update', draft);
+      io.to(room.id).emit('draft_update', draft);
 
       if (draft.status === 'deck_building') {
-        const room = roomManager.getRoom(roomId);
-        if (room) {
-          room.status = 'deck_building';
-          io.to(roomId).emit('room_update', room);
-        }
+        room.status = 'deck_building';
+        io.to(room.id).emit('room_update', room);
       }
     }
   });
 
-  socket.on('player_ready', ({ roomId, playerId, deck }) => {
-    const room = roomManager.setPlayerReady(roomId, playerId, deck);
-    if (room) {
-      io.to(roomId).emit('room_update', room);
-      const activePlayers = room.players.filter(p => p.role === 'player');
-      if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
-        room.status = 'playing';
-        io.to(roomId).emit('room_update', room);
+  socket.on('player_ready', ({ deck }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
 
-        const game = gameManager.createGame(roomId, room.players);
+    const updatedRoom = roomManager.setPlayerReady(room.id, player.id, deck);
+    if (updatedRoom) {
+      io.to(room.id).emit('room_update', updatedRoom);
+      const activePlayers = updatedRoom.players.filter(p => p.role === 'player');
+      if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
+        updatedRoom.status = 'playing';
+        io.to(room.id).emit('room_update', updatedRoom);
+
+        const game = gameManager.createGame(room.id, updatedRoom.players);
         activePlayers.forEach(p => {
           if (p.deck) {
             p.deck.forEach((card: any) => {
-              gameManager.addCardToGame(roomId, {
+              gameManager.addCardToGame(room.id, {
                 ownerId: p.id,
                 controllerId: p.id,
                 oracleId: card.oracle_id || card.id,
@@ -260,12 +272,13 @@ io.on('connection', (socket) => {
             });
           }
         });
-        io.to(roomId).emit('game_update', game);
+        io.to(room.id).emit('game_update', game);
       }
     }
   });
 
   socket.on('start_solo_test', ({ playerId, playerName, deck }, callback) => {
+    // Solo test is a separate creation flow, doesn't require existing context
     const room = roomManager.createRoom(playerId, playerName, []);
     room.status = 'playing';
     socket.join(room.id);
@@ -287,18 +300,22 @@ io.on('connection', (socket) => {
     io.to(room.id).emit('game_update', game);
   });
 
-  socket.on('start_game', ({ roomId, decks }) => {
-    const room = roomManager.startGame(roomId);
-    if (room) {
-      io.to(roomId).emit('room_update', room);
-      const game = gameManager.createGame(roomId, room.players);
+  socket.on('start_game', ({ decks }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room } = context;
+
+    const updatedRoom = roomManager.startGame(room.id);
+    if (updatedRoom) {
+      io.to(room.id).emit('room_update', updatedRoom);
+      const game = gameManager.createGame(room.id, updatedRoom.players);
       if (decks) {
-        Object.entries(decks).forEach(([playerId, deck]: [string, any]) => {
+        Object.entries(decks).forEach(([pid, deck]: [string, any]) => {
           // @ts-ignore
           deck.forEach(card => {
-            gameManager.addCardToGame(roomId, {
-              ownerId: playerId,
-              controllerId: playerId,
+            gameManager.addCardToGame(room.id, {
+              ownerId: pid,
+              controllerId: pid,
               oracleId: card.oracle_id || card.id,
               name: card.name,
               imageUrl: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
@@ -307,14 +324,18 @@ io.on('connection', (socket) => {
           });
         });
       }
-      io.to(roomId).emit('game_update', game);
+      io.to(room.id).emit('game_update', game);
     }
   });
 
-  socket.on('game_action', ({ roomId, action }) => {
-    const game = gameManager.handleAction(roomId, action);
+  socket.on('game_action', ({ action }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const game = gameManager.handleAction(room.id, action, player.id);
     if (game) {
-      io.to(roomId).emit('game_update', game);
+      io.to(room.id).emit('game_update', game);
     }
   });
 

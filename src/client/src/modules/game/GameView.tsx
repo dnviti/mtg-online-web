@@ -58,7 +58,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     }
 
     socketService.socket.emit('game_action', {
-      roomId: gameState.roomId,
       action: {
         type: actionType,
         ...safePayload
@@ -92,7 +91,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     }
 
     socketService.socket.emit('game_action', {
-      roomId: gameState.roomId,
       action
     });
   };
@@ -103,7 +101,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
   const toggleTap = (cardId: string) => {
     socketService.socket.emit('game_action', {
-      roomId: gameState.roomId,
       action: {
         type: 'TAP_CARD',
         cardId
@@ -272,7 +269,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         <div className="w-40 p-2 flex flex-col gap-2 items-center justify-center border-r border-white/10">
           <div
             className="group relative w-16 h-24 bg-slate-800 rounded border border-slate-600 cursor-pointer shadow-lg transition-transform hover:-translate-y-1 hover:shadow-cyan-500/20"
-            onClick={() => socketService.socket.emit('game_action', { roomId: gameState.roomId, action: { type: 'DRAW_CARD', playerId: currentPlayerId } })}
+            onClick={() => socketService.socket.emit('game_action', { action: { type: 'DRAW_CARD' } })}
             onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'library')}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 rounded"></div>
@@ -337,13 +334,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             <div className="flex gap-1 mt-2 justify-center">
               <button
                 className="w-8 h-8 rounded-full bg-slate-800 hover:bg-red-500/20 text-red-500 border border-slate-700 hover:border-red-500 transition-colors flex items-center justify-center font-bold"
-                onClick={() => socketService.socket.emit('game_action', { roomId: gameState.roomId, action: { type: 'UPDATE_LIFE', playerId: currentPlayerId, amount: -1 } })}
+                onClick={() => socketService.socket.emit('game_action', { action: { type: 'UPDATE_LIFE', amount: -1 } })}
               >
                 -
               </button>
               <button
                 className="w-8 h-8 rounded-full bg-slate-800 hover:bg-emerald-500/20 text-emerald-500 border border-slate-700 hover:border-emerald-500 transition-colors flex items-center justify-center font-bold"
-                onClick={() => socketService.socket.emit('game_action', { roomId: gameState.roomId, action: { type: 'UPDATE_LIFE', playerId: currentPlayerId, amount: 1 } })}
+                onClick={() => socketService.socket.emit('game_action', { action: { type: 'UPDATE_LIFE', amount: 1 } })}
               >
                 +
               </button>

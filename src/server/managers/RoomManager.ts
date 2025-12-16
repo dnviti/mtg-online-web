@@ -145,4 +145,15 @@ export class RoomManager {
     room.messages.push(message);
     return message;
   }
+
+  getPlayerBySocket(socketId: string): { player: Player, room: Room } | null {
+    // Inefficient linear search, but robust for now. Maps would be better for high scale.
+    for (const room of this.rooms.values()) {
+      const player = room.players.find(p => p.socketId === socketId);
+      if (player) {
+        return { player, room };
+      }
+    }
+    return null;
+  }
 }

@@ -9,7 +9,7 @@ interface DeckBuilderViewProps {
   initialPool: any[];
 }
 
-export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ roomId, currentPlayerId, initialPool }) => {
+export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool }) => {
   const [timer, setTimer] = useState(45 * 60); // 45 minutes
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
@@ -84,11 +84,11 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ roomId, curren
     // Actually, user rules say "Host ... guided ... configuring packs ... multiplayer".
 
     // I'll emit 'submit_deck' event (need to handle in server)
-    socketService.socket.emit('player_ready', { roomId, playerId: currentPlayerId, deck: fullDeck });
+    socketService.socket.emit('player_ready', { deck: fullDeck });
   };
 
   return (
-    <div className="flex h-full bg-slate-900 text-white">
+    <div className="flex-1 w-full flex h-full bg-slate-900 text-white">
       {/* Left: Pool */}
       <div className="w-1/2 p-4 flex flex-col border-r border-slate-700">
         <div className="flex justify-between items-center mb-4">

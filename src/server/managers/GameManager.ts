@@ -72,58 +72,67 @@ export class GameManager {
   }
 
   // Generic action handler for sandbox mode
-  handleAction(roomId: string, action: any): GameState | null {
+  handleAction(roomId: string, action: any, actorId: string): GameState | null {
     const game = this.games.get(roomId);
     if (!game) return null;
 
+    // Basic Validation: Ensure actor exists in game
+    if (!game.players[actorId]) return null;
+
     switch (action.type) {
       case 'MOVE_CARD':
-        this.moveCard(game, action);
+        this.moveCard(game, action, actorId);
         break;
       case 'TAP_CARD':
-        this.tapCard(game, action);
+        this.tapCard(game, action, actorId);
         break;
       case 'FLIP_CARD':
-        this.flipCard(game, action);
+        this.flipCard(game, action, actorId);
         break;
       case 'ADD_COUNTER':
-        this.addCounter(game, action);
+        this.addCounter(game, action, actorId);
         break;
       case 'CREATE_TOKEN':
-        this.createToken(game, action);
+        this.createToken(game, action, actorId);
         break;
       case 'DELETE_CARD':
-        this.deleteCard(game, action);
+        this.deleteCard(game, action, actorId);
         break;
       case 'UPDATE_LIFE':
-        this.updateLife(game, action);
+        this.updateLife(game, action, actorId);
         break;
       case 'DRAW_CARD':
-        this.drawCard(game, action);
+        this.drawCard(game, action, actorId);
         break;
       case 'SHUFFLE_LIBRARY':
-        this.shuffleLibrary(game, action);
+        this.shuffleLibrary(game, action, actorId);
         break;
       case 'SHUFFLE_GRAVEYARD':
-        this.shuffleGraveyard(game, action);
+        this.shuffleGraveyard(game, action, actorId);
         break;
       case 'SHUFFLE_EXILE':
-        this.shuffleExile(game, action);
+        this.shuffleExile(game, action, actorId);
         break;
       case 'MILL_CARD':
-        this.millCard(game, action);
+        this.millCard(game, action, actorId);
         break;
       case 'EXILE_GRAVEYARD':
-        this.exileGraveyard(game, action);
+        this.exileGraveyard(game, action, actorId);
         break;
     }
 
     return game;
   }
 
-  private moveCard(game: GameState, action: { cardId: string; toZone: CardInstance['zone']; position?: { x: number, y: number } }) {
+  private moveCard(game: GameState, action: { cardId: string; toZone: CardInstance['zone']; position?: { x: number, y: number } }, actorId: string) {
     const card = game.cards[action.cardId];
     if (card) {
+      // ANTI-TAMPER: Only controller can move card
+      if (card.controllerId !== actorId) {
+        console.warn(`Anti-Tamper: Player ${actorId} tried to move card ${card.instanceId} controlled by ${card.controllerId}`);
+        return;
+      }
+
       // Bring to front
       card.position.z = ++game.maxZ;
 
@@ -145,13 +154,13 @@ export class GameManager {
     }
   }
 
-  private addCounter(game: GameState, action: { cardId: string; counterType: string; amount: number }) {
+  private addCounter(game: GameState, action: { cardId: string; counterType: string; amount: number }, actorId: string) {
     const card = game.cards[action.cardId];
     if (card) {
+      if (card.controllerId !== actorId) return; // Anti-tamper
       const existing = card.counters.find(c => c.type === action.counterType);
       if (existing) {
         existing.count += action.amount;
-        // Remove if 0 or less? Usually yes for counters like +1/+1 but let's just keep logic simple
         if (existing.count <= 0) {
           card.counters = card.counters.filter(c => c.type !== action.counterType);
         }
@@ -161,7 +170,9 @@ export class GameManager {
     }
   }
 
-  private createToken(game: GameState, action: { ownerId: string; tokenData: any; position?: { x: number, y: number } }) {
+  private createToken(game: GameState, action: { ownerId: string; tokenData: any; position?: { x: number, y: number } }, actorId: string) {
+    if (action.ownerId !== actorId) return; // Anti-tamper
+
     const tokenId = `token-${Math.random().toString(36).substring(7)}`;
     // @ts-ignore
     const token: CardInstance = {
@@ -185,40 +196,40 @@ export class GameManager {
     game.cards[tokenId] = token;
   }
 
-  private deleteCard(game: GameState, action: { cardId: string }) {
-    if (game.cards[action.cardId]) {
+  private deleteCard(game: GameState, action: { cardId: string }, actorId: string) {
+    if (game.cards[action.cardId] && game.cards[action.cardId].controllerId === actorId) {
       delete game.cards[action.cardId];
     }
   }
 
-  private tapCard(game: GameState, action: { cardId: string }) {
+  private tapCard(game: GameState, action: { cardId: string }, actorId: string) {
     const card = game.cards[action.cardId];
-    if (card) {
+    if (card && card.controllerId === actorId) {
       card.tapped = !card.tapped;
     }
   }
 
-  private flipCard(game: GameState, action: { cardId: string }) {
+  private flipCard(game: GameState, action: { cardId: string }, actorId: string) {
     const card = game.cards[action.cardId];
-    if (card) {
-      // Bring to front on flip too
+    if (card && card.controllerId === actorId) {
       card.position.z = ++game.maxZ;
       card.faceDown = !card.faceDown;
     }
   }
 
-  private updateLife(game: GameState, action: { playerId: string; amount: number }) {
+  private updateLife(game: GameState, action: { playerId: string; amount: number }, actorId: string) {
+    if (action.playerId !== actorId) return; // Anti-tamper
     const player = game.players[action.playerId];
     if (player) {
       player.life += action.amount;
     }
   }
 
-  private drawCard(game: GameState, action: { playerId: string }) {
-    // Find top card of library for this player
+  private drawCard(game: GameState, action: { playerId: string }, actorId: string) {
+    if (action.playerId !== actorId) return; // Anti-tamper
+
     const libraryCards = Object.values(game.cards).filter(c => c.ownerId === action.playerId && c.zone === 'library');
     if (libraryCards.length > 0) {
-      // Pick random one (simulating shuffle for now)
       const randomIndex = Math.floor(Math.random() * libraryCards.length);
       const card = libraryCards[randomIndex];
 
@@ -228,20 +239,21 @@ export class GameManager {
     }
   }
 
-  private shuffleLibrary(_game: GameState, _action: { playerId: string }) {
-    // No-op in current logic since we pick randomly
+  private shuffleLibrary(_game: GameState, _action: { playerId: string }, actorId: string) {
+    if (_action.playerId !== actorId) return;
   }
 
-  private shuffleGraveyard(_game: GameState, _action: { playerId: string }) {
-    // No-op
+  private shuffleGraveyard(_game: GameState, _action: { playerId: string }, actorId: string) {
+    if (_action.playerId !== actorId) return;
   }
 
-  private shuffleExile(_game: GameState, _action: { playerId: string }) {
-    // No-op
+  private shuffleExile(_game: GameState, _action: { playerId: string }, actorId: string) {
+    if (_action.playerId !== actorId) return;
   }
 
-  private millCard(game: GameState, action: { playerId: string; amount: number }) {
-    // Similar to draw but to graveyard
+  private millCard(game: GameState, action: { playerId: string; amount: number }, actorId: string) {
+    if (action.playerId !== actorId) return;
+
     const amount = action.amount || 1;
     for (let i = 0; i < amount; i++) {
       const libraryCards = Object.values(game.cards).filter(c => c.ownerId === action.playerId && c.zone === 'library');
@@ -255,7 +267,9 @@ export class GameManager {
     }
   }
 
-  private exileGraveyard(game: GameState, action: { playerId: string }) {
+  private exileGraveyard(game: GameState, action: { playerId: string }, actorId: string) {
+    if (action.playerId !== actorId) return;
+
     const graveyardCards = Object.values(game.cards).filter(c => c.ownerId === action.playerId && c.zone === 'graveyard');
     graveyardCards.forEach(card => {
       card.zone = 'exile';
