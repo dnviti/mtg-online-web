@@ -15,4 +15,5 @@
 - [Reconnection & Auto-Pick](./devlog/2025-12-16-191500_reconnection_and_autopick.md): Completed. Implemented session persistence, seamless reconnection, and 30s auto-pick on disconnect.
 - [Draft Interface UI Polish](./devlog/2025-12-16-195000_draft_ui_polish.md): Completed. Redesigned the draft view for a cleaner, immersive, game-like experience with no unnecessary scrolls.
 - [Resizable Draft Interface](./devlog/2025-12-16-200500_resizable_draft_ui.md): Completed. Implemented user-resizable pool panel and card sizes with persistence.
-- [Card Zoom (Dedicated Zone)](./devlog/2025-12-16-203000_zoom_zone.md): Completed. Refactored layout to show zoomed card in a dedicated side panel.
+- [Draft UI Zoom Zone](./devlog/2025-12-16-203000_zoom_zone.md): Completed. Implemented dedicated zoom zone for card preview.
+- [Host Disconnect Pause](./devlog/2025-12-16-213500_host_disconnect_pause.md): Completed. Specific logic to pause game when host leaves.

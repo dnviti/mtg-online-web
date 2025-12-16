@@ -182,12 +182,12 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
 
 
   const handleExitRoom = () => {
+    if (activeRoom) {
+      socketService.socket.emit('leave_room', { roomId: activeRoom.id, playerId });
+    }
     setActiveRoom(null);
     setInitialDraftState(null);
     localStorage.removeItem('active_room_id');
-    // Also likely want to disconnect socket or leave room specifically if needed, 
-    // but just clearing local state allows creating new rooms.
-    // Ideally: socketService.emit('leave_room', { roomId: activeRoom.id, playerId });
   };
 
   if (activeRoom) {

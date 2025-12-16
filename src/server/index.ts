@@ -64,8 +64,54 @@ app.post('/api/cards/cache', async (req: Request, res: Response) => {
 io.on('connection', (socket) => {
   console.log('A user connected', socket.id);
 
-  // Actually, let's use a simpler map: PlayerID -> Timeout
+  // Timer management
   const playerTimers = new Map<string, NodeJS.Timeout>();
+
+  const startAutoPickTimer = (roomId: string, playerId: string) => {
+    // Clear existing if any (debounce)
+    if (playerTimers.has(playerId)) {
+      clearTimeout(playerTimers.get(playerId)!);
+    }
+
+    const timer = setTimeout(() => {
+      console.log(`Timeout for player ${playerId}. Auto-picking...`);
+      const draft = draftManager.autoPick(roomId, playerId);
+      if (draft) {
+        io.to(roomId).emit('draft_update', draft);
+        // We only pick once. If they stay offline, the next pick depends on the next turn cycle.
+        // If we wanted continuous auto-pick, we'd need to check if it's still their turn and recurse.
+        // For now, this unblocks the current step.
+      }
+      playerTimers.delete(playerId);
+    }, 30000); // 30s
+
+    playerTimers.set(playerId, timer);
+  };
+
+  const stopAutoPickTimer = (playerId: string) => {
+    if (playerTimers.has(playerId)) {
+      clearTimeout(playerTimers.get(playerId)!);
+      playerTimers.delete(playerId);
+    }
+  };
+
+  const stopAllRoomTimers = (roomId: string) => {
+    const room = roomManager.getRoom(roomId);
+    if (room) {
+      room.players.forEach(p => stopAutoPickTimer(p.id));
+    }
+  };
+
+  const resumeRoomTimers = (roomId: string) => {
+    const room = roomManager.getRoom(roomId);
+    if (room && room.status === 'drafting') {
+      room.players.forEach(p => {
+        if (p.isOffline && p.role === 'player') {
+          startAutoPickTimer(roomId, p.id);
+        }
+      });
+    }
+  };
 
   socket.on('create_room', ({ hostId, hostName, packs }, callback) => {
     const room = roomManager.createRoom(hostId, hostName, packs, socket.id); // Add socket.id
@@ -78,15 +124,18 @@ io.on('connection', (socket) => {
     const room = roomManager.joinRoom(roomId, playerId, playerName, socket.id); // Add socket.id
     if (room) {
       // Clear timeout if exists (User reconnected)
-      if (playerTimers.has(playerId)) {
-        clearTimeout(playerTimers.get(playerId)!);
-        playerTimers.delete(playerId);
-        console.log(`Player ${playerName} reconnected. Auto-pick cancelled.`);
-      }
+      stopAutoPickTimer(playerId);
+      console.log(`Player ${playerName} reconnected. Auto-pick cancelled.`);
 
       socket.join(room.id);
       console.log(`Player ${playerName} joined room ${roomId}`);
       io.to(room.id).emit('room_update', room); // Broadcast update
+
+      // Check if Host Reconnected -> Resume Game
+      if (room.hostId === playerId) {
+        console.log(`Host ${playerName} reconnected. Resuming draft timers.`);
+        resumeRoomTimers(roomId);
+      }
 
       // If drafting, send state immediately and include in callback
       let currentDraft = null;
@@ -104,25 +153,45 @@ io.on('connection', (socket) => {
   // RE-IMPLEMENTING rejoin_room with playerId
   socket.on('rejoin_room', ({ roomId, playerId }) => {
     socket.join(roomId);
+
     if (playerId) {
       // Update socket ID mapping
-      roomManager.updatePlayerSocket(roomId, playerId, socket.id);
+      const room = roomManager.updatePlayerSocket(roomId, playerId, socket.id);
 
-      // Clear Timer
-      if (playerTimers.has(playerId)) {
-        clearTimeout(playerTimers.get(playerId)!);
-        playerTimers.delete(playerId);
-        console.log(`Player ${playerId} reconnected via rejoin. Auto-pick cancelled.`);
+      if (room) {
+        // Clear Timer
+        stopAutoPickTimer(playerId);
+        console.log(`Player ${playerId} reconnected via rejoin.`);
+
+        // Notify others (isOffline false)
+        io.to(roomId).emit('room_update', room);
+
+        // Check if Host Reconnected -> Resume Game
+        if (room.hostId === playerId) {
+          console.log(`Host ${playerId} reconnected. Resuming draft timers.`);
+          resumeRoomTimers(roomId);
+        }
+
+        if (room.status === 'drafting') {
+          const draft = draftManager.getDraft(roomId);
+          if (draft) socket.emit('draft_update', draft);
+        }
       }
+    } else {
+      // Just get room if no playerId? Should rare happen
+      const room = roomManager.getRoom(roomId);
+      if (room) socket.emit('room_update', room);
     }
+  });
 
-    const room = roomManager.getRoom(roomId);
+  socket.on('leave_room', ({ roomId, playerId }) => {
+    const room = roomManager.leaveRoom(roomId, playerId);
+    socket.leave(roomId);
     if (room) {
-      socket.emit('room_update', room);
-      if (room.status === 'drafting') {
-        const draft = draftManager.getDraft(roomId);
-        if (draft) socket.emit('draft_update', draft);
-      }
+      console.log(`Player ${playerId} left room ${roomId}`);
+      io.to(roomId).emit('room_update', room);
+    } else {
+      console.log(`Room ${roomId} closed/empty`);
     }
   });
 
@@ -261,32 +330,17 @@ io.on('connection', (socket) => {
       io.to(room.id).emit('room_update', room);
 
       if (room.status === 'drafting') {
-        // Start Timer (e.g. 30 seconds)
-        const timer = setTimeout(() => {
-          console.log(`Timeout for player ${playerId}. Auto-picking...`);
-          // Auto-pick
-          const draft = draftManager.autoPick(room.id, playerId);
-          if (draft) {
-            io.to(room.id).emit('draft_update', draft);
+        // Check if Host is currently offline (including self if self is host)
+        // If Host is offline, PAUSE EVERYTHING.
+        const hostOffline = room.players.find(p => p.id === room.hostId)?.isOffline;
 
-            // If they still have picks to make (Pick 2), we might need to auto-pick again?
-            // For simplicity, let's assume autoPick handles 1 pick. 
-            // If they are still offline, the NEXT time they are blocking the flow?
-            // Ideally, we should check if they still need to pick. 
-            // But for a basic "if user does not reconnect in a time frame", this fulfills the request.
-            // The system will effectively auto-pick 1 card every 30s (if we reset the timer).
-            // But we only set the timer ONCE on disconnect.
-            // If they stay disconnected, we need to loop.
-
-            // RECURSIVE TIMER:
-            // If player is still offline after auto-pick, schedule another one?
-            // We need to check if they are still blocking.
-            // For now, let's just do ONE auto-pick per disconnect event to unblock.
-          }
-          playerTimers.delete(playerId);
-        }, 30000); // 30 seconds
-
-        playerTimers.set(playerId, timer);
+        if (hostOffline) {
+          console.log("Host is offline. Pausing game (stopping all timers).");
+          stopAllRoomTimers(room.id);
+        } else {
+          // Host is online, but THIS player disconnected. Start timer for them.
+          startAutoPickTimer(room.id, playerId);
+        }
       }
     }
   });

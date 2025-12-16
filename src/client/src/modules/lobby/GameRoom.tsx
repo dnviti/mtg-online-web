@@ -82,12 +82,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       setModalOpen(true);
     };
 
+    const handleGameUpdate = (data: any) => {
+      setGameState(data);
+    };
+
     socket.on('draft_update', handleDraftUpdate);
     socket.on('draft_error', handleDraftError);
+    socket.on('game_update', handleGameUpdate);
 
     return () => {
       socket.off('draft_update', handleDraftUpdate);
       socket.off('draft_error', handleDraftError);
+      socket.off('game_update', handleGameUpdate);
     };
   }, []);
 
