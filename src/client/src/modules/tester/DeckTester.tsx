@@ -115,8 +115,13 @@ export const DeckTester: React.FC = () => {
     }
   };
 
+  const handleExitTester = () => {
+    setActiveRoom(null);
+    setInitialGame(null);
+  };
+
   if (activeRoom) {
-    return <GameRoom room={activeRoom} currentPlayerId={playerId} initialGameState={initialGame} />;
+    return <GameRoom room={activeRoom} currentPlayerId={playerId} initialGameState={initialGame} onExit={handleExitTester} />;
   }
 
   return (

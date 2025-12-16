@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Play, Copy, Check, Layers } from 'lucide-react';
+import { Users, MessageSquare, Send, Play, Copy, Check, Layers, LogOut } from 'lucide-react';
+import { Modal } from '../../components/Modal';
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
@@ -11,6 +12,7 @@ interface Player {
   name: string;
   isHost: boolean;
   role: 'player' | 'spectator';
+  isOffline?: boolean;
 }
 
 interface ChatMessage {
@@ -32,53 +34,38 @@ interface GameRoomProps {
   room: Room;
   currentPlayerId: string;
   initialGameState?: any;
+  initialDraftState?: any;
+  onExit: () => void;
 }
 
-export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId, initialGameState }) => {
+export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId, initialGameState, initialDraftState, onExit }) => {
+  // State
   const [room, setRoom] = useState<Room>(initialRoom);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ title: '', message: '', type: 'info' as 'info' | 'error' | 'warning' | 'success' });
+
+  // Restored States
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(initialRoom.messages || []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<any>(initialGameState || null);
+  const [draftState, setDraftState] = useState<any>(initialDraftState || null);
 
+  // Derived State
+  const host = room.players.find(p => p.isHost);
+  const isHostOffline = host?.isOffline;
+  const isMeHost = currentPlayerId === host?.id;
+
+  // Effects
   useEffect(() => {
     setRoom(initialRoom);
     setMessages(initialRoom.messages || []);
   }, [initialRoom]);
 
-  useEffect(() => {
-    const socket = socketService.socket;
-
-    const handleRoomUpdate = (updatedRoom: Room) => {
-      console.log('Room updated:', updatedRoom);
-      setRoom(updatedRoom);
-    };
-
-    const handleNewMessage = (msg: ChatMessage) => {
-      setMessages(prev => [...prev, msg]);
-    };
-
-    const handleGameUpdate = (game: any) => {
-      setGameState(game);
-    };
-
-    socket.on('room_update', handleRoomUpdate);
-    socket.on('new_message', handleNewMessage);
-    socket.on('game_update', handleGameUpdate);
-
-    return () => {
-      socket.off('room_update', handleRoomUpdate);
-      socket.off('new_message', handleNewMessage);
-      socket.off('game_update', handleGameUpdate);
-    };
-  }, []);
-
+  // Scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // New States
-  const [draftState, setDraftState] = useState<any>(null);
 
   useEffect(() => {
     const socket = socketService.socket;
@@ -87,7 +74,12 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     };
 
     const handleDraftError = (error: { message: string }) => {
-      alert(error.message); // Simple alert for now
+      setModalConfig({
+        title: 'Error',
+        message: error.message,
+        type: 'error'
+      });
+      setModalOpen(true);
     };
 
     socket.on('draft_update', handleDraftUpdate);
@@ -116,10 +108,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     if (navigator.clipboard) {
       navigator.clipboard.writeText(room.id).catch(err => {
         console.error('Failed to copy: ', err);
-        // Fallback could go here
       });
     } else {
-      // Fallback for non-secure context or older browsers
       console.warn('Clipboard API not available');
       const textArea = document.createElement("textarea");
       textArea.value = room.id;
@@ -135,19 +125,17 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   };
 
   const handleStartGame = () => {
-    // Create a test deck for each player for now
     const testDeck = Array.from({ length: 40 }).map((_, i) => ({
       id: `card-${i}`,
       name: i % 2 === 0 ? "Mountain" : "Lightning Bolt",
       image_uris: {
         normal: i % 2 === 0
-          ? "https://cards.scryfall.io/normal/front/1/9/194459f0-2586-444a-be7d-786d5e7e9bc4.jpg" // Mountain
-          : "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb211a7.jpg" // Bolt
+          ? "https://cards.scryfall.io/normal/front/1/9/194459f0-2586-444a-be7d-786d5e7e9bc4.jpg"
+          : "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb211a7.jpg"
       }
     }));
 
     const decks = room.players.reduce((acc, p) => ({ ...acc, [p.id]: testDeck }), {});
-
     socketService.socket.emit('start_game', { roomId: room.id, decks });
   };
 
@@ -155,21 +143,16 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     socketService.socket.emit('start_draft', { roomId: room.id });
   };
 
-  // Helper to determine view
   const renderContent = () => {
     if (gameState) {
       return <GameView gameState={gameState} currentPlayerId={currentPlayerId} />;
     }
 
     if (room.status === 'drafting' && draftState) {
-      return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} />;
+      return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} onExit={onExit} />;
     }
 
     if (room.status === 'deck_building' && draftState) {
-      // Check if I am ready
-      // Type casting needed because 'ready' was added to interface only in server side so far? 
-      // Need to update client Player interface too in this file if not already consistent.
-      // But let's assume raw object has it.
       const me = room.players.find(p => p.id === currentPlayerId) as any;
       if (me?.ready) {
         return (
@@ -201,7 +184,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} />;
     }
 
-    // Default Waiting Lobby
     return (
       <div className="flex-1 bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center">
         <h2 className="text-3xl font-bold text-white mb-4">Waiting for Players...</h2>
@@ -250,16 +232,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     <div className="flex h-full gap-4">
       {renderContent()}
 
-      {/* Sidebar: Players & Chat */}
       <div className="w-80 flex flex-col gap-4">
-        {/* Players List */}
         <div className="flex-1 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl overflow-hidden flex flex-col">
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
             <Users className="w-4 h-4" /> Lobby
           </h3>
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {room.players.map(p => {
-              // Cast to any to access ready state without full interface update for now
               const isReady = (p as any).ready;
               return (
                 <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
@@ -283,7 +262,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           </div>
         </div>
 
-        {/* Chat */}
         <div className="h-1/2 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl flex flex-col">
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
             <MessageSquare className="w-4 h-4" /> Chat
@@ -311,6 +289,48 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           </form>
         </div>
       </div>
+
+      {/* Host Disconnected Overlay */}
+      {isHostOffline && !isMeHost && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-8 animate-in fade-in duration-500">
+          <div className="bg-slate-900 border border-red-500/50 p-8 rounded-2xl shadow-2xl max-w-lg text-center">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Users className="w-8 h-8 text-red-500" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Game Paused</h2>
+            <p className="text-slate-300 mb-6">
+              The host <span className="text-white font-bold">{host?.name}</span> has disconnected.
+              The game is paused until they reconnect.
+            </p>
+            <div className="flex flex-col gap-6 items-center">
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-500 uppercase tracking-wider font-bold animate-pulse">
+                <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                Waiting for host...
+              </div>
+
+              <button
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to leave the game?")) {
+                    onExit();
+                  }
+                }}
+                className="px-6 py-2 bg-slate-800 hover:bg-red-900/30 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/50 rounded-lg flex items-center gap-2 transition-all"
+              >
+                <LogOut className="w-4 h-4" /> Leave Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Modal */}
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        type={modalConfig.type}
+      />
     </div>
   );
 };

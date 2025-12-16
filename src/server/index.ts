@@ -88,13 +88,14 @@ io.on('connection', (socket) => {
       console.log(`Player ${playerName} joined room ${roomId}`);
       io.to(room.id).emit('room_update', room); // Broadcast update
 
-      // If drafting, send state immediately
+      // If drafting, send state immediately and include in callback
+      let currentDraft = null;
       if (room.status === 'drafting') {
-        const draft = draftManager.getDraft(roomId);
-        if (draft) socket.emit('draft_update', draft);
+        currentDraft = draftManager.getDraft(roomId);
+        if (currentDraft) socket.emit('draft_update', currentDraft);
       }
 
-      callback({ success: true, room });
+      callback({ success: true, room, draftState: currentDraft });
     } else {
       callback({ success: false, message: 'Room not found or full' });
     }

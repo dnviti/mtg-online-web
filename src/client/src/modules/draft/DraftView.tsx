@@ -1,15 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
+import { LogOut } from 'lucide-react';
+import { Modal } from '../../components/Modal';
 
 interface DraftViewProps {
   draftState: any;
   roomId: string; // Passed from parent
   currentPlayerId: string;
+  onExit?: () => void;
 }
 
-export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, currentPlayerId }) => {
+export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, currentPlayerId, onExit }) => {
   const [timer, setTimer] = useState(60);
+  const [confirmExitOpen, setConfirmExitOpen] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -78,14 +82,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
     socketService.socket.emit('pick_card', { roomId, playerId: currentPlayerId, cardId });
   };
 
-  if (!activePack) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-slate-900 text-white">
-        <h2 className="text-2xl font-bold mb-4">Waiting for next pack...</h2>
-        <div className="animate-pulse bg-slate-700 w-64 h-8 rounded"></div>
-      </div>
-    );
-  }
+  // ... inside DraftView return ...
 
   return (
     <div className="flex flex-col h-full bg-slate-950 text-white overflow-hidden relative select-none" onContextMenu={(e) => e.preventDefault()}>
@@ -117,8 +114,23 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
             </div>
           </div>
 
-          <div className="text-4xl font-mono text-emerald-400 font-bold drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">
-            00:{timer < 10 ? `0${timer}` : timer}
+          <div className="flex items-center gap-6">
+            {!activePack ? (
+              <div className="text-sm font-bold text-amber-500 animate-pulse uppercase tracking-wider">Waiting...</div>
+            ) : (
+              <div className="text-4xl font-mono text-emerald-400 font-bold drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]">
+                00:{timer < 10 ? `0${timer}` : timer}
+              </div>
+            )}
+            {onExit && (
+              <button
+                onClick={() => setConfirmExitOpen(true)}
+                className="p-3 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-500 border border-slate-700 hover:border-red-500/50 rounded-xl transition-all shadow-lg group"
+                title="Exit to Lobby"
+              >
+                <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -127,7 +139,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
       <div className="flex-1 flex overflow-hidden">
 
         {/* Dedicated Zoom Zone (Left Sidebar) */}
-        <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10">
+        <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10 transition-all">
           {hoveredCard ? (
             <div className="animate-in fade-in slide-in-from-left-4 duration-300 p-4 sticky top-4">
               <img
@@ -150,30 +162,49 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
           )}
         </div>
 
-        {/* Main Area: Current Pack */}
+        {/* Main Area: Current Pack OR Waiting State */}
         <div className="flex-1 overflow-y-auto p-4 z-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          <div className="flex flex-col items-center justify-center min-h-full pb-10">
-            <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
-            <div className="flex flex-wrap justify-center gap-6 [perspective:1000px]">
-              {activePack.cards.map((card: any) => (
-                <div
-                  key={card.id}
-                  className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
-                  style={{ width: `${14 * cardScale}rem` }}
-                  onClick={() => handlePick(card.id)}
-                  onMouseEnter={() => setHoveredCard(card)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  <div className="absolute inset-0 rounded-xl bg-emerald-500 blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
-                  <img
-                    src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
-                    alt={card.name}
-                    className="w-full rounded-xl shadow-2xl shadow-black group-hover:ring-2 ring-emerald-400/50 relative z-10"
-                  />
+          {!activePack ? (
+            <div className="flex flex-col items-center justify-center min-h-full pb-10 fade-in animate-in duration-500">
+              <div className="w-24 h-24 mb-6 relative">
+                <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                <div className="absolute inset-0 rounded-full border-4 border-t-emerald-500 animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <LogOut className="w-8 h-8 text-emerald-500 rotate-180" /> {/* Just a placeholder icon or similar */}
                 </div>
-              ))}
+              </div>
+              <h2 className="text-3xl font-bold text-white mb-2">Waiting for next pack...</h2>
+              <p className="text-slate-400">Your neighbor is selecting a card.</p>
+              <div className="mt-8 flex gap-2">
+                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce"></div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center min-h-full pb-10">
+              <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
+              <div className="flex flex-wrap justify-center gap-6 [perspective:1000px]">
+                {activePack.cards.map((card: any) => (
+                  <div
+                    key={card.id}
+                    className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
+                    style={{ width: `${14 * cardScale}rem` }}
+                    onClick={() => handlePick(card.id)}
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    <div className="absolute inset-0 rounded-xl bg-emerald-500 blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
+                    <img
+                      src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
+                      alt={card.name}
+                      className="w-full rounded-xl shadow-2xl shadow-black group-hover:ring-2 ring-emerald-400/50 relative z-10"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>
@@ -214,6 +245,16 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, roomId, curren
           ))}
         </div>
       </div>
+      <Modal
+        isOpen={confirmExitOpen}
+        onClose={() => setConfirmExitOpen(false)}
+        title="Exit Draft?"
+        message="Are you sure you want to exit the draft? You can rejoin later."
+        type="warning"
+        confirmLabel="Exit Draft"
+        cancelLabel="Stay"
+        onConfirm={onExit}
+      />
     </div>
   );
 };

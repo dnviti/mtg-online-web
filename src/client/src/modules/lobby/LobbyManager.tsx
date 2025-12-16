@@ -15,6 +15,8 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
   const [joinRoomId, setJoinRoomId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialDraftState, setInitialDraftState] = useState<any>(null);
+
   const [playerId] = useState(() => {
     const saved = localStorage.getItem('player_id');
     if (saved) return saved;
@@ -128,6 +130,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
       });
 
       if (response.success) {
+        setInitialDraftState(response.draftState || null);
         setActiveRoom(response.room);
       } else {
         setError(response.message || 'Failed to join room');
@@ -154,12 +157,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
       connect();
       socketService.emitPromise('rejoin_room', { roomId: savedRoomId })
         .then(() => {
-          // We don't get the room back directly in this event usually, but let's assume socket events 'room_update' handles it?
-          // The backend 'rejoin_room' doesn't return a callback with room data in the current implementation, it emits updates.
-          // However, let's try to invoke 'join_room' logic as a fallback or assume room_update catches it.
-          // Actually, backend 'rejoin_room' DOES emit 'room_update'.
-          // Let's rely on the socket listener in GameRoom... wait, GameRoom is not mounted yet!
-          // We need to listen to 'room_update' HERE to switch state.
+          // Rejoin logic mostly handled by onRoomUpdate via socket
         })
         .catch(err => {
           console.warn("Reconnection failed", err);
@@ -183,8 +181,17 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
   }, [playerId]);
 
 
+  const handleExitRoom = () => {
+    setActiveRoom(null);
+    setInitialDraftState(null);
+    localStorage.removeItem('active_room_id');
+    // Also likely want to disconnect socket or leave room specifically if needed, 
+    // but just clearing local state allows creating new rooms.
+    // Ideally: socketService.emit('leave_room', { roomId: activeRoom.id, playerId });
+  };
+
   if (activeRoom) {
-    return <GameRoom room={activeRoom} currentPlayerId={playerId} />;
+    return <GameRoom room={activeRoom} currentPlayerId={playerId} onExit={handleExitRoom} initialDraftState={initialDraftState} />;
   }
 
   return (
