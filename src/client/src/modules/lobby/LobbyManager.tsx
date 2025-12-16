@@ -155,9 +155,19 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
     if (savedRoomId && !activeRoom && playerId) {
       setLoading(true);
       connect();
-      socketService.emitPromise('rejoin_room', { roomId: savedRoomId })
-        .then(() => {
-          // Rejoin logic mostly handled by onRoomUpdate via socket
+      socketService.emitPromise('rejoin_room', { roomId: savedRoomId, playerId })
+        .then((response: any) => {
+          if (response.success) {
+            console.log("Rejoined session successfully");
+            setActiveRoom(response.room);
+            if (response.draftState) {
+              setInitialDraftState(response.draftState);
+            }
+          } else {
+            console.warn("Rejoin failed by server: ", response.message);
+            localStorage.removeItem('active_room_id');
+            setLoading(false);
+          }
         })
         .catch(err => {
           console.warn("Reconnection failed", err);

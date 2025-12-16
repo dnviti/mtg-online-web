@@ -62,6 +62,24 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     setMessages(initialRoom.messages || []);
   }, [initialRoom]);
 
+  // React to prop updates for draft state (Crucial for resume)
+  useEffect(() => {
+    if (initialDraftState) {
+      setDraftState(initialDraftState);
+    }
+  }, [initialDraftState]);
+
+  // Handle kicked event
+  useEffect(() => {
+    const socket = socketService.socket;
+    const onKicked = () => {
+      alert("You have been kicked from the room.");
+      onExit();
+    };
+    socket.on('kicked', onKicked);
+    return () => { socket.off('kicked', onKicked); };
+  }, [onExit]);
+
   // Scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -243,24 +261,54 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
             <Users className="w-4 h-4" /> Lobby
           </h3>
+
+
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {room.players.map(p => {
               const isReady = (p as any).ready;
+              const isMe = p.id === currentPlayerId;
+
               return (
-                <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
+                <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 group">
                   <div className="flex items-center gap-2">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${p.role === 'spectator' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-br from-purple-500 to-blue-500 text-white'}`}>
                       {p.name.substring(0, 2).toUpperCase()}
                     </div>
                     <div className="flex flex-col">
-                      <span className={`text-sm font-medium ${p.id === currentPlayerId ? 'text-white' : 'text-slate-300'}`}>
-                        {p.name}
+                      <span className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-300'}`}>
+                        {p.name} {isMe && '(You)'}
                       </span>
                       <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
                         {p.role} {p.isHost && <span className="text-amber-500 ml-1">• Host</span>}
                         {isReady && room.status === 'deck_building' && <span className="text-emerald-500 ml-1">• Ready</span>}
+                        {p.isOffline && <span className="text-red-500 ml-1">• Offline</span>}
                       </span>
                     </div>
+                  </div>
+
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isMe && (
+                      <button
+                        onClick={onExit}
+                        className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-red-400"
+                        title="Leave Room"
+                      >
+                        <LogOut className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isMeHost && !isMe && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Kick ${p.name}?`)) {
+                            socketService.socket.emit('kick_player', { roomId: room.id, targetId: p.id });
+                          }
+                        }}
+                        className="p-1 hover:bg-red-900/50 rounded text-slate-500 hover:text-red-500"
+                        title="Kick Player"
+                      >
+                        <LogOut className="w-4 h-4 rotate-180" />
+                      </button>
+                    )}
                   </div>
                 </div>
               )

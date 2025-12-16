@@ -17,5 +17,7 @@
 - [Resizable Draft Interface](./devlog/2025-12-16-200500_resizable_draft_ui.md): Completed. Implemented user-resizable pool panel and card sizes with persistence.
 - [Draft UI Zoom Zone](./devlog/2025-12-16-203000_zoom_zone.md): Completed. Implemented dedicated zoom zone for card preview.
 - [Host Disconnect Pause](./devlog/2025-12-16-213500_host_disconnect_pause.md): Completed. Specific logic to pause game when host leaves.
-- [Anti-Tampering System](./devlog/2025-12-16-215000_anti_tampering.md): Completed. Robust server-side validation using socket session binding and ownership checks.
+- [2025-12-16-215000_anti_tampering.md](./devlog/2025-12-16-215000_anti_tampering.md): Implemented server-side validation for game actions.
+- [2025-12-16-220000_session_persistence.md](./devlog/2025-12-16-220000_session_persistence.md): Plan for session persistence and safer room exit logic.
+- [2025-12-16-221000_lobby_improvements.md](./devlog/2025-12-16-221000_lobby_improvements.md): Plan for kick functionality and exit button relocation.
 - [Fix Draft UI Layout](./devlog/2025-12-16-215500_fix_draft_ui_layout.md): Completed. Fixed "Waiting for next pack" layout to be consistently full-screen.

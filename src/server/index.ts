@@ -151,7 +151,7 @@ io.on('connection', (socket) => {
   });
 
   // RE-IMPLEMENTING rejoin_room with playerId
-  socket.on('rejoin_room', ({ roomId, playerId }) => {
+  socket.on('rejoin_room', ({ roomId, playerId }, callback) => {
     socket.join(roomId);
 
     if (playerId) {
@@ -172,15 +172,29 @@ io.on('connection', (socket) => {
           resumeRoomTimers(roomId);
         }
 
+        // Prepare Draft State if exists
+        let currentDraft = null;
         if (room.status === 'drafting') {
-          const draft = draftManager.getDraft(roomId);
-          if (draft) socket.emit('draft_update', draft);
+          currentDraft = draftManager.getDraft(roomId);
+          if (currentDraft) socket.emit('draft_update', currentDraft);
+        }
+
+        // ACK Callback
+        if (typeof callback === 'function') {
+          callback({ success: true, room, draftState: currentDraft });
+        }
+      } else {
+        // Room found but player not in it? Or room not found?
+        // If room exists but player not in list, it failed.
+        if (typeof callback === 'function') {
+          callback({ success: false, message: 'Player not found in room or room closed' });
         }
       }
     } else {
-      // Just get room if no playerId? Should rare happen
-      const room = roomManager.getRoom(roomId);
-      if (room) socket.emit('room_update', room);
+      // Missing playerId
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'Missing Player ID' });
+      }
     }
   });
 
@@ -199,6 +213,29 @@ io.on('connection', (socket) => {
     const message = roomManager.addMessage(roomId, sender, text);
     if (message) {
       io.to(roomId).emit('new_message', message);
+    }
+  });
+
+  socket.on('kick_player', ({ roomId, targetId }) => {
+    const context = getContext();
+    if (!context || !context.player.isHost) return; // Verify host
+
+    // Get target socketId before removal to notify them
+    // Note: getPlayerBySocket works if they are connected.
+    // We might need to find target in room.players directly.
+    const room = roomManager.getRoom(roomId);
+    if (room) {
+      const target = room.players.find(p => p.id === targetId);
+      if (target) {
+        const updatedRoom = roomManager.kickPlayer(roomId, targetId);
+        if (updatedRoom) {
+          io.to(roomId).emit('room_update', updatedRoom);
+          if (target.socketId) {
+            io.to(target.socketId).emit('kicked', { message: 'You have been kicked by the host.' });
+          }
+          console.log(`Player ${targetId} kicked from room ${roomId} by host.`);
+        }
+      }
     }
   });
 

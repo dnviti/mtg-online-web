@@ -105,18 +105,32 @@ export class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
-    room.players = room.players.filter(p => p.id !== playerId);
+    if (room.status === 'waiting') {
+      // Normal logic: Remove player completely
+      room.players = room.players.filter(p => p.id !== playerId);
 
-    // If host leaves, assign new host from remaining players
-    if (room.players.length === 0) {
-      this.rooms.delete(roomId);
-      return null;
-    } else if (room.hostId === playerId) {
-      const nextPlayer = room.players.find(p => p.role === 'player') || room.players[0];
-      if (nextPlayer) {
-        room.hostId = nextPlayer.id;
-        nextPlayer.isHost = true;
+      // If host leaves, assign new host from remaining players
+      if (room.players.length === 0) {
+        this.rooms.delete(roomId);
+        return null;
+      } else if (room.hostId === playerId) {
+        const nextPlayer = room.players.find(p => p.role === 'player') || room.players[0];
+        if (nextPlayer) {
+          room.hostId = nextPlayer.id;
+          nextPlayer.isHost = true;
+        }
       }
+    } else {
+      // Game in progress (Drafting/Playing)
+      // DO NOT REMOVE PLAYER. Just mark offline.
+      // This allows them to rejoin and reclaim their seat (and deck).
+      const player = room.players.find(p => p.id === playerId);
+      if (player) {
+        player.isOffline = true;
+        // Note: socketId is already handled by disconnect event usually, but if explicit leave, we should clear it?
+        player.socketId = undefined;
+      }
+      console.log(`Player ${playerId} left active game in room ${roomId}. Marked as offline.`);
     }
     return room;
   }
@@ -130,6 +144,16 @@ export class RoomManager {
 
   getRoom(roomId: string): Room | undefined {
     return this.rooms.get(roomId);
+  }
+
+  kickPlayer(roomId: string, playerId: string): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    room.players = room.players.filter(p => p.id !== playerId);
+
+    // If game was running, we might need more cleanup, but for now just removal.
+    return room;
   }
 
   addMessage(roomId: string, sender: string, text: string): ChatMessage | null {
