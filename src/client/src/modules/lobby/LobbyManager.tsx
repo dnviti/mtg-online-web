@@ -11,11 +11,22 @@ interface LobbyManagerProps {
 
 export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) => {
   const [activeRoom, setActiveRoom] = useState<any>(null);
-  const [playerName, setPlayerName] = useState('');
+  const [playerName, setPlayerName] = useState(() => localStorage.getItem('player_name') || '');
   const [joinRoomId, setJoinRoomId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [playerId] = useState(() => Math.random().toString(36).substring(2) + Date.now().toString(36)); // Simple persistent ID
+  const [playerId] = useState(() => {
+    const saved = localStorage.getItem('player_id');
+    if (saved) return saved;
+    const newId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem('player_id', newId);
+    return newId;
+  });
+
+  // Persist player name
+  React.useEffect(() => {
+    localStorage.setItem('player_name', playerName);
+  }, [playerName]);
 
   const connect = () => {
     if (!socketService.socket.connected) {

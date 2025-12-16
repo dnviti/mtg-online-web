@@ -7,8 +7,32 @@ import { DeckTester } from './modules/tester/DeckTester';
 import { Pack } from './services/PackGeneratorService';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'tester'>('draft');
-  const [generatedPacks, setGeneratedPacks] = useState<Pack[]>([]);
+  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'tester'>(() => {
+    const saved = localStorage.getItem('activeTab');
+    return (saved as 'draft' | 'bracket' | 'lobby' | 'tester') || 'draft';
+  });
+
+  const [generatedPacks, setGeneratedPacks] = useState<Pack[]>(() => {
+    try {
+      const saved = localStorage.getItem('generatedPacks');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load packs from storage", e);
+      return [];
+    }
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('generatedPacks', JSON.stringify(generatedPacks));
+    } catch (e) {
+      console.error("Failed to save packs to storage", e);
+    }
+  }, [generatedPacks]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans pb-20">

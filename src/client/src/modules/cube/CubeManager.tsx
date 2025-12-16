@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2 } from 'lucide-react';
 import { CardParserService } from '../../services/CardParserService';
 import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
@@ -20,33 +20,91 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   const generatorService = React.useMemo(() => new PackGeneratorService(), []);
 
   // --- State ---
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(() => localStorage.getItem('cube_inputText') || '');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
 
-  const [rawScryfallData, setRawScryfallData] = useState<ScryfallCard[] | null>(null);
+  const [rawScryfallData, setRawScryfallData] = useState<ScryfallCard[] | null>(() => {
+    try {
+      const saved = localStorage.getItem('cube_rawScryfallData');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.warn("Failed to load rawScryfallData from local storage", e);
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      if (rawScryfallData) {
+        localStorage.setItem('cube_rawScryfallData', JSON.stringify(rawScryfallData));
+      } else {
+        localStorage.removeItem('cube_rawScryfallData');
+      }
+    } catch (e) {
+      console.warn("Failed to save rawScryfallData to local storage (likely quota exceeded)", e);
+    }
+  }, [rawScryfallData]);
   const [processedData, setProcessedData] = useState<{ pools: ProcessedPools, sets: SetsMap } | null>(null);
 
-  const [filters, setFilters] = useState({
-    ignoreBasicLands: true,
-    ignoreCommander: true,
-    ignoreTokens: true
+  const [filters, setFilters] = useState<{
+    ignoreBasicLands: boolean;
+    ignoreCommander: boolean;
+    ignoreTokens: boolean;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem('cube_filters');
+      return saved ? JSON.parse(saved) : {
+        ignoreBasicLands: true,
+        ignoreCommander: true,
+        ignoreTokens: true
+      };
+    } catch {
+      return {
+        ignoreBasicLands: true,
+        ignoreCommander: true,
+        ignoreTokens: true
+      };
+    }
   });
 
   // UI State
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('list');
 
   // Generation Settings
-  const [genSettings, setGenSettings] = useState<PackGenerationSettings>({
-    mode: 'mixed',
-    rarityMode: 'peasant'
+  const [genSettings, setGenSettings] = useState<PackGenerationSettings>(() => {
+    try {
+      const saved = localStorage.getItem('cube_genSettings');
+      return saved ? JSON.parse(saved) : {
+        mode: 'mixed',
+        rarityMode: 'peasant'
+      };
+    } catch {
+      return {
+        mode: 'mixed',
+        rarityMode: 'peasant'
+      };
+    }
   });
 
-  const [sourceMode, setSourceMode] = useState<'upload' | 'set'>('upload');
+  const [sourceMode, setSourceMode] = useState<'upload' | 'set'>(() =>
+    (localStorage.getItem('cube_sourceMode') as 'upload' | 'set') || 'upload'
+  );
   const [availableSets, setAvailableSets] = useState<ScryfallSet[]>([]);
-  const [selectedSet, setSelectedSet] = useState<string>('');
-  const [numBoxes, setNumBoxes] = useState<number>(3);
+  const [selectedSet, setSelectedSet] = useState(() => localStorage.getItem('cube_selectedSet') || '');
+  const [numBoxes, setNumBoxes] = useState<number>(() => {
+    const saved = localStorage.getItem('cube_numBoxes');
+    return saved ? parseInt(saved) : 3;
+  });
+
+  // --- Persistence Effects ---
+  useEffect(() => localStorage.setItem('cube_inputText', inputText), [inputText]);
+  useEffect(() => localStorage.setItem('cube_filters', JSON.stringify(filters)), [filters]);
+  useEffect(() => localStorage.setItem('cube_genSettings', JSON.stringify(genSettings)), [genSettings]);
+  useEffect(() => localStorage.setItem('cube_sourceMode', sourceMode), [sourceMode]);
+  useEffect(() => localStorage.setItem('cube_selectedSet', selectedSet), [selectedSet]);
+  useEffect(() => localStorage.setItem('cube_numBoxes', numBoxes.toString()), [numBoxes]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -214,6 +272,20 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
   const toggleFilter = (key: keyof typeof filters) => {
     setFilters(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleReset = () => {
+    if (window.confirm("Are you sure you want to clear this session? All parsed cards and generated packs will be lost.")) {
+      setPacks([]);
+      setInputText('');
+      setRawScryfallData(null);
+      setProcessedData(null);
+      setSelectedSet('');
+      localStorage.removeItem('cube_inputText');
+      localStorage.removeItem('cube_rawScryfallData');
+      localStorage.removeItem('cube_selectedSet');
+      // We keep filters and settings as they are user preferences
+    }
   };
 
   return (
@@ -407,6 +479,15 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
             {loading ? 'Generating...' : '2. Generate Packs'}
+          </button>
+
+          {/* Reset Button */}
+          <button
+            onClick={handleReset}
+            className="w-full mt-4 py-2 text-xs font-semibold text-slate-500 hover:text-red-400 hover:bg-red-900/10 rounded-lg transition-colors flex items-center justify-center gap-2"
+            title="Clear all data and start over"
+          >
+            <Trash2 className="w-3 h-3" /> Clear Session
           </button>
         </div>
       </div>

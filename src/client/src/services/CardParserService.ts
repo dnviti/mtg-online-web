@@ -34,7 +34,7 @@ export class CardParserService {
           const qty = parseInt(parts[0]);
           // If valid CSV structure
           if (!isNaN(qty)) {
-            const name = parts[1]; // We can keep name for reference, but we use ID if present
+            // const name = parts[1]; // We can keep name for reference, but we use ID if present
             const finishRaw = parts[2]?.toLowerCase();
             const finish = (finishRaw === 'foil' || finishRaw === 'etched') ? 'foil' : (finishRaw === 'normal' ? 'normal' : undefined);
 
