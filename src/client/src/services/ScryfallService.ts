@@ -168,7 +168,8 @@ export class ScryfallService {
           name: s.name,
           set_type: s.set_type,
           released_at: s.released_at,
-          icon_svg_uri: s.icon_svg_uri
+          icon_svg_uri: s.icon_svg_uri,
+          digital: s.digital
         }));
       }
     } catch (e) {
@@ -226,4 +227,5 @@ export interface ScryfallSet {
   set_type: string;
   released_at: string;
   icon_svg_uri: string;
+  digital: boolean;
 }

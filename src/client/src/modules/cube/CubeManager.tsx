@@ -96,7 +96,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     const saved = localStorage.getItem('cube_selectedSets');
     return saved ? JSON.parse(saved) : [];
   });
+
   const [searchTerm, setSearchTerm] = useState('');
+  const [gameTypeFilter, setGameTypeFilter] = useState<'all' | 'paper' | 'digital'>('all'); // Filter state
   const [numBoxes, setNumBoxes] = useState<number>(() => {
     const saved = localStorage.getItem('cube_numBoxes');
     return saved ? parseInt(saved) : 3;
@@ -440,14 +442,47 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                     )}
                   </div>
 
+                  {/* Game Type Filter */}
+                  <div className="flex border-b border-slate-700 bg-slate-900">
+                    <button
+                      onClick={() => setGameTypeFilter('all')}
+                      className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${gameTypeFilter === 'all' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800'}`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setGameTypeFilter('paper')}
+                      className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${gameTypeFilter === 'paper' ? 'bg-emerald-900/40 text-emerald-400' : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-800'}`}
+                      title="Show only Paper sets"
+                    >
+                      Paper
+                    </button>
+                    <button
+                      onClick={() => setGameTypeFilter('digital')}
+                      className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors ${gameTypeFilter === 'digital' ? 'bg-blue-900/40 text-blue-400' : 'text-slate-500 hover:text-blue-400 hover:bg-slate-800'}`}
+                      title="Show only Digital sets (Arena/MTGO)"
+                    >
+                      Digital
+                    </button>
+                  </div>
+
                   {/* List */}
                   <div className="max-h-60 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
                     {availableSets
-                      .filter(s =>
-                        !searchTerm ||
-                        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        s.code.toLowerCase().includes(searchTerm.toLowerCase())
-                      )
+                      .filter(s => {
+                        // Search Filter
+                        const matchesSearch = !searchTerm ||
+                          s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          s.code.toLowerCase().includes(searchTerm.toLowerCase());
+
+                        // Game Type Filter
+                        const matchesType =
+                          gameTypeFilter === 'all' ? true :
+                            gameTypeFilter === 'paper' ? !s.digital :
+                              gameTypeFilter === 'digital' ? s.digital : true;
+
+                        return matchesSearch && matchesType;
+                      })
                       .map(s => {
                         const isSelected = selectedSets.includes(s.code);
                         return (

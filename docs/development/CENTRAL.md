@@ -31,3 +31,4 @@
 - [Server-Side Caching](./devlog/2025-12-16-235900_server_side_caching.md): Completed. Implemented logic to cache images and metadata on the server upon bulk parsing, and updated client to use local assets.
 - [Peasant Algorithm Implementation](./devlog/2025-12-16-225700_peasant_algorithm.md): Completed. Implemented Peasant-specific pack generation rules including slot logic for commons, uncommons, lands, and wildcards.
 - [Multi-Expansion Selection](./devlog/2025-12-16-230500_multi_expansion_selection.md): Completed. Implemented searchable multi-select interface for "From Expansion" pack generation, allowing mixed-set drafts.
+- [Game Type Filter](./devlog/2025-12-16-231000_game_type_filter.md): Completed. Added Paper/Digital filter to the expansion selection list.
