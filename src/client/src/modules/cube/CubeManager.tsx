@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown } from 'lucide-react';
 import { CardParserService } from '../../services/CardParserService';
 import { ScryfallService, ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
@@ -23,6 +23,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const [rawScryfallData, setRawScryfallData] = useState<ScryfallCard[] | null>(null);
   const [processedData, setProcessedData] = useState<{ pools: ProcessedPools, sets: SetsMap } | null>(null);
@@ -73,36 +74,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     event.target.value = '';
   };
 
-  const loadDemoData = () => {
-    const demo = `20 Shock
-20 Llanowar Elves
-20 Giant Growth
-20 Counterspell
-20 Dark Ritual
-20 Lightning Bolt
-20 Opt
-20 Consider
-20 Ponder
-20 Preordain
-20 Brainstorm
-20 Duress
-20 Faithless Looting
-20 Thrill of Possibility
-20 Terror
-10 Serra Angel
-10 Vampire Nighthawk
-10 Eternal Witness
-10 Mulldrifter
-10 Flametongue Kavu
-5 Wrath of God
-5 Birds of Paradise
-2 Jace, the Mind Sculptor
-1 Sheoldred, the Apocalypse
-20 Island
-1 Sol Ring
-1 Command Tower`;
-    setInputText(demo);
-  };
+
 
   const fetchAndParse = async () => {
     setLoading(true);
@@ -182,6 +154,64 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     }, 50);
   };
 
+  const handleExportCsv = () => {
+    if (packs.length === 0) return;
+    const csvContent = generatorService.generateCsv(packs);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `generated_packs_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const template = `Quantity,Name,Finish,Edition Name,Scryfall ID
+5,Agate Assault,Normal,Bloomburrow,7dd9946b-515e-4e0d-9da2-711e126e9fa6
+1,Agate-Blade Assassin,Normal,Bloomburrow,39ebb84a-1c52-4b07-9bd0-b360523b3a5b
+4,Agate-Blade Assassin,Normal,Bloomburrow,39ebb84a-1c52-4b07-9bd0-b360523b3a5b
+4,Alania's Pathmaker,Normal,Bloomburrow,d3871fe6-e26e-4ab4-bd81-7e3c7b8135c1
+1,Artist's Talent,Normal,Bloomburrow,8b9e51d9-189b-4dd6-87cb-628ea6373e81
+1,Azure Beastbinder,Normal,Bloomburrow,211af1bf-910b-41a5-b928-f378188d1871
+3,Bakersbane Duo,Normal,Bloomburrow,5309354f-1ff4-4fa9-9141-01ea2f7588ab
+2,Bandit's Talent,Normal,Bloomburrow,485dc8d8-9e44-4a0f-9ff6-fa448e232290
+3,Banishing Light,Normal,Bloomburrow,25a06f82-ebdb-4dd6-bfe8-958018ce557c
+4,Barkform Harvester,Normal,Bloomburrow,f77049a6-0f22-415b-bc89-20bcb32accf6
+1,Bark-Knuckle Boxer,Normal,Bloomburrow,582637a9-6aa0-4824-bed7-d5fc91bda35e
+1,"Baylen, the Haymaker",Normal,Bloomburrow,00e93be2-e06b-4774-8ba5-ccf82a6da1d8
+3,Bellowing Crier,Normal,Bloomburrow,ca2215dd-6300-49cf-b9b2-3a840b786c31
+1,Blacksmith's Talent,Normal,Bloomburrow,4bb318fa-481d-40a7-978e-f01b49101ae0
+1,Blooming Blast,Normal,Bloomburrow,0cd92a83-cec3-4085-a929-3f204e3e0140
+4,Bonebind Orator,Normal,Bloomburrow,faf226fa-ca09-4468-8804-87b2a7de2c66
+2,Bonecache Overseer,Normal,Bloomburrow,82defb87-237f-4b77-9673-5bf00607148f
+1,Brambleguard Captain,Foil,Bloomburrow,e200b8bf-f2f3-4157-8e04-02baf07a963e`;
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `import_template.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopyCsv = async () => {
+    if (packs.length === 0) return;
+    const csvContent = generatorService.generateCsv(packs);
+    try {
+      await navigator.clipboard.writeText(csvContent);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+      alert('Failed to copy CSV to clipboard');
+    }
+  };
+
   const toggleFilter = (key: keyof typeof filters) => {
     setFilters(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -225,7 +255,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                     <Upload className="w-3 h-3" /> Upload
                   </button>
                   <input type="file" ref={fileInputRef} className="hidden" accept=".csv,.txt" onChange={handleFileUpload} />
-                  <button onClick={loadDemoData} className="text-xs text-purple-400 hover:text-purple-300 hover:underline">Demo</button>
+                  <button onClick={handleDownloadTemplate} className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 hover:underline">
+                    <FileDown className="w-3 h-3" /> Template
+                  </button>
                 </div>
               </div>
 
@@ -392,12 +424,29 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
           <div className="flex gap-2">
             {/* Play Button */}
             {packs.length > 0 && (
-              <button
-                onClick={onGoToLobby}
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
-              >
-                <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
-              </button>
+              <>
+                <button
+                  onClick={onGoToLobby}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+                >
+                  <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
+                </button>
+                <button
+                  onClick={handleExportCsv}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+                  title="Export as CSV"
+                >
+                  <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
+                </button>
+                <button
+                  onClick={handleCopyCsv}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+                  title="Copy CSV to Clipboard"
+                >
+                  {copySuccess ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  <span className="hidden sm:inline">{copySuccess ? 'Copied!' : 'Copy'}</span>
+                </button>
+              </>
             )}
 
             <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">

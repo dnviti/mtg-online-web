@@ -16,60 +16,98 @@ export class CardParserService {
       if (line.toLowerCase().startsWith('quantity') && line.toLowerCase().includes('name')) return;
 
       const idMatch = line.match(uuidRegex);
-      const cleanLineForQty = line.replace(/['"]/g, '');
-      const quantityMatch = cleanLineForQty.match(/^(\d+)[xX\s,;]/);
-      const quantity = quantityMatch ? parseInt(quantityMatch[1], 10) : 1;
-
-      // Detect Finish from CSV (Comma Separated)
-      let finish: 'foil' | 'normal' | undefined = undefined;
-      const parts = line.split(',');
-      if (parts.length >= 3) {
-        // Assuming format: Quantity,Name,Finish,...
-        // If the line started with a number, parts[0] is quantity. parts[1] is name. parts[2] is Finish.
-        // We should be careful about commas in names, but the user example shows a clean structure.
-        // If the name is quoted, split(',') might be naive, but valid for the provided example.
-        // Let's assume the user provided format: Quantity,Name,Finish,Edition Name,Scryfall ID
-
-        const possibleFinish = parts[2].trim().toLowerCase();
-        if (possibleFinish === 'foil' || possibleFinish === 'etched') finish = 'foil';
-        else if (possibleFinish === 'normal') finish = 'normal';
-      }
-
-      let identifier: { type: 'id' | 'name', value: string } | null = null;
-
       if (idMatch) {
-        identifier = { type: 'id', value: idMatch[0] };
-      } else {
-        const cleanLine = line.replace(/['"]/g, '');
-        // Remove leading quantity
-        let name = cleanLine.replace(/^(\d+)[xX\s,;]+/, '').trim();
+        // Extract quantity if present before ID, otherwise default to 1
+        // Simple check: Look for "Nx ID" or "N, ID" pattern? 
+        // The previous/standard logic usually treats ID lines as 1x unless specified. 
+        // Let's try to find a quantity at the start if it exists differently from UUID.
+        // But usually UUID lines are direct from export.
 
-        // Remove set codes in parentheses/brackets e.g. (M20), [STA]
-        name = name.replace(/\s*[\(\[].*?[\)\]]/g, '');
+        // But our CSV template puts ID at the end.
+        // If UUID is present anywhere in the line, we might trust it over the name.
+        // Let's stick to the previous logic: if UUID is found, use it.
+        // BUT, we should try to parse the whole CSV line if possible to get Finish and Quantity.
 
-        // Remove trailing collector numbers (digits at the very end)
-        name = name.replace(/\s+\d+$/, '');
+        // Let's parse with CSV logic first.
+        const parts = this.parseCsvLine(line);
+        if (parts.length >= 2) {
+          const qty = parseInt(parts[0]);
+          // If valid CSV structure
+          if (!isNaN(qty)) {
+            const name = parts[1]; // We can keep name for reference, but we use ID if present
+            const finishRaw = parts[2]?.toLowerCase();
+            const finish = (finishRaw === 'foil' || finishRaw === 'etched') ? 'foil' : (finishRaw === 'normal' ? 'normal' : undefined);
 
-        // Remove trailing punctuation
-        name = name.replace(/^[,;]+|[,;]+$/g, '').trim();
+            // If the last part has UUID, use it.
+            const uuidPart = parts.find(p => uuidRegex.test(p));
+            if (uuidPart) {
+              const uuid = uuidPart.match(uuidRegex)![0];
+              rawCardList.push({ type: 'id', value: uuid, quantity: qty, finish });
+              return;
+            }
+          }
+        }
 
-        // If CSV like "Name, SetCode", take first part
-        if (name.includes(',')) name = name.split(',')[0].trim();
-
-        if (name && name.length > 1) identifier = { type: 'name', value: name };
+        // Fallback ID logic
+        rawCardList.push({ type: 'id', value: idMatch[0], quantity: 1 }); // Default simple UUID match
+        return;
       }
 
-      if (identifier) {
-        rawCardList.push({
-          type: identifier.type,
-          value: identifier.value,
-          quantity: quantity,
-          finish: finish
-        });
+      // Not an ID match, try parsing as name
+      const parts = this.parseCsvLine(line);
+
+      if (parts.length >= 2 && !isNaN(parseInt(parts[0]))) {
+        // It looks like result of our CSV: Quantity, Name, Finish, ...
+        const quantity = parseInt(parts[0]);
+        const name = parts[1];
+        const finishRaw = parts[2]?.toLowerCase();
+        const finish = (finishRaw === 'foil' || finishRaw === 'etched') ? 'foil' : (finishRaw === 'normal' ? 'normal' : undefined);
+
+        if (name && name.length > 0) {
+          rawCardList.push({ type: 'name', value: name, quantity, finish });
+          return;
+        }
+      }
+
+      // Fallback to simple Arena/MTGO text format: "4 Lightning Bolt"
+      const cleanLine = line.replace(/['"]/g, '');
+      const simpleMatch = cleanLine.match(/^(\d+)[xX\s]+(.+)$/);
+      if (simpleMatch) {
+        let name = simpleMatch[2].trim();
+        // cleanup
+        name = name.replace(/\s*[\(\[].*?[\)\]]/g, ''); // remove set codes
+        name = name.replace(/\s+\d+$/, ''); // remove collector number
+
+        rawCardList.push({ type: 'name', value: name, quantity: parseInt(simpleMatch[1]) });
+      } else {
+        // Maybe just "Lightning Bolt" (1x)
+        let name = cleanLine.trim();
+        if (name) {
+          rawCardList.push({ type: 'name', value: name, quantity: 1 });
+        }
       }
     });
 
     if (rawCardList.length === 0) throw new Error("No valid cards found.");
     return rawCardList;
+  }
+
+  private parseCsvLine(line: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuote = !inQuote;
+      } else if (char === ',' && !inQuote) {
+        parts.push(current.trim().replace(/^"|"$/g, '')); // Parsing finished, strip outer quotes if just accumulated
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    parts.push(current.trim().replace(/^"|"$/g, ''));
+    return parts;
   }
 }

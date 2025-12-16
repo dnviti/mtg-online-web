@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DraftCard, Pack } from '../services/PackGeneratorService';
 import { Copy } from 'lucide-react';
 import { StackView } from './StackView';
@@ -7,6 +7,84 @@ interface PackCardProps {
   pack: Pack;
   viewMode: 'list' | 'grid' | 'stack';
 }
+
+// --- Floating Preview Component ---
+const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }> = ({ card, x, y }) => {
+  const isFoil = card.finish === 'foil';
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Basic boundary detection to prevent going off-screen
+  // We check window dimensions. This might need customization based on the actual viewport, 
+  // but window is a good safe default.
+  const [adjustedPos, setAdjustedPos] = useState({ top: y, left: x });
+
+  useEffect(() => {
+    // Offset from cursor
+    const OFFSET = 20;
+    const CARD_WIDTH = 300; // Approx width of preview
+    const CARD_HEIGHT = 420; // Approx height of preview
+
+    let newX = x + OFFSET;
+    let newY = y + OFFSET;
+
+    // Flip horizontally if too close to right edge
+    if (newX + CARD_WIDTH > window.innerWidth) {
+      newX = x - CARD_WIDTH - OFFSET;
+    }
+
+    // Flip vertically if too close to bottom edge
+    if (newY + CARD_HEIGHT > window.innerHeight) {
+      newY = y - CARD_HEIGHT - OFFSET;
+    }
+
+    setAdjustedPos({ top: newY, left: newX });
+
+  }, [x, y]);
+
+  return (
+    <div
+      className="fixed z-[9999] pointer-events-none transition-opacity duration-75"
+      style={{
+        top: adjustedPos.top,
+        left: adjustedPos.left
+      }}
+    >
+      <div className="relative w-[300px] rounded-xl overflow-hidden shadow-2xl border-4 border-slate-900 bg-black">
+        <img ref={imgRef} src={card.image} alt={card.name} className="w-full h-auto" />
+        {isFoil && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 mix-blend-overlay animate-pulse"></div>}
+      </div>
+    </div>
+  );
+};
+
+// --- Hover Wrapper to handle mouse events ---
+const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.ReactNode; className?: string }> = ({ card, children, className }) => {
+  const [isHovering, setIsHovering] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // Only show preview if there is an image
+  const hasImage = !!card.image;
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!hasImage) return;
+    setMousePos({ x: e.clientX, y: e.clientY });
+  };
+
+  return (
+    <div
+      className={className}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+      onMouseMove={handleMouseMove}
+    >
+      {children}
+      {isHovering && hasImage && (
+        <FloatingPreview card={card} x={mousePos.x} y={mousePos.y} />
+      )}
+    </div>
+  );
+};
+
 
 const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
   const isFoil = (card: DraftCard) => card.finish === 'foil';
@@ -22,8 +100,8 @@ const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
   };
 
   return (
-    <li className="relative group">
-      <div className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer">
+    <CardHoverWrapper card={card} className="relative group">
+      <div className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors">
         <span className={`font-medium flex items-center gap-2 ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
           {card.name}
           {isFoil(card) && (
@@ -34,15 +112,7 @@ const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
         </span>
         <span className={`w-2 h-2 rounded-full border ${getRarityColorClass(card.rarity)} !p-0 !text-[0px]`}></span>
       </div>
-      {card.image && (
-        <div className="hidden group-hover:block absolute left-0 top-full z-50 mt-1 pointer-events-none">
-          <div className="bg-black p-1 rounded-lg border border-slate-500 shadow-2xl w-48 relative overflow-hidden">
-            {isFoil(card) && <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-white/10 opacity-50 z-10 pointer-events-none mix-blend-overlay animate-pulse" />}
-            <img src={card.image} alt={card.name} className="w-full rounded relative z-0" />
-          </div>
-        </div>
-      )}
-    </li>
+    </CardHoverWrapper>
   );
 };
 
@@ -51,12 +121,12 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
   const rares = pack.cards.filter(c => c.rarity === 'rare');
   const uncommons = pack.cards.filter(c => c.rarity === 'uncommon');
   const commons = pack.cards.filter(c => c.rarity === 'common');
+
   const isFoil = (card: DraftCard) => card.finish === 'foil';
 
   const copyPackToClipboard = () => {
     const text = pack.cards.map(c => c.name).join('\n');
     navigator.clipboard.writeText(text);
-    // Toast notification could go here
     alert(`Pack list ${pack.id} copied!`);
   };
 
@@ -104,23 +174,29 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
         {viewMode === 'grid' && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {pack.cards.map((card) => (
-              <div key={card.id} className={`relative aspect-[2.5/3.5] bg-slate-900 rounded-lg overflow-hidden group hover:scale-105 transition-transform duration-200 shadow-xl border ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
-                {isFoil(card) && <div className="absolute inset-0 z-20 bg-gradient-to-tr from-purple-500/10 via-transparent to-pink-500/10 mix-blend-color-dodge pointer-events-none" />}
-                {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
+              <CardHoverWrapper key={card.id} card={card}>
+                <div className="relative group bg-slate-900 rounded-lg">
+                  {/* Visual Card */}
+                  <div className={`relative aspect-[2.5/3.5] overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+                    {isFoil(card) && <div className="absolute inset-0 z-20 bg-gradient-to-tr from-purple-500/10 via-transparent to-pink-500/10 mix-blend-color-dodge pointer-events-none" />}
+                    {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
 
-                {card.image ? (
-                  <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">
-                    {card.name}
+                    {card.image ? (
+                      <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">
+                        {card.name}
+                      </div>
+                    )}
+                    {/* Rarity Stripe */}
+                    <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' :
+                      card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                        card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
+                          'bg-black'
+                      }`} />
                   </div>
-                )}
-                <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' :
-                  card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
-                    card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
-                      'bg-black'
-                  }`} />
-              </div>
+                </div>
+              </CardHoverWrapper>
             ))}
           </div>
         )}

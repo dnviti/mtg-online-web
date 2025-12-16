@@ -311,4 +311,17 @@ export class PackGeneratorService {
       return v.toString(16);
     });
   }
+
+  generateCsv(packs: Pack[]): string {
+    const header = "Pack ID,Name,Set Code,Rarity,Finish,Scryfall ID\n";
+    const rows = packs.flatMap(pack =>
+      pack.cards.map(card => {
+        const finish = card.finish || 'normal';
+        // Escape quotes in name if necessary
+        const safeName = card.name.includes(',') ? `"${card.name}"` : card.name;
+        return `${pack.id},${safeName},${card.setCode},${card.rarity},${finish},${card.scryfallId}`;
+      })
+    );
+    return header + rows.join('\n');
+  }
 }
