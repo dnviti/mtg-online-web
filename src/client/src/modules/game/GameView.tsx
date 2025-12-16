@@ -111,15 +111,15 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     });
   }
 
-  const toggleFlip = (cardId: string) => {
-    socketService.socket.emit('game_action', {
-      roomId: gameState.roomId,
-      action: {
-        type: 'FLIP_CARD',
-        cardId
-      }
-    });
-  }
+  // const toggleFlip = (cardId: string) => {
+  //   socketService.socket.emit('game_action', {
+  //     roomId: gameState.roomId,
+  //     action: {
+  //       type: 'FLIP_CARD',
+  //       cardId
+  //     }
+  //   });
+  // }
 
   const myPlayer = gameState.players[currentPlayerId];
   const opponentId = Object.keys(gameState.players).find(id => id !== currentPlayerId);
