@@ -324,10 +324,10 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   };
 
   return (
-    <div className="h-full overflow-y-auto max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
+    <div className="h-full overflow-y-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
-      <div className="lg:col-span-4 flex flex-col gap-4">
+      <div className="lg:col-span-4 flex flex-col gap-4 sticky top-4 self-start max-h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar p-1">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl">
           {/* Source Toggle */}
           <div className="flex p-1 bg-slate-900 rounded-lg mb-4 border border-slate-700">

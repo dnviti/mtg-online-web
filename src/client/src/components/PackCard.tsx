@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { DraftCard, Pack } from '../services/PackGeneratorService';
 import { Copy } from 'lucide-react';
 import { StackView } from './StackView';
@@ -8,82 +8,7 @@ interface PackCardProps {
   viewMode: 'list' | 'grid' | 'stack';
 }
 
-// --- Floating Preview Component ---
-const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number }> = ({ card, x, y }) => {
-  const isFoil = card.finish === 'foil';
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  // Basic boundary detection to prevent going off-screen
-  // We check window dimensions. This might need customization based on the actual viewport, 
-  // but window is a good safe default.
-  const [adjustedPos, setAdjustedPos] = useState({ top: y, left: x });
-
-  useEffect(() => {
-    // Offset from cursor
-    const OFFSET = 20;
-    const CARD_WIDTH = 300; // Approx width of preview
-    const CARD_HEIGHT = 420; // Approx height of preview
-
-    let newX = x + OFFSET;
-    let newY = y + OFFSET;
-
-    // Flip horizontally if too close to right edge
-    if (newX + CARD_WIDTH > window.innerWidth) {
-      newX = x - CARD_WIDTH - OFFSET;
-    }
-
-    // Flip vertically if too close to bottom edge
-    if (newY + CARD_HEIGHT > window.innerHeight) {
-      newY = y - CARD_HEIGHT - OFFSET;
-    }
-
-    setAdjustedPos({ top: newY, left: newX });
-
-  }, [x, y]);
-
-  return (
-    <div
-      className="fixed z-[9999] pointer-events-none transition-opacity duration-75"
-      style={{
-        top: adjustedPos.top,
-        left: adjustedPos.left
-      }}
-    >
-      <div className="relative w-[300px] rounded-xl overflow-hidden shadow-2xl border-4 border-slate-900 bg-black">
-        <img ref={imgRef} src={card.image} alt={card.name} className="w-full h-auto" />
-        {isFoil && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 mix-blend-overlay animate-pulse"></div>}
-      </div>
-    </div>
-  );
-};
-
-// --- Hover Wrapper to handle mouse events ---
-const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.ReactNode; className?: string }> = ({ card, children, className }) => {
-  const [isHovering, setIsHovering] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-
-  // Only show preview if there is an image
-  const hasImage = !!card.image;
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!hasImage) return;
-    setMousePos({ x: e.clientX, y: e.clientY });
-  };
-
-  return (
-    <div
-      className={className}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
-      onMouseMove={handleMouseMove}
-    >
-      {children}
-      {isHovering && hasImage && (
-        <FloatingPreview card={card} x={mousePos.x} y={mousePos.y} />
-      )}
-    </div>
-  );
-};
+import { CardHoverWrapper } from './CardPreview';
 
 
 const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {

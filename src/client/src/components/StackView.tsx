@@ -1,53 +1,100 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
+import { CardHoverWrapper } from './CardPreview';
 
 interface StackViewProps {
   cards: DraftCard[];
 }
 
+const CATEGORY_ORDER = [
+  'Creature',
+  'Planeswalker',
+  'Instant',
+  'Sorcery',
+  'Enchantment',
+  'Artifact',
+  'Land',
+  'Battle',
+  'Other'
+];
+
 export const StackView: React.FC<StackViewProps> = ({ cards }) => {
-  const getRarityColorClass = (rarity: string) => {
-    switch (rarity) {
-      case 'common': return 'bg-black text-white border-slate-600';
-      case 'uncommon': return 'bg-slate-300 text-slate-900 border-white';
-      case 'rare': return 'bg-yellow-500 text-yellow-950 border-yellow-200';
-      case 'mythic': return 'bg-orange-600 text-white border-orange-300';
-      default: return 'bg-slate-500';
-    }
-  };
+
+  const categorizedCards = useMemo(() => {
+    const categories: Record<string, DraftCard[]> = {};
+    CATEGORY_ORDER.forEach(c => categories[c] = []);
+
+    cards.forEach(card => {
+      let category = 'Other';
+      const typeLine = card.typeLine || '';
+
+      if (typeLine.includes('Creature')) category = 'Creature'; // Includes Artifact Creature, Ench Creature
+      else if (typeLine.includes('Planeswalker')) category = 'Planeswalker';
+      else if (typeLine.includes('Instant')) category = 'Instant';
+      else if (typeLine.includes('Sorcery')) category = 'Sorcery';
+      else if (typeLine.includes('Enchantment')) category = 'Enchantment';
+      else if (typeLine.includes('Artifact')) category = 'Artifact';
+      else if (typeLine.includes('Battle')) category = 'Battle';
+      else if (typeLine.includes('Land')) category = 'Land';
+
+      // Special handling: Commander? usually Creature or Planeswalker
+      // Ensure it lands in one of the predefined bins
+
+      categories[category].push(card);
+    });
+
+    // Sort cards within categories by CMC (low to high)? Or Rarity?
+    // Archidekt usually sorts by CMC.
+    Object.keys(categories).forEach(key => {
+      categories[key].sort((a, b) => (a.cmc || 0) - (b.cmc || 0));
+    });
+
+    return categories;
+  }, [cards]);
 
   return (
-    <div className="relative w-full max-w-sm mx-auto group perspective-1000 py-20">
-      <div className="relative flex flex-col items-center transition-all duration-500 ease-in-out group-hover:space-y-4 space-y-[-16rem] py-10">
-        {cards.map((card, index) => {
-          const colorClass = getRarityColorClass(card.rarity);
-          // Random slight rotation for "organic" look
-          const rotation = (index % 2 === 0 ? 1 : -1) * (Math.random() * 2);
+    <div className="flex flex-row gap-2 overflow-x-auto pb-8 snap-x">
+      {CATEGORY_ORDER.map(category => {
+        const catCards = categorizedCards[category];
+        if (catCards.length === 0) return null;
 
-          return (
-            <div
-              key={card.id}
-              className="relative w-64 aspect-[2.5/3.5] rounded-xl shadow-2xl transition-transform duration-300 hover:scale-110 hover:z-50 hover:rotate-0 origin-center bg-slate-800 border-2 border-slate-900"
-              style={{
-                zIndex: index,
-                transform: `rotate(${rotation}deg)`
-              }}
-            >
-              {card.image ? (
-                <img src={card.image} alt={card.name} className="w-full h-full object-cover rounded-lg" />
-              ) : (
-                <div className="w-full h-full p-4 text-center flex items-center justify-center font-bold text-slate-500">
-                  {card.name}
-                </div>
-              )}
-              <div className={`absolute top-2 right-2 w-3 h-3 rounded-full shadow-md z-10 border ${colorClass}`} />
+        return (
+          <div key={category} className="flex-shrink-0 w-44 snap-start">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-2 px-1 border-b border-slate-700 pb-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{category}</span>
+              <span className="text-xs font-mono text-slate-500">{catCards.length}</span>
             </div>
-          );
-        })}
-      </div>
-      <div className="text-center text-slate-500 text-xs mt-4 opacity-50 group-hover:opacity-0 transition-opacity">
-        Hover to expand stack
-      </div>
+
+            {/* Stack */}
+            <div className="flex flex-col relative px-2">
+              {catCards.map((card, index) => {
+                // Margin calculation: Negative margin to pull up next cards. 
+                // To show a "strip" of say 35px at the top of each card.
+                const isLast = index === catCards.length - 1;
+
+                return (
+                  <CardHoverWrapper key={card.id} card={card} className="relative w-full z-0 hover:z-50 transition-all duration-200">
+                    <div
+                      className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group`}
+                      style={{
+                        // Aspect ratio is maintained by image or div dimensions
+                        // With overlap, we just render them one after another with negative margin
+                        marginBottom: isLast ? '0' : '-125%', // Negative margin to show header
+                        aspectRatio: '2.5/3.5'
+                      }}
+                    >
+                      <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
+                      {/* Optional: Shine effect for foils if visible? */}
+                      {card.finish === 'foil' && <div className="absolute inset-0 bg-white/10 opacity-30 pointer-events-none" />}
+                    </div>
+                  </CardHoverWrapper>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   );
 };

@@ -34,3 +34,6 @@
 - [Game Type Filter](./devlog/2025-12-16-231000_game_type_filter.md): Completed. Added Paper/Digital filter to the expansion selection list.
 - [Incremental Caching](./devlog/2025-12-16-233000_incremental_caching.md): Completed. Refactored data fetching to cache cards to the server incrementally per set, preventing PayloadTooLarge errors.
 - [Server Graceful Shutdown Fix](./devlog/2025-12-17-002000_server_shutdown_fix.md): Completed. Implemented signal handling to ensure clean process exit on Ctrl+C.
+- [Cube Sticky Sidebar](./devlog/2025-12-17-003000_cube_sticky_sidebar.md): Completed. Made the Cube Manager left sidebar sticky to improve usability with long pack lists.
+- [Cube Full Width Layout](./devlog/2025-12-17-003500_cube_full_width.md): Completed. Updated Cube Manager to use the full screen width.
+- [Cube Archidekt View](./devlog/2025-12-17-004500_archidekt_view.md): Completed. Implemented column-based stacked view for packs.
