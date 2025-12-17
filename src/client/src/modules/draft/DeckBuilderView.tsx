@@ -39,7 +39,7 @@ const DraggableCardWrapper = ({ children, card, source, disabled }: any) => {
   } : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="touch-none">
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="relative z-0">
       {children}
     </div>
   );
@@ -61,7 +61,7 @@ const DraggableLandWrapper = ({ children, land }: any) => {
   } : undefined;
 
   return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="touch-none">
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="relative z-0">
       {children}
     </div>
   );
@@ -345,7 +345,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   // --- DnD Handlers ---
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
-    useSensor(TouchSensor, { activationConstraint: { distance: 10 } })
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    })
   );
 
   const [draggedCard, setDraggedCard] = useState<any>(null);
@@ -591,9 +596,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
           )}
         </div>
 
-        <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+        <DragOverlay dropAnimation={null}>
           {draggedCard ? (
-            <div className={`w-36 rounded-xl shadow-2xl opacity-90 rotate-3 cursor-grabbing overflow-hidden ring-2 ring-emerald-500 bg-slate-900 aspect-[2.5/3.5]`}>
+            <div
+              style={{ width: `${cardWidth}px` }}
+              className={`rounded-xl shadow-2xl opacity-90 rotate-3 cursor-grabbing overflow-hidden ring-2 ring-emerald-500 bg-slate-900 aspect-[2.5/3.5]`}
+            >
               <img src={draggedCard.image || draggedCard.image_uris?.normal} alt={draggedCard.name} className="w-full h-full object-cover" draggable={false} />
             </div>
           ) : null}
@@ -615,7 +623,7 @@ const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) =
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onTouchMove={onTouchMove}
-      className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform touch-none"
+      className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
     >
       <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
         {isFoil && <FoilOverlay />}

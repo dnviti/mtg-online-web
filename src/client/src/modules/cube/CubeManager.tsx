@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle, Plus, Minus } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle, Plus, Minus, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
@@ -766,43 +766,71 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
             </h2>
           </div>
 
-          <div className="flex gap-2 w-full sm:w-auto justify-end overflow-x-auto pb-1 sm:pb-0">
-            {/* Play Button */}
+          <div className="flex gap-2 w-full sm:w-auto justify-end">
+            {/* Actions Menu */}
             {packs.length > 0 && (
               <>
-                <button
-                  onClick={handlePlayOnline}
-                  className={`px-4 py-2 font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in whitespace-nowrap transition-colors
-                    ${packs.length < 12
-                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed hover:bg-slate-600'
-                      : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white'
-                    }`}
-                >
-                  <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
-                </button>
-                <button
-                  onClick={handleStartSoloTest}
-                  disabled={loading}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
-                  title="Test a randomized deck from these packs right now"
-                >
-                  <PlayCircle className="w-4 h-4 text-emerald-400" /> <span className="hidden sm:inline">Test Solo</span>
-                </button>
-                <button
-                  onClick={handleExportCsv}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
-                  title="Export as CSV"
-                >
-                  <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
-                </button>
-                <button
-                  onClick={handleCopyCsv}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
-                  title="Copy CSV to Clipboard"
-                >
-                  {copySuccess ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  <span className="hidden sm:inline">{copySuccess ? 'Copied!' : 'Copy'}</span>
-                </button>
+                <div className="relative group z-50">
+                  <button className="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 transition-all ring-1 ring-white/10">
+                    <MoreHorizontal className="w-4 h-4 text-emerald-400" /> <span className="hidden sm:inline">Actions</span> <ChevronDown className="w-4 h-4 text-slate-400 group-hover:rotate-180 transition-transform" />
+                  </button>
+
+                  {/* Dropdown */}
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right p-2 flex flex-col gap-2 z-[9999]">
+
+                    {/* Play Online */}
+                    <button
+                      onClick={handlePlayOnline}
+                      className={`w-full text-left px-3 py-3 rounded-lg flex items-center gap-3 transition-all shadow-md ${packs.length < 12
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-900/20'
+                        }`}
+                    >
+                      <Users className="w-5 h-5 shrink-0" />
+                      <div>
+                        <span className="block text-sm font-bold leading-tight">Play Online</span>
+                        <span className={`block text-[10px] leading-tight mt-0.5 ${packs.length < 12 ? 'text-slate-500' : 'text-purple-100'}`}>
+                          Start a multiplayer draft
+                        </span>
+                      </div>
+                    </button>
+
+                    <div className="h-px bg-slate-700/50 mx-1" />
+
+                    {/* Test Solo */}
+                    <button
+                      onClick={handleStartSoloTest}
+                      disabled={loading}
+                      className="w-full text-left px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-3 transition-colors shadow-sm"
+                    >
+                      <PlayCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <div>
+                        <span className="block text-sm font-bold">Test Solo</span>
+                        <span className="block text-[10px] text-slate-400 leading-none mt-0.5">Draft against bots</span>
+                      </div>
+                    </button>
+
+                    {/* Export */}
+                    <button
+                      onClick={handleExportCsv}
+                      className="w-full text-left px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-3 transition-colors shadow-sm"
+                    >
+                      <Download className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span className="text-sm font-bold">Export CSV</span>
+                    </button>
+
+                    {/* Copy */}
+                    <button
+                      onClick={handleCopyCsv}
+                      className="w-full text-left px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-3 transition-colors shadow-sm"
+                    >
+                      {copySuccess ? <Check className="w-4 h-4 text-emerald-400 shrink-0" /> : <Copy className="w-4 h-4 text-slate-400 shrink-0" />}
+                      <span className="text-sm font-bold">{copySuccess ? 'Copied!' : 'Copy List'}</span>
+                    </button>
+
+                  </div>
+                </div>
+
 
                 {/* Size Slider */}
                 <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700 h-9 mr-2 flex">
@@ -830,26 +858,28 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           </div>
         </div>
 
-        {packs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-700 rounded-2xl bg-slate-800/30 text-slate-500">
-            <Box className="w-12 h-12 mb-4 opacity-50" />
-            <p>No packs generated.</p>
-          </div>
-        ) : (
-          <div
-            className="grid gap-6 pb-20"
-            style={{
-              gridTemplateColumns: cardWidth <= 150
-                ? `repeat(auto-fill, minmax(${viewMode === 'list' ? '320px' : '550px'}, 1fr))`
-                : '1fr'
-            }}
-          >
-            {packs.map((pack) => (
-              <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
-            ))}
-          </div>
-        )}
-      </div>
+        {
+          packs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-slate-700 rounded-2xl bg-slate-800/30 text-slate-500">
+              <Box className="w-12 h-12 mb-4 opacity-50" />
+              <p>No packs generated.</p>
+            </div>
+          ) : (
+            <div
+              className="grid gap-6 pb-20"
+              style={{
+                gridTemplateColumns: cardWidth <= 150
+                  ? `repeat(auto-fill, minmax(${viewMode === 'list' ? '320px' : '550px'}, 1fr))`
+                  : '1fr'
+              }}
+            >
+              {packs.map((pack) => (
+                <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
+              ))}
+            </div>
+          )
+        }
+      </div >
 
     </div >
   );

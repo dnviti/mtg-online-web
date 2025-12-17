@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
 import { LogOut, Columns, LayoutTemplate } from 'lucide-react';
 import { Modal } from '../../components/Modal';
-import { FoilOverlay } from '../../components/CardPreview';
+import { FoilOverlay, FloatingPreview } from '../../components/CardPreview';
 import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -22,7 +22,7 @@ const PoolDroppable = ({ children, className, style }: any) => {
   });
 
   return (
-    <div ref={setNodeRef} className={`${className} ${isOver ? 'ring-4 ring-emerald-500/50 bg-emerald-900/20' : ''}`} style={style}>
+    <div ref={setNodeRef} className={`${className} ${isOver ? 'ring-4 ring-emerald-500/50 bg-emerald-900/20' : ''}`} style={{ ...style, touchAction: 'none' }}>
       {children}
     </div>
   );
@@ -128,7 +128,12 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
-    useSensor(TouchSensor, { activationConstraint: { distance: 10 } })
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    })
   );
 
   const [draggedCard, setDraggedCard] = useState<any>(null);
@@ -408,20 +413,36 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
         {/* Drag Overlay */}
         <DragOverlay dropAnimation={null}>
           {draggedCard ? (
-            <div className="w-32 h-44 opacity-90 rotate-3 cursor-grabbing shadow-2xl">
+            <div
+              className="opacity-90 rotate-3 cursor-grabbing shadow-2xl rounded-xl"
+              style={{ width: `${14 * cardScale}rem`, aspectRatio: '2.5/3.5' }}
+            >
               <img src={draggedCard.image} alt={draggedCard.name} className="w-full h-full object-cover rounded-xl" draggable={false} />
             </div>
           ) : null}
         </DragOverlay>
       </DndContext>
-    </div>
+
+      {/* Mobile Full Screen Preview (triggered by 2-finger long press) */}
+      {
+        hoveredCard && (
+          <div className="lg:hidden">
+            <FloatingPreview card={hoveredCard} x={0} y={0} isMobile={true} />
+          </div>
+        )
+      }
+    </div >
   );
 };
 
 const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) => {
   const card = normalizeCard(rawCard);
   const isFoil = card.finish === 'foil';
-  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => handlePick(card.id), card);
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => {
+    // Disable tap-to-pick on touch devices, rely on Drag and Drop
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+    handlePick(card.id);
+  }, card);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: card.id,
@@ -433,19 +454,33 @@ const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) 
     opacity: isDragging ? 0 : 1, // Hide original when dragging
   } : undefined;
 
+  // Merge listeners to avoid overriding dnd-kit's TouchSensor
+  const mergedListeners = {
+    ...listeners,
+    onTouchStart: (e: any) => {
+      listeners?.onTouchStart?.(e);
+      onTouchStart(e);
+    },
+    onTouchEnd: (e: any) => {
+      listeners?.onTouchEnd?.(e);
+      onTouchEnd(e);
+    },
+    onTouchMove: (e: any) => {
+      listeners?.onTouchMove?.(e);
+      onTouchMove();
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={{ ...style, width: `${14 * cardScale}rem` }}
-      {...listeners}
       {...attributes}
-      className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer touch-none"
+      {...mergedListeners}
+      className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
       onClick={onClick}
       onMouseEnter={() => setHoveredCard(card)}
       onMouseLeave={() => setHoveredCard(null)}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchMove={onTouchMove}
     >
       {/* Foil Glow Effect */}
       {isFoil && <div className="absolute inset-0 -m-1 rounded-xl bg-purple-500 blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-300 animate-pulse"></div>}
@@ -465,7 +500,9 @@ const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) 
 };
 
 const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
-  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => { }, card);
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => {
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+  }, card);
 
   return (
     <div

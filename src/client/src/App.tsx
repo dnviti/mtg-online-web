@@ -6,6 +6,7 @@ import { LobbyManager } from './modules/lobby/LobbyManager';
 import { DeckTester } from './modules/tester/DeckTester';
 import { Pack } from './services/PackGeneratorService';
 import { ToastProvider } from './components/Toast';
+import { GlobalContextMenu } from './components/GlobalContextMenu';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'tester'>(() => {
@@ -68,6 +69,7 @@ export const App: React.FC = () => {
 
   return (
     <ToastProvider>
+      <GlobalContextMenu />
       <div className="h-screen flex flex-col bg-slate-900 text-slate-100 font-sans overflow-hidden">
         <header className="bg-slate-800 border-b border-slate-700 p-4 shrink-0 z-50 shadow-lg">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
