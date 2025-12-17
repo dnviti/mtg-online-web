@@ -92,6 +92,7 @@ const CardsDisplay: React.FC<{
           cardWidth={cardWidth}
           onCardClick={(c) => onCardClick(c)}
           onHover={(c) => onHover(c)}
+          disableHoverPreview={true}
         />
       </div>
     )

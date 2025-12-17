@@ -1,12 +1,13 @@
 import React, { useMemo } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
-import { FoilOverlay } from './CardPreview';
+import { FoilOverlay, CardHoverWrapper } from './CardPreview';
 
 interface StackViewProps {
   cards: DraftCard[];
   cardWidth?: number;
   onCardClick?: (card: DraftCard) => void;
   onHover?: (card: DraftCard | null) => void;
+  disableHoverPreview?: boolean;
 }
 
 const CATEGORY_ORDER = [
@@ -21,7 +22,7 @@ const CATEGORY_ORDER = [
   'Other'
 ];
 
-export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover }) => {
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
@@ -86,19 +87,21 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                     onMouseLeave={() => onHover && onHover(null)}
                     onClick={() => onCardClick && onCardClick(card)}
                   >
-                    <div
-                      className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
-                      style={{
-                        // Aspect ratio is maintained by image or div dimensions
-                        // With overlap, we just render them one after another with negative margin
-                        marginBottom: isLast ? '0' : (useArtCrop ? '-85%' : '-125%'), // Negative margin to show header. Square cards need less negative margin.
-                        aspectRatio: useArtCrop ? '1/1' : '2.5/3.5'
-                      }}
-                    >
-                      <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
-                      {/* Optional: Shine effect for foils if visible? */}
-                      {card.finish === 'foil' && <FoilOverlay />}
-                    </div>
+                    <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 200}>
+                      <div
+                        className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
+                        style={{
+                          // Aspect ratio is maintained by image or div dimensions
+                          // With overlap, we just render them one after another with negative margin
+                          marginBottom: isLast ? '0' : (useArtCrop ? '-85%' : '-125%'), // Negative margin to show header. Square cards need less negative margin.
+                          aspectRatio: useArtCrop ? '1/1' : '2.5/3.5'
+                        }}
+                      >
+                        <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
+                        {/* Optional: Shine effect for foils if visible? */}
+                        {card.finish === 'foil' && <FoilOverlay />}
+                      </div>
+                    </CardHoverWrapper>
                   </div>
                 )
               })}

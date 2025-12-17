@@ -84,4 +84,7 @@
 - [Gameplay Magnified View & Timeout](./devlog/2025-12-17-161500_gameplay_magnified_view_and_timeout.md): Completed. Added magnified view with full card details (Oracle text, type, mana) to gameplay and disabled timeout.
 - [Test Deck Feature](./devlog/2025-12-17-162500_test_deck_feature.md): Completed. Implemented "Test Solo" button in Cube Manager to instantly start a solo game with a randomized deck from generated packs.
 - [Update Deck Auto-Fill](./devlog/2025-12-17-165500_update_deck_autofill.md): Completed. Updated deck builder "Auto-Fill" to add lands as individual cards to the deck list for easier management.
+- [2025-12-17-183000_restore_stack_hover](./devlog/2025-12-17-183000_restore_stack_hover.md): Completed. Restored hover magnified card for Stack View in Pack Generation.
+- [2025-12-17-183500_draft_ui_upgrade](./devlog/2025-12-17-183500_draft_ui_upgrade.md): Completed. Implemented 3D flip preview and consistent foil rendering in Draft View.
+- [2025-12-17-184000_fix_draft_pool_ui](./devlog/2025-12-17-184000_fix_draft_pool_ui.md): Completed. Fixed "Your Pool" resizing bugs and removed unwanted hover animation.
 - [Customizable Deck Builder Layout](./devlog/2025-12-17-170000_customizable_deck_builder.md): Completed. Implemented switchable Vertical (Side-by-Side) and Horizontal (Top-Bottom) layouts, with an integrated, improved Land Station.

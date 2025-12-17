@@ -3,6 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
 import { LogOut } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { FoilOverlay } from '../../components/CardPreview';
+
+// Helper to normalize card data for visuals
+const normalizeCard = (c: any) => ({
+  ...c,
+  finish: c.finish || 'nonfoil',
+  image: c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
+});
 
 interface DraftViewProps {
   draftState: any;
@@ -76,16 +84,23 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     };
 
     if (isResizing) {
-      window.addEventListener('mousemove', resize);
-      window.addEventListener('mouseup', stopResizing);
+      document.addEventListener('mousemove', resize);
+      document.addEventListener('mouseup', stopResizing);
     }
     return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
+      document.removeEventListener('mousemove', resize);
+      document.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing]);
 
   const [hoveredCard, setHoveredCard] = useState<any>(null);
+  const [displayCard, setDisplayCard] = useState<any>(null);
+
+  useEffect(() => {
+    if (hoveredCard) {
+      setDisplayCard(normalizeCard(hoveredCard));
+    }
+  }, [hoveredCard]);
 
   const activePack = draftState.players[currentPlayerId]?.activePack;
   const pickedCards = draftState.players[currentPlayerId]?.pool || [];
@@ -152,27 +167,61 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
       <div className="flex-1 flex overflow-hidden">
 
         {/* Dedicated Zoom Zone (Left Sidebar) */}
-        <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10 transition-all">
-          {hoveredCard ? (
-            <div className="animate-in fade-in slide-in-from-left-4 duration-300 p-4 sticky top-4">
-              <img
-                src={hoveredCard.image || hoveredCard.image_uris?.normal || hoveredCard.card_faces?.[0]?.image_uris?.normal}
-                alt={hoveredCard.name}
-                className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
-              />
-              <div className="mt-4 text-center">
-                <h3 className="text-lg font-bold text-slate-200">{hoveredCard.name}</h3>
-                <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{hoveredCard.type_line}</p>
+        <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10 transition-all" style={{ perspective: '1000px' }}>
+          <div className="w-full relative sticky top-8 px-6">
+            <div
+              className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
+              style={{
+                transformStyle: 'preserve-3d',
+                transform: hoveredCard ? 'rotateY(0deg)' : 'rotateY(180deg)'
+              }}
+            >
+              {/* Front Face (Hovered Card) */}
+              <div
+                className="absolute inset-0 w-full h-full bg-slate-900 rounded-xl"
+                style={{ backfaceVisibility: 'hidden' }}
+              >
+                {(hoveredCard || displayCard) && (
+                  <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl relative overflow-hidden">
+                    <img
+                      src={(hoveredCard || displayCard).image || (hoveredCard || displayCard).image_uris?.normal || (hoveredCard || displayCard).card_faces?.[0]?.image_uris?.normal}
+                      alt={(hoveredCard || displayCard).name}
+                      className="w-full h-full object-cover rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
+                    />
+                    {/* Foil Overlay for Preview */}
+                    {((hoveredCard || displayCard).finish === 'foil') && <FoilOverlay />}
+
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 text-center z-20">
+                      <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
+                      <p className="text-xs text-slate-300 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).type_line}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Back Face (Card Back) */}
+              <div
+                className="absolute inset-0 w-full h-full rounded-xl shadow-2xl overflow-hidden bg-slate-900"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)'
+                }}
+              >
+                <img
+                  src="/images/back.jpg"
+                  alt="Card Back"
+                  className="w-full h-full object-cover"
+                />
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-600 p-8 text-center opacity-50">
-              <div className="w-48 h-64 border-2 border-dashed border-slate-700 rounded-xl mb-4 flex items-center justify-center">
-                <span className="text-xs uppercase font-bold tracking-widest">Hover Card</span>
+
+            {/* Oracle Text Box Below Card */}
+            {(hoveredCard || displayCard)?.oracle_text && (
+              <div className={`mt-6 text-xs text-slate-300 text-left bg-slate-900/80 backdrop-blur p-4 rounded-lg border border-slate-700 leading-relaxed transition-opacity duration-300 ${hoveredCard ? 'opacity-100' : 'opacity-0'}`}>
+                {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-2 last:mb-0">{line}</p>)}
               </div>
-              <p className="text-sm">Hover over a card to view clear details.</p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Main Area: Current Pack OR Waiting State */}
@@ -198,23 +247,34 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
             <div className="flex flex-col items-center justify-center min-h-full pb-10">
               <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
               <div className="flex flex-wrap justify-center gap-6 [perspective:1000px]">
-                {activePack.cards.map((card: any) => (
-                  <div
-                    key={card.id}
-                    className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
-                    style={{ width: `${14 * cardScale}rem` }}
-                    onClick={() => handlePick(card.id)}
-                    onMouseEnter={() => setHoveredCard(card)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                  >
-                    <div className="absolute inset-0 rounded-xl bg-emerald-500 blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-300"></div>
-                    <img
-                      src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
-                      alt={card.name}
-                      className="w-full rounded-xl shadow-2xl shadow-black group-hover:ring-2 ring-emerald-400/50 relative z-10"
-                    />
-                  </div>
-                ))}
+                {activePack.cards.map((rawCard: any) => {
+                  const card = normalizeCard(rawCard);
+                  const isFoil = card.finish === 'foil';
+
+                  return (
+                    <div
+                      key={card.id}
+                      className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
+                      style={{ width: `${14 * cardScale}rem` }}
+                      onClick={() => handlePick(card.id)}
+                      onMouseEnter={() => setHoveredCard(card)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                    >
+                      {/* Foil Glow Effect */}
+                      {isFoil && <div className="absolute inset-0 -m-1 rounded-xl bg-purple-500 blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-300 animate-pulse"></div>}
+
+                      <div className={`relative w-full rounded-xl shadow-2xl shadow-black overflow-hidden bg-slate-900 ${isFoil ? 'ring-2 ring-purple-400/50' : 'group-hover:ring-2 ring-emerald-400/50'}`}>
+                        <img
+                          src={card.image}
+                          alt={card.name}
+                          className="w-full h-full object-cover relative z-10"
+                        />
+                        {isFoil && <FoilOverlay />}
+                        {isFoil && <div className="absolute top-2 right-2 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm border border-white/20">FOIL</div>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -245,7 +305,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
           {pickedCards.map((card: any, idx: number) => (
             <div
               key={`${card.id}-${idx}`}
-              className="relative group shrink-0 transition-all hover:-translate-y-10 h-full flex items-center"
+              className="relative group shrink-0 transition-all h-full flex items-center"
               onMouseEnter={() => setHoveredCard(card)}
               onMouseLeave={() => setHoveredCard(null)}
             >
