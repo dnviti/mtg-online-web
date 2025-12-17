@@ -1,16 +1,14 @@
 import React from 'react';
 import { DraftCard, Pack } from '../services/PackGeneratorService';
-import { Copy } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { StackView } from './StackView';
+import { CardHoverWrapper, FoilOverlay } from './CardPreview';
 
 interface PackCardProps {
   pack: Pack;
   viewMode: 'list' | 'grid' | 'stack';
   cardWidth?: number;
 }
-
-import { CardHoverWrapper, FoilOverlay } from './CardPreview';
-
 
 const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
   const isFoil = (card: DraftCard) => card.finish === 'foil';
@@ -43,6 +41,7 @@ const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
 };
 
 export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 150 }) => {
+  const [copied, setCopied] = React.useState(false);
   const mythics = pack.cards.filter(c => c.rarity === 'mythic');
   const rares = pack.cards.filter(c => c.rarity === 'rare');
   const uncommons = pack.cards.filter(c => c.rarity === 'uncommon');
@@ -53,7 +52,8 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
   const copyPackToClipboard = () => {
     const text = pack.cards.map(c => c.name).join('\n');
     navigator.clipboard.writeText(text);
-    alert(`Pack list ${pack.id} copied!`);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -64,8 +64,12 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
           <h3 className="font-bold text-purple-400 text-sm md:text-base">Pack #{pack.id}</h3>
           <span className="text-xs text-slate-500 font-mono">{pack.setName}</span>
         </div>
-        <button onClick={copyPackToClipboard} className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-700 transition-colors flex items-center gap-2 text-xs">
-          <Copy className="w-4 h-4" />
+        <button
+          onClick={copyPackToClipboard}
+          className={`p-1.5 rounded transition-all duration-300 flex items-center gap-2 text-xs border ${copied ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/50' : 'text-slate-400 border-transparent hover:text-white hover:bg-slate-700'}`}
+          title="Copy to clipboard"
+        >
+          {copied ? <Check className="w-4 h-4 scale-110 animate-in zoom-in spin-in-12 duration-300" /> : <Copy className="w-4 h-4" />}
         </button>
       </div>
 
