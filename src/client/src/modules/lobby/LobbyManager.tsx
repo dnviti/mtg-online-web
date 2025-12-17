@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import { socketService } from '../../services/SocketService';
 import { GameRoom } from './GameRoom';
 import { Pack } from '../../services/PackGeneratorService';
-import { Users, PlusCircle, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { Users, PlusCircle, LogIn, AlertCircle, Loader2, Package, Check } from 'lucide-react';
+import { Modal } from '../../components/Modal';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
@@ -31,29 +32,23 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     localStorage.setItem('player_name', playerName);
   }, [playerName]);
 
+  const [showBoxSelection, setShowBoxSelection] = useState(false);
+  const [availableBoxes, setAvailableBoxes] = useState<{ id: string, title: string, packs: Pack[], setCode: string, packCount: number }[]>([]);
+
   const connect = () => {
     if (!socketService.socket.connected) {
       socketService.connect();
     }
   };
 
-  const handleCreateRoom = async () => {
-    if (!playerName) {
-      setError('Please enter your name');
-      return;
-    }
-    if (generatedPacks.length === 0) {
-      setError('No packs generated! Please go to Draft Management and generate packs first.');
-      return;
-    }
-
+  const executeCreateRoom = async (packsToUse: Pack[]) => {
     setLoading(true);
     setError('');
     connect();
 
     try {
       // Collect all cards for caching (packs + basic lands)
-      const allCards = generatedPacks.flatMap(p => p.cards);
+      const allCards = packsToUse.flatMap(p => p.cards);
       const allCardsAndLands = [...allCards, ...availableLands];
 
       // Deduplicate by Scryfall ID
@@ -84,7 +79,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       // Note: For multiplayer, clients need to access this URL.
       const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
 
-      const updatedPacks = generatedPacks.map(pack => ({
+      const updatedPacks = packsToUse.map(pack => ({
         ...pack,
         cards: pack.cards.map(c => ({
           ...c,
@@ -115,7 +110,66 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       setError(err.message || 'Connection error');
     } finally {
       setLoading(false);
+      setShowBoxSelection(false);
     }
+  };
+
+  const handleCreateRoom = async () => {
+    if (!playerName) {
+      setError('Please enter your name');
+      return;
+    }
+    if (generatedPacks.length === 0) {
+      setError('No packs generated! Please go to Draft Management and generate packs first.');
+      return;
+    }
+
+    // Logic to detect Multiple Boxes
+    // 1. Group by Set Name
+    const packsBySet: Record<string, Pack[]> = {};
+    generatedPacks.forEach(p => {
+      const key = p.setName;
+      if (!packsBySet[key]) packsBySet[key] = [];
+      packsBySet[key].push(p);
+    });
+
+    const boxes: { id: string, title: string, packs: Pack[], setCode: string, packCount: number }[] = [];
+
+    // Sort sets alphabetically
+    Object.keys(packsBySet).sort().forEach(setName => {
+      const setPacks = packsBySet[setName];
+      const BOX_SIZE = 36;
+
+      // Split into chunks of 36
+      for (let i = 0; i < setPacks.length; i += BOX_SIZE) {
+        const chunk = setPacks.slice(i, i + BOX_SIZE);
+        const boxNum = Math.floor(i / BOX_SIZE) + 1;
+        const setCode = (chunk[0].cards[0]?.setCode || 'unk').toLowerCase();
+
+        boxes.push({
+          id: `${setCode}-${boxNum}-${Date.now()}`, // Unique ID
+          title: `${setName} - Box ${boxNum}`,
+          packs: chunk,
+          setCode: setCode,
+          packCount: chunk.length
+        });
+      }
+    });
+
+    // Strategy: If we have multiple boxes, or if we have > 36 packs but maybe not multiple "boxes" (e.g. 50 packs of mixed),
+    // we should interpret them.
+    // The prompt says: "more than 1 box has been generated".
+    // If I generate 2 boxes (72 packs), `boxes` array will have length 2.
+    // If I generate 1 box (36 packs), `boxes` array will have length 1.
+
+    if (boxes.length > 1) {
+      setAvailableBoxes(boxes);
+      setShowBoxSelection(true);
+      return;
+    }
+
+    // If only 1 box (or partial), just use all packs
+    executeCreateRoom(generatedPacks);
   };
 
   const handleJoinRoom = async () => {
@@ -316,6 +370,62 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
           </div>
         </div>
       </div>
+      {/* Box Selection Modal */}
+      <Modal
+        isOpen={showBoxSelection}
+        onClose={() => setShowBoxSelection(false)}
+        title="Select Sealed Box"
+        message="Multiple boxes available. Please select a sealed box to open for this draft."
+        type="info"
+        maxWidth="max-w-3xl"
+      >
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar p-1">
+          {availableBoxes.map(box => (
+            <button
+              key={box.id}
+              onClick={() => executeCreateRoom(box.packs)}
+              className="group relative flex flex-col items-center p-6 bg-slate-900 border border-slate-700 rounded-xl hover:border-purple-500 hover:bg-slate-800 transition-all shadow-xl hover:shadow-purple-900/20"
+            >
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="bg-purple-600 rounded-full p-1 shadow-lg shadow-purple-500/50">
+                  <Check className="w-4 h-4 text-white" />
+                </div>
+              </div>
+
+              {/* Box Graphic simulation */}
+              <div className="w-24 h-32 mb-4 relative perspective-1000 group-hover:scale-105 transition-transform duration-300">
+                <div className="absolute inset-0 bg-slate-800 rounded border border-slate-600 transform rotate-y-12 translate-z-4 shadow-2xl flex items-center justify-center overflow-hidden">
+                  {/* Set Icon as Box art */}
+                  <img
+                    src={`https://svgs.scryfall.io/sets/${box.setCode}.svg?1734307200`}
+                    alt={box.setCode}
+                    className="w-16 h-16 opacity-20 group-hover:opacity-50 transition-opacity invert"
+                  />
+                  <Package className="absolute bottom-2 right-2 w-6 h-6 text-slate-500" />
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/50 pointer-events-none rounded"></div>
+              </div>
+
+              <h3 className="font-bold text-white text-center text-lg leading-tight mb-1 group-hover:text-purple-400 transition-colors">
+                {box.title}
+              </h3>
+              <div className="flex items-center gap-2 text-xs text-slate-500 font-mono uppercase tracking-wider">
+                <span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700">{box.setCode.toUpperCase()}</span>
+                <span>•</span>
+                <span>{box.packCount} Packs</span>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={() => setShowBoxSelection(false)}
+            className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm font-bold"
+          >
+            Cancel
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };
