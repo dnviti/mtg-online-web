@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle, Plus, Minus } from 'lucide-react';
 import { ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
@@ -107,7 +107,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   });
   const [numBoxes, setNumBoxes] = useState<number>(() => {
     const saved = localStorage.getItem('cube_numBoxes');
-    return saved ? parseInt(saved) : 3;
+    return saved ? parseInt(saved) : 1;
   });
 
   const [cardWidth, setCardWidth] = useState(() => {
@@ -697,17 +697,27 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
               {sourceMode === 'set' && (
                 <div className="mb-4">
                   <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Quantity</label>
-                  <div className="flex items-center gap-2 bg-slate-800 p-2 rounded border border-slate-700">
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={numBoxes}
-                      onChange={(e) => setNumBoxes(parseInt(e.target.value))}
-                      className="w-16 bg-slate-700 border-none rounded p-1 text-center text-white font-mono"
-                      disabled={loading}
-                    />
-                    <span className="text-slate-300 text-xs">Boxes ({numBoxes * 36} Packs)</span>
+                  <div className="flex items-center gap-3 bg-slate-800 p-2 rounded border border-slate-700">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setNumBoxes(prev => Math.max(1, prev - 1))}
+                        disabled={numBoxes <= 1 || loading}
+                        className="p-1.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center font-mono font-bold text-white text-lg">{numBoxes}</span>
+                      <button
+                        onClick={() => setNumBoxes(prev => Math.min(10, prev + 1))}
+                        disabled={numBoxes >= 10 || loading}
+                        className="p-1.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-white"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <span className="text-slate-400 text-xs font-medium border-l border-slate-700 pl-3">
+                      <span className="text-white font-bold">{numBoxes * 36}</span> Packs
+                    </span>
                   </div>
                 </div>
               )}
