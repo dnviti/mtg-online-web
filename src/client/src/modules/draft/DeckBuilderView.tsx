@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid } from 'lucide-react';
+import { StackView } from '../../components/StackView';
+import { FoilOverlay } from '../../components/CardPreview';
+import { DraftCard } from '../../services/PackGeneratorService';
 
 interface DeckBuilderViewProps {
   roomId: string;
@@ -9,33 +12,156 @@ interface DeckBuilderViewProps {
   availableBasicLands?: any[];
 }
 
+// Internal Helper to normalize card data for visuals
+const normalizeCard = (c: any): DraftCard => ({
+  ...c,
+  finish: c.finish || 'nonfoil',
+  // Ensure image is top-level for components that expect it
+  image: c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
+});
+
+// Reusable List Item Component
+const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: any) => void }> = ({ card, onClick, onHover }) => {
+  const isFoil = (card: DraftCard) => card.finish === 'foil';
+
+  const getRarityColorClass = (rarity: string) => {
+    switch (rarity) {
+      case 'common': return 'bg-black text-white border-slate-600';
+      case 'uncommon': return 'bg-slate-300 text-slate-900 border-white';
+      case 'rare': return 'bg-yellow-500 text-yellow-950 border-yellow-200';
+      case 'mythic': return 'bg-orange-600 text-white border-orange-300';
+      default: return 'bg-slate-500';
+    }
+  };
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => onHover && onHover(card)}
+      onMouseLeave={() => onHover && onHover(null)}
+      className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors w-full group"
+    >
+      <span className={`font-medium flex items-center gap-2 truncate ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
+        {card.name}
+        {isFoil(card) && (
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-400 animate-pulse text-xs font-bold border border-purple-500/50 rounded px-1">
+            FOIL
+          </span>
+        )}
+      </span>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[10px] text-slate-600 font-mono uppercase opacity-0 group-hover:opacity-100 transition-opacity">{card.type_line?.split('—')[0]?.trim()}</span>
+        <span className={`w-2 h-2 rounded-full border ${getRarityColorClass(card.rarity)} !p-0 !text-[0px]`}></span>
+      </div>
+    </div>
+  );
+};
+
+// Extracted Component to avoid re-mounting issues
+const CardsDisplay: React.FC<{
+  cards: any[];
+  viewMode: 'list' | 'grid' | 'stack';
+  cardWidth: number;
+  onCardClick: (c: any) => void;
+  onHover: (c: any) => void;
+  emptyMessage: string;
+}> = ({ cards, viewMode, cardWidth, onCardClick, onHover, emptyMessage }) => {
+  if (cards.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50 p-8 border-2 border-dashed border-slate-700/50 rounded-lg">
+        <Layers className="w-12 h-12 mb-2" />
+        <p>{emptyMessage}</p>
+      </div>
+    )
+  }
+
+  if (viewMode === 'list') {
+    const sorted = [...cards].sort((a, b) => (a.cmc || 0) - (b.cmc || 0));
+    return (
+      <div className="flex flex-col gap-1 w-full">
+        {sorted.map(c => <ListItem key={c.id} card={normalizeCard(c)} onClick={() => onCardClick(c)} onHover={onHover} />)}
+      </div>
+    );
+  }
+
+  if (viewMode === 'stack') {
+    return (
+      <div className="w-full h-full"> {/* Allow native scrolling from parent */}
+        <StackView
+          cards={cards.map(normalizeCard)}
+          cardWidth={cardWidth}
+          onCardClick={(c) => onCardClick(c)}
+          onHover={(c) => onHover(c)}
+        />
+      </div>
+    )
+  }
+
+  // Grid View
+  return (
+    <div
+      className="grid gap-4 pb-20 content-start"
+      style={{
+        gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))`
+      }}
+    >
+      {cards.map(c => {
+        const card = normalizeCard(c);
+        const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
+        const displayImage = useArtCrop ? card.imageArtCrop : card.image;
+        const isFoil = card.finish === 'foil';
+
+        return (
+          <div
+            key={card.id}
+            onClick={() => onCardClick(c)}
+            onMouseEnter={() => onHover(card)}
+            onMouseLeave={() => onHover(null)}
+            className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+              {isFoil && <FoilOverlay />}
+              {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
+              {displayImage ? (
+                <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
+              )}
+              <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' : card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' : 'bg-black'}`} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  )
+};
+
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, availableBasicLands = [] }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('grid');
+  const [cardWidth, setCardWidth] = useState(150);
+
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
   const [lands, setLands] = useState({ Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 });
   const [hoveredCard, setHoveredCard] = useState<any>(null);
 
   // --- Land Advice Logic ---
-  const landSuggestion = React.useMemo(() => {
+  const landSuggestion = useMemo(() => {
     const targetLands = 17;
-    // Count existing non-basic lands in deck
     const existingLands = deck.filter(c => c.type_line && c.type_line.includes('Land')).length;
-    // We want to suggest basics to reach target
     const landsNeeded = Math.max(0, targetLands - existingLands);
 
     if (landsNeeded === 0) return null;
 
-    // Count pips in spell costs
     const pips = { Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 };
     let totalPips = 0;
 
     deck.forEach(card => {
       if (card.type_line && card.type_line.includes('Land')) return;
       if (!card.mana_cost) return;
-
       const cost = card.mana_cost;
       pips.Plains += (cost.match(/{W}/g) || []).length;
       pips.Island += (cost.match(/{U}/g) || []).length;
@@ -45,24 +171,19 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     });
 
     totalPips = Object.values(pips).reduce((a, b) => a + b, 0);
-
     if (totalPips === 0) return null;
 
-    // Distribute
     const suggestion = { Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 };
     let allocated = 0;
 
-    // First pass: floor
     (Object.keys(pips) as Array<keyof typeof pips>).forEach(type => {
       const count = Math.floor((pips[type] / totalPips) * landsNeeded);
       suggestion[type] = count;
       allocated += count;
     });
 
-    // Remainder
     let remainder = landsNeeded - allocated;
     if (remainder > 0) {
-      // Add to color with most pips
       const sortedTypes = (Object.keys(pips) as Array<keyof typeof pips>).sort((a, b) => pips[b] - pips[a]);
       for (let i = 0; i < remainder; i++) {
         suggestion[sortedTypes[i % sortedTypes.length]]++;
@@ -74,24 +195,15 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   const applySuggestion = () => {
     if (!landSuggestion) return;
-
-    // Check if we have available basic lands to add as real cards
     if (availableBasicLands && availableBasicLands.length > 0) {
       const newLands: any[] = [];
-
       Object.entries(landSuggestion).forEach(([type, count]) => {
         if (count <= 0) return;
-
-        // Find matching land in availableBasicLands
-        // We look for strict name match first, then potential fallback (e.g. snow lands)
-        const landCard = availableBasicLands.find(l => l.name === type) ||
-          availableBasicLands.find(l => l.name.includes(type));
-
+        const landCard = availableBasicLands.find(l => l.name === type) || availableBasicLands.find(l => l.name.includes(type));
         if (landCard) {
           for (let i = 0; i < count; i++) {
             const newLand = {
               ...landCard,
-              // Ensure unique ID with index
               id: `land-${landCard.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`,
               image_uris: landCard.image_uris || { normal: landCard.image }
             };
@@ -99,20 +211,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
           }
         }
       });
-
-      if (newLands.length > 0) {
-        setDeck(prev => [...prev, ...newLands]);
-      }
+      if (newLands.length > 0) setDeck(prev => [...prev, ...newLands]);
     } else {
-      // Fallback: If no basic lands loaded (counter mode), use the old counter logic
       setLands(landSuggestion);
     }
   };
 
-  // --- Helper Methods ---
-  const formatTime = (seconds: number | string) => {
-    return seconds; // Just return "Unlimited"
-  };
+  // --- Actions ---
+  const formatTime = (seconds: number | string) => seconds;
 
   const addToDeck = (card: any) => {
     setPool(prev => prev.filter(c => c.id !== card.id));
@@ -120,7 +226,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   };
 
   const addLandToDeck = (land: any) => {
-    // Create a unique instance
     const newLand = {
       ...land,
       id: `land-${land.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
@@ -131,10 +236,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   const removeFromDeck = (card: any) => {
     setDeck(prev => prev.filter(c => c.id !== card.id));
-
-    if (card.id.startsWith('land-')) {
-      // Just delete 
-    } else {
+    if (!card.id.startsWith('land-')) {
       setPool(prev => [...prev, card]);
     }
   };
@@ -152,7 +254,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
         Mountain: "https://cards.scryfall.io/normal/front/f/5/f5383569-42b7-4c07-b67f-2736bc88bd37.jpg",
         Forest: "https://cards.scryfall.io/normal/front/1/f/1fa688da-901d-4876-be11-884d6b677271.jpg"
       };
-
       return Array(count).fill(null).map((_, i) => ({
         id: `basic-${type}-${i}`,
         name: type,
@@ -165,257 +266,193 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     socketService.socket.emit('player_ready', { deck: fullDeck });
   };
 
-  const sortedLands = React.useMemo(() => {
+  const sortedLands = useMemo(() => {
     return [...(availableBasicLands || [])].sort((a, b) => a.name.localeCompare(b.name));
   }, [availableBasicLands]);
 
-  // --- Sub Actions ---
-  const renderAdvisorContent = () => {
-    if (!landSuggestion) return <span className="text-xs text-slate-500 italic">Add colored spells to get advice.</span>;
-
-    return (
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex gap-2">
-          {(Object.entries(landSuggestion) as [string, number][]).map(([type, count]) => {
-            if (count === 0) return null;
-            let colorClass = "text-slate-300";
-            if (type === 'Plains') colorClass = "text-amber-200";
-            if (type === 'Island') colorClass = "text-blue-200";
-            if (type === 'Swamp') colorClass = "text-purple-200";
-            if (type === 'Mountain') colorClass = "text-red-200";
-            if (type === 'Forest') colorClass = "text-emerald-200";
-
-            return (
-              <div key={type} className={`font-bold ${colorClass} text-xs flex items-center gap-1`}>
-                <span>{type.substring(0, 1)}:</span>
-                <span>{count}</span>
-              </div>
-            )
-          })}
-        </div>
-        <button
-          onClick={applySuggestion}
-          className="bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] px-2 py-1 rounded shadow transition-colors font-bold uppercase tracking-wide"
-        >
-          Auto-Fill
-        </button>
-      </div>
-    );
-  }
-
-  // --- Render Sections ---
+  // --- Render Functions (Inline) ---
   const renderLandStation = () => (
-    <div className={`bg-slate-800 rounded-lg border border-slate-700 flex flex-col ${layout === 'horizontal' ? 'h-full' : 'h-72'} transition-all`}>
-      <div className="p-3 border-b border-slate-700 flex flex-col gap-2 shrink-0 bg-slate-900/30">
-        <div className="flex justify-between items-center">
-          <h3 className="text-sm font-bold text-slate-400 uppercase">Land Station</h3>
-        </div>
-
-        {/* Integrated Advisor */}
-        <div className="bg-slate-950/50 rounded border border-white/5 p-2 flex flex-col gap-1">
-          <span className="text-[10px] text-emerald-400 font-bold uppercase flex items-center gap-1">
-            <Layers className="w-3 h-3" /> Land Advisor (Target: 17)
-          </span>
-          {renderAdvisorContent()}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 bg-slate-900/50 rounded-b-lg">
-        {availableBasicLands && availableBasicLands.length > 0 ? (
-          <div className={`grid ${layout === 'horizontal' ? 'grid-cols-2' : 'grid-flow-col auto-cols-max'} gap-2 content-start`}>
-            {/* Note: horizontal layout gets grid-cols-2 for vertical scrolling list feeling, vertical layout gets side-scrolling or wrapped */}
-            <div className="flex flex-wrap gap-2 justify-center">
-              {sortedLands.map((land) => (
-                <div
-                  key={land.scryfallId}
-                  className="relative group cursor-pointer"
-                  onClick={() => addLandToDeck(land)}
-                  onMouseEnter={() => setHoveredCard(land)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  <img
-                    src={land.image || land.image_uris?.normal}
-                    className="w-20 hover:scale-105 transition-transform rounded shadow-lg"
-                    alt={land.name}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded transition-opacity">
-                    <span className="text-white font-bold text-xs bg-black/50 px-1 rounded">+</span>
-                  </div>
-                </div>
-              ))}
+    <div className="bg-slate-900/40 rounded border border-slate-700/50 p-2 mb-2 shrink-0 flex flex-col gap-2">
+      {/* Header & Advisor */}
+      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded">
+        <h4 className="text-xs font-bold text-slate-400 uppercase">Land Station</h4>
+        {landSuggestion ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500">Advice:</span>
+            <div className="flex gap-1">
+              {Object.entries(landSuggestion).map(([type, count]) => {
+                if ((count as number) <= 0) return null;
+                const color = type === 'Plains' ? 'text-amber-200' : type === 'Island' ? 'text-blue-200' : type === 'Swamp' ? 'text-purple-200' : type === 'Mountain' ? 'text-red-200' : 'text-emerald-200';
+                return <span key={type} className={`text-[10px] font-bold ${color}`}>{type[0]}:{count as number}</span>
+              })}
             </div>
+            <button onClick={applySuggestion} className="bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded shadow font-bold uppercase">Auto-Fill</button>
           </div>
         ) : (
-          // Fallback counter UI
-          <div className="flex flex-col gap-2 p-2">
-            {Object.keys(lands).map(type => (
-              <div key={type} className="flex items-center justify-between bg-slate-800 p-2 rounded">
-                <div className="flex items-center gap-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs border
-                                       ${type === 'Plains' ? 'bg-amber-900/50 border-amber-500 text-amber-200' : ''}
-                                       ${type === 'Island' ? 'bg-blue-900/50 border-blue-500 text-blue-200' : ''}
-                                       ${type === 'Swamp' ? 'bg-purple-900/50 border-purple-500 text-purple-200' : ''}
-                                       ${type === 'Mountain' ? 'bg-red-900/50 border-red-500 text-red-200' : ''}
-                                       ${type === 'Forest' ? 'bg-green-900/50 border-green-500 text-green-200' : ''}
-                                   `}>
-                    {type[0]}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => handleLandChange(type, -1)} className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 font-bold">-</button>
-                  <span className="w-6 text-center text-sm font-bold">{lands[type as keyof typeof lands]}</span>
-                  <button onClick={() => handleLandChange(type, 1)} className="w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 font-bold">+</button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <span className="text-[10px] text-slate-600 italic">Add spells for advice</span>
         )}
       </div>
+
+      {/* Land Scroll */}
+      {availableBasicLands && availableBasicLands.length > 0 ? (
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
+          {sortedLands.map((land) => (
+            <div
+              key={land.scryfallId}
+              className="relative group cursor-pointer shrink-0"
+              onClick={() => addLandToDeck(land)}
+              onMouseEnter={() => setHoveredCard(land)}
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <img
+                src={land.image || land.image_uris?.normal}
+                className="w-16 rounded shadow group-hover:scale-105 transition-transform"
+                alt={land.name}
+              />
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded transition-opacity">
+                <span className="text-white font-bold text-[10px] bg-black/50 px-1 rounded">+</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex justify-between px-2">
+          {Object.keys(lands).map(type => (
+            <div key={type} className="flex flex-col items-center">
+              <div className="text-[10px] font-bold text-slate-500">{type[0]}</div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleLandChange(type, -1)} className="w-5 h-5 bg-slate-700 rounded text-slate-300 flex items-center justify-center font-bold text-xs">-</button>
+                <span className="w-4 text-center text-xs font-bold">{lands[type as keyof typeof lands]}</span>
+                <button onClick={() => handleLandChange(type, 1)} className="w-5 h-5 bg-slate-700 rounded text-slate-300 flex items-center justify-center font-bold text-xs">+</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
-  const renderPool = () => (
-    <>
-      <div className="flex justify-between items-center mb-4 shrink-0">
-        <h2 className="text-xl font-bold flex items-center gap-2"><Layers /> Card Pool ({pool.length})</h2>
-      </div>
-      <div className="flex-1 overflow-y-auto p-2 bg-slate-950/50 rounded-lg custom-scrollbar">
-        <div className="flex flex-wrap gap-2 justify-center content-start">
-          {pool.map((card) => (
-            <img
-              key={card.id}
-              src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
-              className="w-28 hover:scale-110 transition-transform cursor-pointer rounded shadow-md"
-              onClick={() => addToDeck(card)}
-              onMouseEnter={() => setHoveredCard(card)}
-              onMouseLeave={() => setHoveredCard(null)}
-              title={card.name}
-            />
-          ))}
-        </div>
-      </div>
-    </>
-  );
-
-  const renderDeck = () => (
-    <>
-      <div className="flex justify-between items-center mb-4 shrink-0">
-        <h2 className="text-xl font-bold">Your Deck ({deck.length + Object.values(lands).reduce((a, b) => a + b, 0)})</h2>
+  return (
+    <div className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col">
+      {/* Global Toolbar - Inlined */}
+      <div className="h-14 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-amber-400 font-mono text-xl font-bold bg-slate-800 px-3 py-1 rounded border border-amber-500/30">
-            <Clock className="w-5 h-5" /> {formatTime(timer)}
+          {/* Layout Switcher */}
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+            <button onClick={() => setLayout('vertical')} className={`p-1.5 rounded ${layout === 'vertical' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Vertical Split"><Columns className="w-4 h-4" /></button>
+            <button onClick={() => setLayout('horizontal')} className={`p-1.5 rounded ${layout === 'horizontal' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Horizontal Split"><LayoutTemplate className="w-4 h-4" /></button>
+          </div>
+
+          {/* View Mode Switcher */}
+          <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+            <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="List View"><List className="w-4 h-4" /></button>
+            <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Grid View"><LayoutGrid className="w-4 h-4" /></button>
+            <button onClick={() => setViewMode('stack')} className={`p-1.5 rounded ${viewMode === 'stack' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-4 h-4" /></button>
+          </div>
+
+          {/* Slider */}
+          <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-2 py-1 border border-slate-700 h-9">
+            <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" />
+            <input
+              type="range"
+              min="100"
+              max="300"
+              step="1"
+              value={cardWidth}
+              onChange={(e) => setCardWidth(parseInt(e.target.value))}
+              className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+            />
+            <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-amber-400 font-mono text-sm font-bold bg-slate-900 px-3 py-1.5 rounded border border-amber-500/30">
+            <Clock className="w-4 h-4" /> {formatTime(timer)}
           </div>
           <button
             onClick={submitDeck}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105 text-sm"
           >
             <Save className="w-4 h-4" /> Submit Deck
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 bg-slate-950/50 rounded-lg custom-scrollbar">
-        <div className="flex flex-wrap gap-2 justify-center content-start">
-          {deck.map((card) => (
-            <img
-              key={card.id}
-              src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
-              className="w-28 hover:scale-110 transition-transform cursor-pointer rounded shadow-md"
-              onClick={() => removeFromDeck(card)}
-              onMouseEnter={() => setHoveredCard(card)}
-              onMouseLeave={() => setHoveredCard(null)}
-              title={card.name}
-            />
-          ))}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Zoom Sidebar */}
+        <div className="hidden xl:flex w-72 shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4">
+          {hoveredCard ? (
+            <div key={hoveredCard.id} className="animate-in fade-in duration-300 sticky top-4 w-full">
+              <img
+                src={hoveredCard.image || hoveredCard.image_uris?.normal || hoveredCard.card_faces?.[0]?.image_uris?.normal}
+                alt={hoveredCard.name}
+                className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
+              />
+              <div className="mt-4 text-center">
+                <h3 className="text-lg font-bold text-slate-200">{hoveredCard.name}</h3>
+                <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{hoveredCard.type_line}</p>
+                {hoveredCard.oracle_text && (
+                  <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                    {hoveredCard.oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-600 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-xl mt-10">
+              <span className="text-xs uppercase font-bold tracking-widest">Hover Card</span>
+            </div>
+          )}
         </div>
-      </div>
-    </>
-  );
 
-  return (
-    <div className="flex-1 w-full flex h-full bg-slate-900 text-white overflow-hidden relative">
-      {/* View Switcher - Absolute Positioned */}
-      <div className="absolute bottom-4 left-84 z-20 flex bg-slate-800/80 backdrop-blur rounded-lg p-1 border border-slate-700 shadow-xl gap-1" style={{ left: '330px' }}>
-        <button
-          onClick={() => setLayout('vertical')}
-          className={`p-2 rounded flex items-center gap-2 text-xs font-bold transition-colors ${layout === 'vertical' ? 'bg-slate-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-          title="Cards Side-by-Side"
-        >
-          <Columns className="w-4 h-4" /> Vertical
-        </button>
-        <button
-          onClick={() => setLayout('horizontal')}
-          className={`p-2 rounded flex items-center gap-2 text-xs font-bold transition-colors ${layout === 'horizontal' ? 'bg-slate-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-          title="Pool Above Deck"
-        >
-          <LayoutTemplate className="w-4 h-4" /> Horizontal
-        </button>
-      </div>
-
-      {/* Column 1: Zoom Sidebar (Always visible) */}
-      <div className="hidden xl:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800 bg-slate-950/50 z-10 p-4">
-        {hoveredCard ? (
-          <div className="animate-in fade-in slide-in-from-left-4 duration-200 sticky top-4 w-full">
-            <img
-              src={hoveredCard.image || hoveredCard.image_uris?.normal || hoveredCard.card_faces?.[0]?.image_uris?.normal}
-              alt={hoveredCard.name}
-              className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
-            />
-            <div className="mt-4 text-center">
-              <h3 className="text-lg font-bold text-slate-200">{hoveredCard.name}</h3>
-              <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{hoveredCard.type_line}</p>
-              {hoveredCard.oracle_text && (
-                <div className="mt-4 text-sm text-slate-400 text-left bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                  {hoveredCard.oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
-                </div>
-              )}
+        {/* Content Area */}
+        {layout === 'vertical' ? (
+          <div className="flex-1 flex">
+            {/* Pool Column */}
+            <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800 bg-slate-900/50">
+              <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
+                <span>Card Pool ({pool.length})</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col">
+                {renderLandStation()}
+                <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" />
+              </div>
+            </div>
+            {/* Deck Column */}
+            <div className="flex-1 flex flex-col min-w-0 bg-slate-900/50">
+              <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
+                <span>Deck ({deck.length})</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" />
+              </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-slate-600 text-center opacity-50">
-            <div className="w-48 h-64 border-2 border-dashed border-slate-700 rounded-xl mb-4 flex items-center justify-center">
-              <span className="text-xs uppercase font-bold tracking-widest">Hover Card</span>
+          <div className="flex-1 flex flex-col">
+            {/* Top: Pool + Land Station */}
+            <div className="flex-1 flex flex-col min-h-0 border-b border-slate-800 bg-slate-900/50">
+              <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
+                <span>Card Pool ({pool.length})</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col">
+                {renderLandStation()}
+                <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" />
+              </div>
             </div>
-            <p className="text-sm">Hover over a card to view clear details.</p>
+            {/* Bottom: Deck */}
+            <div className="h-[40%] flex flex-col min-h-0 bg-slate-900/50">
+              <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
+                <span>Deck ({deck.length})</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" />
+              </div>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Main Content Area */}
-      {layout === 'vertical' ? (
-        <>
-          {/* Vertical: Column 2 (Pool) */}
-          <div className="flex-1 p-4 flex flex-col border-r border-slate-700 min-w-0">
-            {renderPool()}
-          </div>
-          {/* Vertical: Column 3 (Deck & Lands) */}
-          <div className="flex-1 p-4 flex flex-col min-w-0">
-            {renderDeck()}
-            <div className="mt-4">
-              {renderLandStation()}
-            </div>
-          </div>
-        </>
-      ) : (
-        /* Horizontal Layout */
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Top Row: Lands + Pool */}
-          <div className="flex-1 flex min-h-0 border-b border-slate-700">
-            {/* Land Station (Left of Pool) */}
-            <div className="w-[300px] p-4 border-r border-slate-700 flex flex-col">
-              {renderLandStation()}
-            </div>
-            {/* Pool */}
-            <div className="flex-1 p-4 flex flex-col min-w-0">
-              {renderPool()}
-            </div>
-          </div>
-          {/* Bottom Row: Deck */}
-          <div className="h-[40%] p-4 flex flex-col bg-slate-900/50">
-            {renderDeck()}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

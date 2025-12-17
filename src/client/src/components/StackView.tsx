@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
-import { CardHoverWrapper, FoilOverlay } from './CardPreview';
+import { FoilOverlay } from './CardPreview';
 
 interface StackViewProps {
   cards: DraftCard[];
   cardWidth?: number;
+  onCardClick?: (card: DraftCard) => void;
+  onHover?: (card: DraftCard | null) => void;
 }
 
 const CATEGORY_ORDER = [
@@ -19,7 +21,7 @@ const CATEGORY_ORDER = [
   'Other'
 ];
 
-export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) => {
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
@@ -54,21 +56,21 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
   }, [cards]);
 
   return (
-    <div className="flex flex-row gap-4 overflow-x-auto pb-8 snap-x">
+    <div className="flex flex-row gap-4 overflow-x-auto pb-8 snap-x items-start">
       {CATEGORY_ORDER.map(category => {
         const catCards = categorizedCards[category];
         if (catCards.length === 0) return null;
 
         return (
-          <div key={category} className="flex-shrink-0 snap-start" style={{ width: cardWidth }}>
+          <div key={category} className="flex-shrink-0 snap-start flex flex-col" style={{ width: cardWidth }}>
             {/* Header */}
-            <div className="flex justify-between items-center mb-2 px-1 border-b border-slate-700 pb-1">
+            <div className="flex justify-between items-center mb-2 px-1 border-b border-slate-700 pb-1 shrink-0 bg-slate-900/80 backdrop-blur z-10 sticky top-0">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{category}</span>
               <span className="text-xs font-mono text-slate-500">{catCards.length}</span>
             </div>
 
             {/* Stack */}
-            <div className="flex flex-col relative px-2">
+            <div className="flex flex-col relative px-2 pb-32">
               {catCards.map((card, index) => {
                 // Margin calculation: Negative margin to pull up next cards. 
                 // To show a "strip" of say 35px at the top of each card.
@@ -77,9 +79,15 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
-                  <CardHoverWrapper key={card.id} card={card} className="relative w-full z-0 hover:z-50 transition-all duration-200" preventPreview={cardWidth >= 200}>
+                  <div
+                    key={card.id}
+                    className="relative w-full z-0 hover:z-50 transition-all duration-200 group"
+                    onMouseEnter={() => onHover && onHover(card)}
+                    onMouseLeave={() => onHover && onHover(null)}
+                    onClick={() => onCardClick && onCardClick(card)}
+                  >
                     <div
-                      className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group`}
+                      className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
                       style={{
                         // Aspect ratio is maintained by image or div dimensions
                         // With overlap, we just render them one after another with negative margin
@@ -91,7 +99,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                       {/* Optional: Shine effect for foils if visible? */}
                       {card.finish === 'foil' && <FoilOverlay />}
                     </div>
-                  </CardHoverWrapper>
+                  </div>
                 )
               })}
             </div>
