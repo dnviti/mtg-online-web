@@ -333,10 +333,10 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   };
 
   return (
-    <div className="h-full overflow-y-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 p-4 md:p-6">
+    <div className="h-full overflow-y-auto w-full flex flex-col lg:flex-row gap-8 p-4 md:p-6">
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
-      <div className="lg:col-span-4 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar p-1">
+      <div className="w-full lg:w-1/3 lg:max-w-[400px] shrink-0 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar p-1">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl">
           {/* Source Toggle */}
           <div className="flex p-1 bg-slate-900 rounded-lg mb-4 border border-slate-700">
@@ -635,7 +635,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
       </div>
 
       {/* --- RIGHT COLUMN: PACKS --- */}
-      <div className="lg:col-span-8">
+      <div className="flex-1 w-full min-w-0">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 sticky top-4 z-40 bg-slate-900/95 backdrop-blur-xl p-3 rounded-xl border border-white/10 shadow-2xl">
           <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
