@@ -89,3 +89,4 @@
 - [2025-12-17-184000_fix_draft_pool_ui](./devlog/2025-12-17-184000_fix_draft_pool_ui.md): Completed. Fixed "Your Pool" resizing bugs and removed unwanted hover animation.
 - [Customizable Deck Builder Layout](./devlog/2025-12-17-170000_customizable_deck_builder.md): Completed. Implemented switchable Vertical (Side-by-Side) and Horizontal (Top-Bottom) layouts, with an integrated, improved Land Station.
 - [Draft View Layout Selection](./devlog/2025-12-17-185000_draft_view_layout.md): Completed. Implemented Vertical/Horizontal layout selection for Draft View to match Deck Builder, optimizing screen space and preventing overlap.
+- [Fix Cube Sidebar Scrolling](./devlog/2025-12-18-004109_fix_cube_sidebar_scrolling.md): Completed. Adjusted sidebar max-height to ensure autonomous scrolling and button accessibility on tablet screens.

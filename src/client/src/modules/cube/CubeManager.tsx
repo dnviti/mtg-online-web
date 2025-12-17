@@ -456,7 +456,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     <div className="h-full overflow-y-auto w-full flex flex-col lg:flex-row gap-8 p-4 md:p-6">
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
-      <div className="w-full lg:w-1/3 lg:max-w-[400px] shrink-0 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto custom-scrollbar p-1">
+      <div className="w-full lg:w-1/3 lg:max-w-[400px] shrink-0 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto custom-scrollbar p-1">
         <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl">
           {/* Source Toggle */}
           <div className="flex p-1 bg-slate-900 rounded-lg mb-4 border border-slate-700">
