@@ -71,3 +71,5 @@
 - [Enhanced Toast Visibility](./devlog/2025-12-17-023000_enhanced_toast_visibility.md): Completed. Updated toasts to be top-center, animated, and highly visible with premium styling.
 - [Unified Toast Design](./devlog/2025-12-17-023500_unified_toast_design.md): Completed. Refined toast aesthetics to match the global dark/slate theme with subtle colored accents.
 - [Animated Copy Button](./devlog/2025-12-17-024000_animated_copy_button.md): Completed. Replaced copy toast with an in-place animated tick button for immediate feedback.
+- [Play Online Logic](./devlog/2025-12-17-031500_play_online_logic.md): Completed. Implemented strict pack limits (min 12 for 4 players) and visual feedback for the online lobby button.
+- [Lobby Rules Tooltip](./devlog/2025-12-17-032000_lobby_rules_tooltip.md): Completed. Added dynamic rules explanation and supported player indicators to the lobby creation screen.

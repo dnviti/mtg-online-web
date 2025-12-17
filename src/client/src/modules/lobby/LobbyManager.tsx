@@ -234,8 +234,41 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-700">
             {/* Create Room */}
             <div className={`space-y-4 ${generatedPacks.length === 0 ? 'opacity-50' : ''}`}>
-              <h3 className="text-xl font-bold text-white">Create Room</h3>
-              <p className="text-sm text-slate-400">Start a new draft with your {generatedPacks.length} generated packs.</p>
+              <div className="flex justify-between items-start">
+                <h3 className="text-xl font-bold text-white">Create Room</h3>
+                <div className="group relative">
+                  <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
+                  <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
+                    <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules (3 packs/player)</strong>
+                    <ul className="space-y-1">
+                      <li className={generatedPacks.length < 12 ? 'text-red-400' : 'text-slate-500'}>
+                        • &lt; 12 Packs: Not enough for draft
+                      </li>
+                      <li className={(generatedPacks.length >= 12 && generatedPacks.length < 18) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                        • 12-17 Packs: 4 Players
+                      </li>
+                      <li className={(generatedPacks.length >= 18 && generatedPacks.length < 24) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                        • 18-23 Packs: 4 or 6 Players
+                      </li>
+                      <li className={generatedPacks.length >= 24 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                        • 24+ Packs: 4, 6 or 8 Players
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-sm text-slate-400">
+                Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.
+                <div className="mt-1 text-xs">
+                  Supported Players: {' '}
+                  {generatedPacks.length < 12 && <span className="text-red-400 font-bold">None (Generate more packs)</span>}
+                  {generatedPacks.length >= 12 && generatedPacks.length < 18 && <span className="text-emerald-400 font-bold">4 Only</span>}
+                  {generatedPacks.length >= 18 && generatedPacks.length < 24 && <span className="text-emerald-400 font-bold">4 or 6</span>}
+                  {generatedPacks.length >= 24 && <span className="text-emerald-400 font-bold">4, 6 or 8</span>}
+                </div>
+              </div>
+
               <button
                 onClick={handleCreateRoom}
                 disabled={loading || generatedPacks.length === 0}

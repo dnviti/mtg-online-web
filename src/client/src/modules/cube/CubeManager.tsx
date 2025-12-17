@@ -10,8 +10,10 @@ interface CubeManagerProps {
   onGoToLobby: () => void;
 }
 
+import { useToast } from '../../components/Toast';
+
 export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoToLobby }) => {
-  // --- Services ---
+  const { showToast } = useToast();
   // --- Services ---
   // Memoize services to persist cache across renders
   const generatorService = React.useMemo(() => new PackGeneratorService(), []);
@@ -136,6 +138,32 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   }, []);
 
   // --- Handlers ---
+  const handlePlayOnline = () => {
+    const totalPacks = packs.length;
+
+    // Rules:
+    // < 12: No draft
+    // 12 <= p < 18: 4 players
+    // 18 <= p < 24: 4 or 6 players
+    // >= 24: 4, 6 or 8 players
+
+    if (totalPacks < 12) {
+      showToast('Need at least 12 packs for a 4-player draft (3 packs/player).', 'error');
+      return;
+    }
+
+    if (totalPacks >= 12 && totalPacks < 18) {
+      showToast('Enough packs for 4 players only.', 'info');
+    } else if (totalPacks >= 18 && totalPacks < 24) {
+      showToast('Enough packs for 4 or 6 players.', 'info');
+    } else {
+      showToast('Enough packs for 8 players!', 'success');
+    }
+
+    // Proceed to lobby
+    onGoToLobby();
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -649,8 +677,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
             {packs.length > 0 && (
               <>
                 <button
-                  onClick={onGoToLobby}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in whitespace-nowrap"
+                  onClick={handlePlayOnline}
+                  className={`px-4 py-2 font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in whitespace-nowrap transition-colors
+                    ${packs.length < 12
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed hover:bg-slate-600'
+                      : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white'
+                    }`}
                 >
                   <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
                 </button>
