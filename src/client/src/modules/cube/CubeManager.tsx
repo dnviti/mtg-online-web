@@ -671,13 +671,13 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                 </button>
 
                 {/* Size Slider */}
-                <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700 h-9 mr-2 hidden sm:flex">
+                <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700 h-9 mr-2 flex">
                   <div className="w-3 h-4 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
                   <input
                     type="range"
                     min="100"
                     max="300"
-                    step="10"
+                    step="1"
                     value={cardWidth}
                     onChange={(e) => setCardWidth(parseInt(e.target.value))}
                     className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-600 rounded-lg appearance-none"

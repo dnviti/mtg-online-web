@@ -113,13 +113,13 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
             </div>
 
             {/* Card Scalar */}
-            <div className="hidden md:flex flex-col gap-1 w-32">
+            <div className="flex flex-col gap-1 w-24 md:w-32">
               <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Card Size</label>
               <input
                 type="range"
                 min="0.5"
                 max="1.5"
-                step="0.1"
+                step="0.01"
                 value={cardScale}
                 onChange={(e) => setCardScale(parseFloat(e.target.value))}
                 className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"

@@ -192,8 +192,10 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
       onContextMenu={(e) => {
-        // Prevent context menu if we are long pressing to view card
-        if (isLongPressing) {
+        // Prevent context menu to allow long-press preview without browser menu
+        // We block it if we are on mobile (trying to open preview) 
+        // OR if we are already in long-press state.
+        if ((isMobile && hasImage) || isLongPressing) {
           e.preventDefault();
           e.stopPropagation();
         }
