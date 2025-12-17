@@ -76,6 +76,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     return (localStorage.getItem('cube_viewMode') as 'list' | 'grid' | 'stack') || 'list';
   });
 
+
   // Generation Settings
   const [genSettings, setGenSettings] = useState<PackGenerationSettings>(() => {
     try {
@@ -771,7 +772,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
             {packs.length > 0 && (
               <>
                 <div className="relative group z-50">
-                  <button className="px-4 py-2 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 transition-all ring-1 ring-white/10">
+                  <button className="h-10 px-4 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 hover:to-slate-700 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 transition-all ring-1 ring-white/10">
                     <MoreHorizontal className="w-4 h-4 text-emerald-400" /> <span className="hidden sm:inline">Actions</span> <ChevronDown className="w-4 h-4 text-slate-400 group-hover:rotate-180 transition-transform" />
                   </button>
 
@@ -833,7 +834,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
 
                 {/* Size Slider */}
-                <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700 h-9 mr-2 flex">
+                <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 border border-slate-700 h-10 flex">
                   <div className="w-3 h-4 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
                   <input
                     type="range"
@@ -850,7 +851,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
               </>
             )}
 
-            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700 shrink-0">
+            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700 shrink-0 h-10 items-center">
               <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><List className="w-4 h-4" /></button>
               <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}><Layers className="w-4 h-4" /></button>
