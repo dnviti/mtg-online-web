@@ -214,7 +214,10 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         cards: sourceMode === 'upload' ? rawScryfallData : [],
         sourceMode,
         selectedSets,
-        settings: genSettings,
+        settings: {
+          ...genSettings,
+          withReplacement: sourceMode === 'set'
+        },
         numBoxes,
         numPacks: sourceMode === 'set' ? (numBoxes * 36) : undefined,
         filters

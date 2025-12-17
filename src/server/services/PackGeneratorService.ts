@@ -49,6 +49,7 @@ export interface SetsMap {
 export interface PackGenerationSettings {
   mode: 'mixed' | 'by_set';
   rarityMode: 'peasant' | 'standard'; // Peasant: 10C/3U, Standard: 10C/3U/1R
+  withReplacement?: boolean; // If true, pools are refilled/reshuffled for each pack (unlimited generation)
 }
 
 export class PackGeneratorService {
@@ -149,7 +150,7 @@ export class PackGeneratorService {
 
   generatePacks(pools: ProcessedPools, sets: SetsMap, settings: PackGenerationSettings, numPacks: number): Pack[] {
     console.time('generatePacks');
-    console.log('[PackGenerator] Starting generation:', { mode: settings.mode, rarity: settings.rarityMode, count: numPacks });
+    console.log('[PackGenerator] Starting generation:', { mode: settings.mode, rarity: settings.rarityMode, count: numPacks, infinite: settings.withReplacement });
 
     // Optimize: Deep clone only what's needed? 
     // Actually, we destructively modify lists in the algo (shifting/drawing), so we must clone the arrays of specific pools we use.
@@ -159,7 +160,8 @@ export class PackGeneratorService {
 
     if (settings.mode === 'mixed') {
       // Mixed Mode (Chaos)
-      const currentPools = {
+      // Initial Shuffle of the master pools
+      let currentPools = {
         commons: this.shuffle([...pools.commons]),
         uncommons: this.shuffle([...pools.uncommons]),
         rares: this.shuffle([...pools.rares]),
@@ -177,12 +179,42 @@ export class PackGeneratorService {
       });
 
       for (let i = 1; i <= numPacks; i++) {
-        const result = this.buildSinglePack(currentPools, i, 'Chaos Pack', settings.rarityMode);
-        if (!result) {
-          console.warn(`[PackGenerator] Warning: ran out of cards at pack ${i}`);
-          break;
+        // If infinite, we reset the pools for every pack (using a fresh shuffle of original pools)
+        let packPools = currentPools;
+        if (settings.withReplacement) {
+          packPools = {
+            commons: this.shuffle([...pools.commons]),
+            uncommons: this.shuffle([...pools.uncommons]),
+            rares: this.shuffle([...pools.rares]),
+            mythics: this.shuffle([...pools.mythics]),
+            lands: this.shuffle([...pools.lands]),
+            tokens: this.shuffle([...pools.tokens])
+          };
         }
-        newPacks.push(result);
+
+        const result = this.buildSinglePack(packPools, i, 'Chaos Pack', settings.rarityMode);
+
+        if (result) {
+          newPacks.push(result);
+          if (!settings.withReplacement) {
+            // If not infinite, we must persist the depleting state
+            // This assumes buildSinglePack MODIFIED packPools in place (via reassigning properties).
+            // However, packPools is a shallow clone of currentPools if (settings.infinite) was false?
+            // Wait. 'let packPools = currentPools' is a reference copy.
+            // buildSinglePack reassigns properties of packPools.
+            // e.g. packPools.commons = ...
+            // This mutates the object 'packPools'.
+            // If 'packPools' IS 'currentPools', then 'currentPools' is mutated. Correct.
+          }
+        } else {
+          if (!settings.withReplacement) {
+            console.warn(`[PackGenerator] Warning: ran out of cards at pack ${i}`);
+            break;
+          } else {
+            // Should not happen with replacement unless pools are intrinsically empty
+            console.warn(`[PackGenerator] Infinite mode but failed to generate pack ${i} (empty source?)`);
+          }
+        }
 
         if (i % 50 === 0) console.log(`[PackGenerator] Built ${i} packs...`);
       }
@@ -208,7 +240,8 @@ export class PackGeneratorService {
         const data = sets[setCode];
         console.log(`[PackGenerator] Generating ${packsPerSet} packs for set ${data.name}`);
 
-        const currentPools = {
+        // Initial Shuffle
+        let currentPools = {
           commons: this.shuffle([...data.commons]),
           uncommons: this.shuffle([...data.uncommons]),
           rares: this.shuffle([...data.rares]),
@@ -220,13 +253,26 @@ export class PackGeneratorService {
         for (let i = 0; i < packsPerSet; i++) {
           if (packId > numPacks) break;
 
-          const result = this.buildSinglePack(currentPools, packId, data.name, settings.rarityMode);
+          let packPools = currentPools;
+          if (settings.withReplacement) {
+            // Refresh pools for every pack from the source data
+            packPools = {
+              commons: this.shuffle([...data.commons]),
+              uncommons: this.shuffle([...data.uncommons]),
+              rares: this.shuffle([...data.rares]),
+              mythics: this.shuffle([...data.mythics]),
+              lands: this.shuffle([...data.lands]),
+              tokens: this.shuffle([...data.tokens])
+            };
+          }
+
+          const result = this.buildSinglePack(packPools, packId, data.name, settings.rarityMode);
           if (result) {
             newPacks.push(result);
             packId++;
           } else {
             console.warn(`[PackGenerator] Set ${data.name} depleted at pack ${packId}`);
-            break;
+            if (!settings.withReplacement) break;
           }
         }
       }

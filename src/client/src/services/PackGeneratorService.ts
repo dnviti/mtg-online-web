@@ -76,6 +76,7 @@ export interface SetsMap {
 export interface PackGenerationSettings {
   mode: 'mixed' | 'by_set';
   rarityMode: 'peasant' | 'standard'; // Peasant: 10C/3U, Standard: 10C/3U/1R
+  withReplacement?: boolean;
 }
 
 export class PackGeneratorService {
