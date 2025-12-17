@@ -19,6 +19,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000', // Proxy API requests to backend
       '/cards': 'http://localhost:3000', // Proxy cached card images
+      '/images': 'http://localhost:3000', // Proxy static images
       '/socket.io': {
         target: 'http://localhost:3000',
         ws: true

@@ -147,6 +147,13 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   const [deck, setDeck] = useState<any[]>([]);
   const [lands, setLands] = useState({ Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 });
   const [hoveredCard, setHoveredCard] = useState<any>(null);
+  const [displayCard, setDisplayCard] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (hoveredCard) {
+      setDisplayCard(hoveredCard);
+    }
+  }, [hoveredCard]);
 
   // --- Land Advice Logic ---
   const landSuggestion = useMemo(() => {
@@ -381,29 +388,56 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
       <div className="flex-1 flex overflow-hidden">
         {/* Zoom Sidebar */}
-        <div className="hidden xl:flex w-72 shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4">
-          {hoveredCard ? (
-            <div key={hoveredCard.id} className="animate-in fade-in duration-300 sticky top-4 w-full">
-              <img
-                src={hoveredCard.image || hoveredCard.image_uris?.normal || hoveredCard.card_faces?.[0]?.image_uris?.normal}
-                alt={hoveredCard.name}
-                className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
-              />
-              <div className="mt-4 text-center">
-                <h3 className="text-lg font-bold text-slate-200">{hoveredCard.name}</h3>
-                <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{hoveredCard.type_line}</p>
-                {hoveredCard.oracle_text && (
-                  <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed">
-                    {hoveredCard.oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
+        <div className="hidden xl:flex w-72 shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4" style={{ perspective: '1000px' }}>
+          <div className="w-full relative sticky top-4">
+            <div
+              className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
+              style={{
+                transformStyle: 'preserve-3d',
+                transform: hoveredCard ? 'rotateY(0deg)' : 'rotateY(180deg)'
+              }}
+            >
+              {/* Front Face (Hovered Card) */}
+              <div
+                className="absolute inset-0 w-full h-full bg-slate-900 rounded-xl"
+                style={{ backfaceVisibility: 'hidden' }}
+              >
+                {(hoveredCard || displayCard) && (
+                  <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl">
+                    <img
+                      src={(hoveredCard || displayCard).image || (hoveredCard || displayCard).image_uris?.normal || (hoveredCard || displayCard).card_faces?.[0]?.image_uris?.normal}
+                      alt={(hoveredCard || displayCard).name}
+                      className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
+                    />
+                    <div className="mt-4 text-center">
+                      <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).type_line}</p>
+                      {(hoveredCard || displayCard).oracle_text && (
+                        <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                          {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Back Face (Card Back) */}
+              <div
+                className="absolute inset-0 w-full h-full rounded-xl shadow-2xl overflow-hidden bg-slate-900"
+                style={{
+                  backfaceVisibility: 'hidden',
+                  transform: 'rotateY(180deg)'
+                }}
+              >
+                <img
+                  src="/images/back.jpg"
+                  alt="Card Back"
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-600 text-center opacity-50 border-2 border-dashed border-slate-800 rounded-xl mt-10">
-              <span className="text-xs uppercase font-bold tracking-widest">Hover Card</span>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Content Area */}
@@ -414,7 +448,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
                 <span>Card Pool ({pool.length})</span>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col">
+              <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                 {renderLandStation()}
                 <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" />
               </div>
@@ -424,7 +458,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
                 <span>Deck ({deck.length})</span>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+              <div className="flex-1 overflow-auto p-2 custom-scrollbar">
                 <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" />
               </div>
             </div>
@@ -436,7 +470,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
                 <span>Card Pool ({pool.length})</span>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col">
+              <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                 {renderLandStation()}
                 <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" />
               </div>
@@ -446,7 +480,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
                 <span>Deck ({deck.length})</span>
               </div>
-              <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+              <div className="flex-1 overflow-auto p-2 custom-scrollbar">
                 <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" />
               </div>
             </div>

@@ -37,6 +37,7 @@ app.use(express.json({ limit: '50mb' })); // Increase limit for large card lists
 
 // Serve static images (Nested)
 app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // API Routes
 app.get('/api/health', (_req: Request, res: Response) => {
