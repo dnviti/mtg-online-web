@@ -73,3 +73,4 @@
 - [Animated Copy Button](./devlog/2025-12-17-024000_animated_copy_button.md): Completed. Replaced copy toast with an in-place animated tick button for immediate feedback.
 - [Play Online Logic](./devlog/2025-12-17-031500_play_online_logic.md): Completed. Implemented strict pack limits (min 12 for 4 players) and visual feedback for the online lobby button.
 - [Lobby Rules Tooltip](./devlog/2025-12-17-032000_lobby_rules_tooltip.md): Completed. Added dynamic rules explanation and supported player indicators to the lobby creation screen.
+- [Fix Expansion Pack Generation](./devlog/2025-12-17-140000_fix_expansion_generation.md): Completed. Enforced infinite card pool for expansion drafts to ensure correct pack counts and prevent depletion.

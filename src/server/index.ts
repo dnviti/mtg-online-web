@@ -135,6 +135,10 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
         const setCards = await scryfallService.fetchSetCards(code);
         poolCards.push(...setCards);
       }
+      // Force infinite card pool for Expansion mode
+      if (settings) {
+        settings.withReplacement = true;
+      }
     }
 
     // Default filters if missing

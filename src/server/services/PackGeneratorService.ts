@@ -192,7 +192,7 @@ export class PackGeneratorService {
           };
         }
 
-        const result = this.buildSinglePack(packPools, i, 'Chaos Pack', settings.rarityMode);
+        const result = this.buildSinglePack(packPools, i, 'Chaos Pack', settings.rarityMode, settings.withReplacement);
 
         if (result) {
           newPacks.push(result);
@@ -250,8 +250,13 @@ export class PackGeneratorService {
           tokens: this.shuffle([...data.tokens])
         };
 
-        for (let i = 0; i < packsPerSet; i++) {
+        let packsGeneratedForSet = 0;
+        let attempts = 0;
+        const maxAttempts = packsPerSet * 5; // Prevent infinite loop
+
+        while (packsGeneratedForSet < packsPerSet && attempts < maxAttempts) {
           if (packId > numPacks) break;
+          attempts++;
 
           let packPools = currentPools;
           if (settings.withReplacement) {
@@ -266,13 +271,17 @@ export class PackGeneratorService {
             };
           }
 
-          const result = this.buildSinglePack(packPools, packId, data.name, settings.rarityMode);
+          const result = this.buildSinglePack(packPools, packId, data.name, settings.rarityMode, settings.withReplacement);
           if (result) {
             newPacks.push(result);
             packId++;
+            packsGeneratedForSet++;
           } else {
-            console.warn(`[PackGenerator] Set ${data.name} depleted at pack ${packId}`);
-            if (!settings.withReplacement) break;
+            // only warn occasionally or if persistent
+            if (!settings.withReplacement) {
+              console.warn(`[PackGenerator] Set ${data.name} depleted at pack ${packId}`);
+              break; // Cannot generate more from this set
+            }
           }
         }
       }
@@ -283,45 +292,44 @@ export class PackGeneratorService {
     return newPacks;
   }
 
-  private buildSinglePack(pools: ProcessedPools, packId: number, setName: string, rarityMode: 'peasant' | 'standard'): Pack | null {
+  private buildSinglePack(pools: ProcessedPools, packId: number, setName: string, rarityMode: 'peasant' | 'standard', withReplacement: boolean = false): Pack | null {
     const packCards: DraftCard[] = [];
     const namesInPack = new Set<string>();
 
     // Standard: 14 cards exactly. Peasant: 13 cards exactly.
     const targetSize = rarityMode === 'peasant' ? 13 : 14;
 
+    // Helper to abstract draw logic
+    const draw = (pool: DraftCard[], count: number, poolKey: keyof ProcessedPools) => {
+      const result = this.drawCards(pool, count, namesInPack, withReplacement);
+      if (result.selected.length > 0) {
+        packCards.push(...result.selected);
+        if (!withReplacement) {
+          // @ts-ignore
+          pools[poolKey] = result.remainingPool; // Update ref only if not infinite
+          result.selected.forEach(c => namesInPack.add(c.name));
+        }
+      }
+      return result.selected;
+    };
+
     // 1. Commons (6)
-    const drawC = this.drawUniqueCards(pools.commons, 6, namesInPack);
-    if (drawC.selected.length > 0) {
-      packCards.push(...drawC.selected);
-      pools.commons = drawC.remainingPool; // Update ref
-      drawC.selected.forEach(c => namesInPack.add(c.name));
-    }
+    draw(pools.commons, 6, 'commons');
 
     // 2. Slot 7 (Common or List)
-    let slot7: DraftCard | undefined;
     const roll7 = Math.random() * 100;
     if (roll7 < 87) {
       // Common
-      const r = this.drawUniqueCards(pools.commons, 1, namesInPack);
-      if (r.selected.length) { slot7 = r.selected[0]; pools.commons = r.remainingPool; }
+      draw(pools.commons, 1, 'commons');
     } else {
       // Uncommon/List
-      // Strict Mode: If List/Uncommon unavailable, DO NOT fallback to Common.
-      const r = this.drawUniqueCards(pools.uncommons, 1, namesInPack);
-      if (r.selected.length) { slot7 = r.selected[0]; pools.uncommons = r.remainingPool; }
+      // If pool empty, try fallback if standard? No, strict as per previous instruction.
+      draw(pools.uncommons, 1, 'uncommons');
     }
-    if (slot7) { packCards.push(slot7); namesInPack.add(slot7.name); }
 
     // 3. Uncommons (3 or 4 dependent on PEASANT vs STANDARD)
-    // Memo says: PEASANT slots 8-11 (4 uncommons). STANDARD slots 8-10 (3 uncommons).
     const uNeeded = rarityMode === 'peasant' ? 4 : 3;
-    const drawU = this.drawUniqueCards(pools.uncommons, uNeeded, namesInPack);
-    if (drawU.selected.length > 0) {
-      packCards.push(...drawU.selected);
-      pools.uncommons = drawU.remainingPool;
-      drawU.selected.forEach(c => namesInPack.add(c.name));
-    }
+    draw(pools.uncommons, uNeeded, 'uncommons');
 
     // 4. Rare/Mythic (Standard Only)
     if (rarityMode === 'standard') {
@@ -329,35 +337,29 @@ export class PackGeneratorService {
       let pickedR = false;
 
       if (isMythic && pools.mythics.length > 0) {
-        const r = this.drawUniqueCards(pools.mythics, 1, namesInPack);
-        if (r.selected.length) {
-          packCards.push(r.selected[0]);
-          pools.mythics = r.remainingPool;
-          namesInPack.add(r.selected[0].name);
-          pickedR = true;
-        }
+        const sel = draw(pools.mythics, 1, 'mythics');
+        if (sel.length) pickedR = true;
       }
 
       if (!pickedR && pools.rares.length > 0) {
-        const r = this.drawUniqueCards(pools.rares, 1, namesInPack);
-        if (r.selected.length) {
-          packCards.push(r.selected[0]);
-          pools.rares = r.remainingPool;
-          namesInPack.add(r.selected[0].name);
-        }
+        draw(pools.rares, 1, 'rares');
       }
     }
 
     // 5. Land
     const isFoilLand = Math.random() < 0.2;
     if (pools.lands.length > 0) {
-      const r = this.drawUniqueCards(pools.lands, 1, namesInPack);
-      if (r.selected.length) {
-        const l = { ...r.selected[0] };
+      // For lands, we generally want random basic lands anyway even in finite cubes if possible?
+      // But adhering to 'withReplacement' logic strictly.
+      const res = this.drawCards(pools.lands, 1, namesInPack, withReplacement);
+      if (res.selected.length) {
+        const l = { ...res.selected[0] };
         if (isFoilLand) l.finish = 'foil';
         packCards.push(l);
-        pools.lands = r.remainingPool;
-        namesInPack.add(l.name);
+        if (!withReplacement) {
+          pools.lands = res.remainingPool;
+          namesInPack.add(l.name);
+        }
       }
     }
 
@@ -369,40 +371,39 @@ export class PackGeneratorService {
       let targetKey: keyof ProcessedPools = 'commons';
 
       if (rarityMode === 'peasant') {
-        // Peasant Wildcard: Strictly Common or Uncommon. No Rare/Mythic.
-        // Adjusted probability: 40% Uncommon, 60% Common (arbitrary but peasant-friendly)
         if (wRoll > 60) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
         else { targetPool = pools.commons; targetKey = 'commons'; }
       } else {
-        // Standard Wildcard: Can be anything.
         if (wRoll > 87) { targetPool = pools.mythics; targetKey = 'mythics'; }
         else if (wRoll > 74) { targetPool = pools.rares; targetKey = 'rares'; }
         else if (wRoll > 50) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
       }
 
-      // Strict Mode: NO Fallback if target pool empty.
-      // If targetPool is empty, we simply cannot fill this wildcard slot with the selected rarity.
-      // The slot remains empty, potentially causing valid pack failure.
+      let res = this.drawCards(targetPool, 1, namesInPack, withReplacement);
 
-      const res = this.drawUniqueCards(targetPool, 1, namesInPack);
+      // FALLBACK LOGIC for Wildcards (Standard Only mostly)
+      // If we failed to get a card from target pool (e.g. rolled Mythic but set has none), try lower rarity
+      if (!res.success && rarityMode === 'standard') {
+        if (targetKey === 'mythics' && pools.rares.length) { res = this.drawCards(pools.rares, 1, namesInPack, withReplacement); targetKey = 'rares'; }
+        else if (targetKey === 'rares' && pools.uncommons.length) { res = this.drawCards(pools.uncommons, 1, namesInPack, withReplacement); targetKey = 'uncommons'; }
+        else if (targetKey === 'uncommons' && pools.commons.length) { res = this.drawCards(pools.commons, 1, namesInPack, withReplacement); targetKey = 'commons'; }
+      }
+
       if (res.selected.length) {
         const c = { ...res.selected[0] };
         if (isFoil) c.finish = 'foil';
         packCards.push(c);
-        namesInPack.add(c.name);
-        // Updating the pool
-        // @ts-ignore
-        pools[targetKey] = res.remainingPool;
+        if (!withReplacement) {
+          // @ts-ignore
+          pools[targetKey] = res.remainingPool;
+          namesInPack.add(c.name);
+        }
       }
     }
 
     // 7. Token (Slot 15)
     if (pools.tokens.length > 0) {
-      const r = this.drawUniqueCards(pools.tokens, 1, namesInPack);
-      if (r.selected.length) {
-        packCards.push(r.selected[0]);
-        pools.tokens = r.remainingPool;
-      }
+      draw(pools.tokens, 1, 'tokens');
     }
 
     // Sort
@@ -419,10 +420,9 @@ export class PackGeneratorService {
     packCards.sort((a, b) => getWeight(b) - getWeight(a));
 
     // ENFORCE SIZE STRICTLY
-    // Truncate to target size (ignoring exceeding tokens/extra)
     const finalCards = packCards.slice(0, targetSize);
 
-    // Strict Validation: If we don't have enough cards, FAIL.
+    // Strict Validation
     if (finalCards.length < targetSize) {
       return null;
     }
@@ -434,29 +434,44 @@ export class PackGeneratorService {
     };
   }
 
-  // OPTIMIZED DRAW (Index based)
-  private drawUniqueCards(pool: DraftCard[], count: number, existingNames: Set<string>) {
-    const selected: DraftCard[] = [];
-    const skipped: DraftCard[] = [];
-    let poolIndex = 0;
+  // Unified Draw Method
+  private drawCards(pool: DraftCard[], count: number, existingNames: Set<string>, withReplacement: boolean) {
+    if (pool.length === 0) return { selected: [], remainingPool: pool, success: false };
 
-    // Use simple iteration
-    while (selected.length < count && poolIndex < pool.length) {
-      const card = pool[poolIndex];
-      poolIndex++;
-
-      if (!existingNames.has(card.name)) {
+    if (withReplacement) {
+      // Infinite Mode: Pick random cards, allow duplicates, do not modify pool
+      const selected: DraftCard[] = [];
+      for (let i = 0; i < count; i++) {
+        const randomIndex = Math.floor(Math.random() * pool.length);
+        // Deep clone to ensure unique IDs if picking same card twice?
+        // Service assigns unique ID during processCards, but if we pick same object ref twice...
+        // We should clone to be safe, especially if we mutate it later (foil).
+        const card = { ...pool[randomIndex] };
+        card.id = crypto.randomUUID(); // Ensure unique ID for this instance in pack
         selected.push(card);
-        existingNames.add(card.name);
-      } else {
-        skipped.push(card);
       }
+      return { selected, remainingPool: pool, success: true };
+    } else {
+      // Finite Mode: Unique, remove from pool
+      const selected: DraftCard[] = [];
+      const skipped: DraftCard[] = [];
+      let poolIndex = 0;
+
+      while (selected.length < count && poolIndex < pool.length) {
+        const card = pool[poolIndex];
+        poolIndex++;
+
+        if (!existingNames.has(card.name)) {
+          selected.push(card);
+          existingNames.add(card.name);
+        } else {
+          skipped.push(card);
+        }
+      }
+
+      const remaining = pool.slice(poolIndex).concat(skipped);
+      return { selected, remainingPool: remaining, success: selected.length === count };
     }
-
-    // Remaining = Rest of pool + Skipped
-    const remaining = pool.slice(poolIndex).concat(skipped);
-
-    return { selected, remainingPool: remaining, success: selected.length === count };
   }
 
   private shuffle(array: any[]) {
