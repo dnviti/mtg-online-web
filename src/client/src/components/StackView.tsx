@@ -73,7 +73,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                 // Margin calculation: Negative margin to pull up next cards. 
                 // To show a "strip" of say 35px at the top of each card.
                 const isLast = index === catCards.length - 1;
-                const useArtCrop = cardWidth < 170 && !!card.imageArtCrop;
+                const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
@@ -83,8 +83,8 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                       style={{
                         // Aspect ratio is maintained by image or div dimensions
                         // With overlap, we just render them one after another with negative margin
-                        marginBottom: isLast ? '0' : '-125%', // Negative margin to show header
-                        aspectRatio: '2.5/3.5'
+                        marginBottom: isLast ? '0' : (useArtCrop ? '-85%' : '-125%'), // Negative margin to show header. Square cards need less negative margin.
+                        aspectRatio: useArtCrop ? '1/1' : '2.5/3.5'
                       }}
                     >
                       <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />

@@ -100,14 +100,14 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
         {viewMode === 'grid' && (
           <div className="flex flex-wrap gap-3">
             {pack.cards.map((card) => {
-              const useArtCrop = cardWidth < 170 && !!card.imageArtCrop;
+              const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
               const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
               return (
                 <CardHoverWrapper key={card.id} card={card} preventPreview={cardWidth >= 200}>
                   <div style={{ width: cardWidth }} className="relative group bg-slate-900 rounded-lg shrink-0">
                     {/* Visual Card */}
-                    <div className={`relative aspect-[2.5/3.5] overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+                    <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
                       {isFoil(card) && <FoilOverlay />}
                       {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
 

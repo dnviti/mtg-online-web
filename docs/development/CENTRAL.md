@@ -61,3 +61,5 @@
 - [Dynamic Art Cropping](./devlog/2025-12-17-024500_dynamic_art_cropping.md): Completed. Implemented automatic switching to full-art/art-crop images when card size is reduced below readability threshold.
 - [Refined Preview Suppression](./devlog/2025-12-17-025000_refined_preview_suppression.md): Completed. Adjusted suppression threshold to 200px to better support Stack View's pop-up behavior.
 - [Explicit Preview Suppression](./devlog/2025-12-17-025500_explicit_preview_suppression.md): Completed. Implemented strict `preventPreview` prop to enforce suppression logic reliably regardless of card overlap or DOM state.
+- [Synchronized Display Boundaries](./devlog/2025-12-17-030000_synchronized_boundaries.md): Completed. Aligned "Art Crop" and "Preview Suppression" thresholds to 200px (50% slider value) for a unified UI behavior.
+- [Squared Art Crops](./devlog/2025-12-17-030500_squared_art_crops.md): Completed. Enforced square aspect ratio for art-crop thumbnails to optimize visual density and stacking.
