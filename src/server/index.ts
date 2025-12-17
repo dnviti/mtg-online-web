@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
+  maxHttpBufferSize: 300 * 1024 * 1024, // 300MB
   cors: {
     origin: "*", // Adjust for production,
     methods: ["GET", "POST"]
