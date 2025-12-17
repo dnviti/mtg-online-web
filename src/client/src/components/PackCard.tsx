@@ -6,6 +6,7 @@ import { StackView } from './StackView';
 interface PackCardProps {
   pack: Pack;
   viewMode: 'list' | 'grid' | 'stack';
+  cardWidth?: number;
 }
 
 import { CardHoverWrapper, FoilOverlay } from './CardPreview';
@@ -41,7 +42,7 @@ const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
   );
 };
 
-export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
+export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 150 }) => {
   const mythics = pack.cards.filter(c => c.rarity === 'mythic');
   const rares = pack.cards.filter(c => c.rarity === 'rare');
   const uncommons = pack.cards.filter(c => c.rarity === 'uncommon');
@@ -97,10 +98,10 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
         )}
 
         {viewMode === 'grid' && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="flex flex-wrap gap-3">
             {pack.cards.map((card) => (
               <CardHoverWrapper key={card.id} card={card}>
-                <div className="relative group bg-slate-900 rounded-lg">
+                <div style={{ width: cardWidth }} className="relative group bg-slate-900 rounded-lg shrink-0">
                   {/* Visual Card */}
                   <div className={`relative aspect-[2.5/3.5] overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
                     {isFoil(card) && <FoilOverlay />}
@@ -126,7 +127,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
           </div>
         )}
 
-        {viewMode === 'stack' && <StackView cards={pack.cards} />}
+        {viewMode === 'stack' && <StackView cards={pack.cards} cardWidth={cardWidth} />}
       </div>
     </div>
   );

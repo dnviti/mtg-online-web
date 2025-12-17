@@ -125,8 +125,17 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
     setCoords({ x: e.clientX, y: e.clientY });
   };
 
-  const handleMouseEnter = () => {
-    if (!isMobile) setIsHovering(true);
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (isMobile) return;
+
+    // Check if the card is already "big enough" on screen
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Width > 240 && Height > 300 targets large grid items but excludes thin list rows
+    if (rect.width > 240 && rect.height > 300) {
+      return;
+    }
+
+    setIsHovering(true);
   };
 
   const handleMouseLeave = () => {

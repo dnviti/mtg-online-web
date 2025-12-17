@@ -4,6 +4,7 @@ import { CardHoverWrapper, FoilOverlay } from './CardPreview';
 
 interface StackViewProps {
   cards: DraftCard[];
+  cardWidth?: number;
 }
 
 const CATEGORY_ORDER = [
@@ -18,7 +19,7 @@ const CATEGORY_ORDER = [
   'Other'
 ];
 
-export const StackView: React.FC<StackViewProps> = ({ cards }) => {
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
@@ -59,7 +60,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards }) => {
         if (catCards.length === 0) return null;
 
         return (
-          <div key={category} className="flex-shrink-0 w-44 snap-start">
+          <div key={category} className="flex-shrink-0 snap-start" style={{ width: cardWidth }}>
             {/* Header */}
             <div className="flex justify-between items-center mb-2 px-1 border-b border-slate-700 pb-1">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{category}</span>

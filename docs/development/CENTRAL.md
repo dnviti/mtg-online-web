@@ -55,3 +55,6 @@
 - [Entrance Animation Fix](./devlog/2025-12-17-021500_entrance_animation_fix.md): Completed. Implemented 'isMounted' state to ensuring scale-in animation triggers correctly on first render.
 - [Foil Bug Fix](./devlog/2025-12-17-022000_foil_bug_fix.md): Completed. Fixed regression where foil animations applied to non-foil cards on desktop.
 - [Universal Foil Application](./devlog/2025-12-17-022500_universal_foil_application.md): Completed. Applied foil animation to Grid View and Stack View card thumbnails.
+- [Smart Preview Suppression](./devlog/2025-12-17-023000_smart_preview_suppression.md): Completed. Disabled hover preview for card elements that are already rendered large enough on screen.
+- [Compact Card Layout](./devlog/2025-12-17-023500_compact_card_layout.md): Completed. Decreased card sizes in Grid and Stack views for a denser UI.
+- [View Scale Slider](./devlog/2025-12-17-024000_view_scale_slider.md): Completed. Added a slider to dynamically adjust card dimensions, synced across Grid and Stack views.

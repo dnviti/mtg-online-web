@@ -101,6 +101,11 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     return saved ? parseInt(saved) : 3;
   });
 
+  const [cardWidth, setCardWidth] = useState(() => {
+    const saved = localStorage.getItem('cube_cardWidth');
+    return saved ? parseInt(saved) : 140;
+  });
+
   // --- Persistence Effects ---
   useEffect(() => localStorage.setItem('cube_inputText', inputText), [inputText]);
   useEffect(() => localStorage.setItem('cube_filters', JSON.stringify(filters)), [filters]);
@@ -108,6 +113,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
   useEffect(() => localStorage.setItem('cube_sourceMode', sourceMode), [sourceMode]);
   useEffect(() => localStorage.setItem('cube_selectedSets', JSON.stringify(selectedSets)), [selectedSets]);
   useEffect(() => localStorage.setItem('cube_numBoxes', numBoxes.toString()), [numBoxes]);
+  useEffect(() => localStorage.setItem('cube_cardWidth', cardWidth.toString()), [cardWidth]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -660,6 +666,22 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                   {copySuccess ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   <span className="hidden sm:inline">{copySuccess ? 'Copied!' : 'Copy'}</span>
                 </button>
+
+                {/* Size Slider */}
+                <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-2 py-1 border border-slate-700 h-9 mr-2 hidden sm:flex">
+                  <div className="w-3 h-4 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
+                  <input
+                    type="range"
+                    min="100"
+                    max="300"
+                    step="10"
+                    value={cardWidth}
+                    onChange={(e) => setCardWidth(parseInt(e.target.value))}
+                    className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-600 rounded-lg appearance-none"
+                    title={`Card Size: ${cardWidth}px`}
+                  />
+                  <div className="w-4 h-6 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
+                </div>
               </>
             )}
 
@@ -679,7 +701,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         ) : (
           <div className="grid grid-cols-1 gap-6 pb-20">
             {packs.map((pack) => (
-              <PackCard key={pack.id} pack={pack} viewMode={viewMode} />
+              <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
             ))}
           </div>
         )}
