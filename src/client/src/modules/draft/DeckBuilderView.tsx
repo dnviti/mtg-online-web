@@ -4,6 +4,7 @@ import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid } from '
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { DraftCard } from '../../services/PackGeneratorService';
+import { useCardTouch } from '../../utils/interaction';
 
 interface DeckBuilderViewProps {
   roomId: string;
@@ -34,11 +35,16 @@ const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: 
     }
   };
 
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick: handleTouchClick } = useCardTouch(onHover || (() => { }), onClick || (() => { }), card);
+
   return (
     <div
-      onClick={onClick}
+      onClick={handleTouchClick}
       onMouseEnter={() => onHover && onHover(card)}
       onMouseLeave={() => onHover && onHover(null)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
       className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors w-full group"
     >
       <span className={`font-medium flex items-center gap-2 truncate ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
@@ -109,28 +115,18 @@ const CardsDisplay: React.FC<{
       {cards.map(c => {
         const card = normalizeCard(c);
         const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
-        const displayImage = useArtCrop ? card.imageArtCrop : card.image;
+
         const isFoil = card.finish === 'foil';
 
         return (
-          <div
+          <DeckCardItem
             key={card.id}
-            onClick={() => onCardClick(c)}
-            onMouseEnter={() => onHover(card)}
-            onMouseLeave={() => onHover(null)}
-            className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
-          >
-            <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
-              {isFoil && <FoilOverlay />}
-              {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
-              {displayImage ? (
-                <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
-              )}
-              <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' : card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' : 'bg-black'}`} />
-            </div>
-          </div>
+            card={card}
+            useArtCrop={useArtCrop}
+            isFoil={isFoil}
+            onCardClick={onCardClick}
+            onHover={onHover}
+          />
         );
       })}
     </div>
@@ -341,7 +337,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   );
 
   return (
-    <div className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col">
+    <div className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
       {/* Global Toolbar - Inlined */}
       <div className="h-14 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
@@ -487,6 +483,34 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
+  const displayImage = useArtCrop ? card.imageArtCrop : card.image;
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => onCardClick(card), card);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => onHover(card)}
+      onMouseLeave={() => onHover(null)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+      className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
+    >
+      <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+        {isFoil && <FoilOverlay />}
+        {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
+        {displayImage ? (
+          <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
+        )}
+        <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' : card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' : 'bg-black'}`} />
       </div>
     </div>
   );

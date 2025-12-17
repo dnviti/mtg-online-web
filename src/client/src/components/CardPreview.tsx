@@ -144,7 +144,7 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!hasImage || !isMobile) return;
+    if (!hasImage || !isMobile || preventPreview) return;
     const touch = e.touches[0];
     const { clientX, clientY } = touch;
 

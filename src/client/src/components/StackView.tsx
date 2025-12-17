@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
 import { FoilOverlay, CardHoverWrapper } from './CardPreview';
+import { useCardTouch } from '../utils/interaction';
 
 interface StackViewProps {
   cards: DraftCard[];
@@ -80,35 +81,52 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
-                  <div
+                  <StackCardItem
                     key={card.id}
-                    className="relative w-full z-0 hover:z-50 transition-all duration-200 group"
-                    onMouseEnter={() => onHover && onHover(card)}
-                    onMouseLeave={() => onHover && onHover(null)}
-                    onClick={() => onCardClick && onCardClick(card)}
-                  >
-                    <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 200}>
-                      <div
-                        className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
-                        style={{
-                          // Aspect ratio is maintained by image or div dimensions
-                          // With overlap, we just render them one after another with negative margin
-                          marginBottom: isLast ? '0' : (useArtCrop ? '-85%' : '-125%'), // Negative margin to show header. Square cards need less negative margin.
-                          aspectRatio: useArtCrop ? '1/1' : '2.5/3.5'
-                        }}
-                      >
-                        <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
-                        {/* Optional: Shine effect for foils if visible? */}
-                        {card.finish === 'foil' && <FoilOverlay />}
-                      </div>
-                    </CardHoverWrapper>
-                  </div>
-                )
+                    card={card}
+                    cardWidth={cardWidth}
+                    isLast={isLast}
+                    useArtCrop={useArtCrop}
+                    displayImage={displayImage}
+                    onHover={onHover}
+                    onCardClick={onCardClick}
+                    disableHoverPreview={disableHoverPreview}
+                  />
+                );
               })}
             </div>
           </div>
         )
       })}
+    </div>
+  );
+};
+
+const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHover, onCardClick, disableHoverPreview }: any) => {
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover || (() => { }), () => onCardClick && onCardClick(card), card);
+
+  return (
+    <div
+      className="relative w-full z-0 hover:z-50 transition-all duration-200 group"
+      onMouseEnter={() => onHover && onHover(card)}
+      onMouseLeave={() => onHover && onHover(null)}
+      onClick={onClick}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+    >
+      <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 200}>
+        <div
+          className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
+          style={{
+            marginBottom: isLast ? '0' : (useArtCrop ? '-85%' : '-125%'),
+            aspectRatio: useArtCrop ? '1/1' : '2.5/3.5'
+          }}
+        >
+          <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
+          {card.finish === 'foil' && <FoilOverlay />}
+        </div>
+      </CardHoverWrapper>
     </div>
   );
 };

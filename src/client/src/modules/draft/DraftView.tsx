@@ -4,6 +4,7 @@ import { socketService } from '../../services/SocketService';
 import { LogOut } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { FoilOverlay } from '../../components/CardPreview';
+import { useCardTouch } from '../../utils/interaction';
 
 // Helper to normalize card data for visuals
 const normalizeCard = (c: any) => ({
@@ -247,34 +248,15 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
             <div className="flex flex-col items-center justify-center min-h-full pb-10">
               <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
               <div className="flex flex-wrap justify-center gap-6 [perspective:1000px]">
-                {activePack.cards.map((rawCard: any) => {
-                  const card = normalizeCard(rawCard);
-                  const isFoil = card.finish === 'foil';
-
-                  return (
-                    <div
-                      key={card.id}
-                      className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
-                      style={{ width: `${14 * cardScale}rem` }}
-                      onClick={() => handlePick(card.id)}
-                      onMouseEnter={() => setHoveredCard(card)}
-                      onMouseLeave={() => setHoveredCard(null)}
-                    >
-                      {/* Foil Glow Effect */}
-                      {isFoil && <div className="absolute inset-0 -m-1 rounded-xl bg-purple-500 blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-300 animate-pulse"></div>}
-
-                      <div className={`relative w-full rounded-xl shadow-2xl shadow-black overflow-hidden bg-slate-900 ${isFoil ? 'ring-2 ring-purple-400/50' : 'group-hover:ring-2 ring-emerald-400/50'}`}>
-                        <img
-                          src={card.image}
-                          alt={card.name}
-                          className="w-full h-full object-cover relative z-10"
-                        />
-                        {isFoil && <FoilOverlay />}
-                        {isFoil && <div className="absolute top-2 right-2 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm border border-white/20">FOIL</div>}
-                      </div>
-                    </div>
-                  );
-                })}
+                {activePack.cards.map((rawCard: any) => (
+                  <DraftCardItem
+                    key={rawCard.id}
+                    rawCard={rawCard}
+                    cardScale={cardScale}
+                    handlePick={handlePick}
+                    setHoveredCard={setHoveredCard}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -303,18 +285,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
         </div>
         <div className="flex-1 overflow-x-auto flex items-center gap-2 px-6 pb-4 custom-scrollbar">
           {pickedCards.map((card: any, idx: number) => (
-            <div
-              key={`${card.id}-${idx}`}
-              className="relative group shrink-0 transition-all h-full flex items-center"
-              onMouseEnter={() => setHoveredCard(card)}
-              onMouseLeave={() => setHoveredCard(null)}
-            >
-              <img
-                src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
-                alt={card.name}
-                className="h-[90%] w-auto rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all object-contain"
-              />
-            </div>
+            <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} />
           ))}
         </div>
       </div>
@@ -330,4 +301,58 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
       />
     </div>
   );
+};
+
+const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) => {
+  const card = normalizeCard(rawCard);
+  const isFoil = card.finish === 'foil';
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => handlePick(card.id), card);
+
+  return (
+    <div
+      className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
+      style={{ width: `${14 * cardScale}rem` }}
+      onClick={onClick}
+      onMouseEnter={() => setHoveredCard(card)}
+      onMouseLeave={() => setHoveredCard(null)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+    >
+      {/* Foil Glow Effect */}
+      {isFoil && <div className="absolute inset-0 -m-1 rounded-xl bg-purple-500 blur-md opacity-20 group-hover:opacity-60 transition-opacity duration-300 animate-pulse"></div>}
+
+      <div className={`relative w-full rounded-xl shadow-2xl shadow-black overflow-hidden bg-slate-900 ${isFoil ? 'ring-2 ring-purple-400/50' : 'group-hover:ring-2 ring-emerald-400/50'}`}>
+        <img
+          src={card.image}
+          alt={card.name}
+          className="w-full h-full object-cover relative z-10"
+        />
+        {isFoil && <FoilOverlay />}
+        {isFoil && <div className="absolute top-2 right-2 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm border border-white/20">FOIL</div>}
+      </div>
+    </div>
+  );
+};
+
+const PoolCardItem = ({ card, setHoveredCard }: any) => {
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => { }, card);
+
+  return (
+    <div
+      className="relative group shrink-0 transition-all h-full flex items-center"
+      onMouseEnter={() => setHoveredCard(card)}
+      onMouseLeave={() => setHoveredCard(null)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+      onClick={onClick}
+    >
+      <img
+        src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
+        alt={card.name}
+        className="h-[90%] w-auto rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all object-contain"
+      />
+    </div>
+  )
 };
