@@ -2,12 +2,31 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
 
 // --- Floating Preview Component ---
+const FoilOverlay = () => (
+  <div className="absolute inset-0 z-20 pointer-events-none rounded-xl overflow-hidden">
+    {/* CSS-based Holographic Pattern */}
+    <div className="absolute inset-0 foil-holo" />
+
+    {/* Gaussian Circular Glare - Spinning Radial Gradient (Mildly visible) */}
+    <div className="absolute inset-[-50%] bg-[radial-gradient(circle_at_50%_50%,_rgba(255,255,255,0.25)_0%,_transparent_60%)] mix-blend-overlay opacity-25 animate-spin-slow" />
+  </div>
+);
+
 export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number; isMobile?: boolean; isClosing?: boolean }> = ({ card, x, y, isMobile, isClosing }) => {
-  const isFoil = card.finish === 'foil';
+  // Cast finishes to any to allow loose string matching if needed, or just standard check
+  const isFoil = (card.finish as string) === 'foil' || (card.finish as string) === 'etched';
   const imgRef = useRef<HTMLImageElement>(null);
 
   // Basic boundary detection
   const [adjustedPos, setAdjustedPos] = useState({ top: y, left: x });
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    // Trigger entrance animation
+    requestAnimationFrame(() => setIsMounted(true));
+  }, []);
+
+  const isActive = isMounted && !isClosing;
 
   useEffect(() => {
     if (isMobile) return;
@@ -33,10 +52,12 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number; 
 
   if (isMobile) {
     return (
-      <div className={`fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center bg-black/60 backdrop-blur-[2px] transition-all duration-300 ${isClosing ? 'animate-out fade-out' : 'animate-in fade-in'}`}>
-        <div className={`relative w-[85vw] max-w-sm rounded-2xl overflow-hidden shadow-2xl ring-4 ring-black/50 transition-all duration-300 ${isClosing ? 'animate-out zoom-out-95' : 'animate-in zoom-in-95'}`}>
+      <div className={`fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center bg-black/60 backdrop-blur-[2px] transition-all duration-300 ease-in-out ${isActive ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`relative w-[85vw] max-w-sm rounded-2xl overflow-hidden shadow-2xl ring-4 ring-black/50 transition-all duration-300 ${isActive ? 'scale-100 opacity-100 ease-out' : 'scale-95 opacity-0 ease-in'}`}>
           <img src={card.image} alt={card.name} className="w-full h-auto" />
-          {isFoil && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 mix-blend-overlay animate-pulse"></div>}
+          {/* Universal mild brightening overlay */}
+          <div className="absolute inset-0 bg-white/10 pointer-events-none mix-blend-overlay" />
+          {isFoil && <FoilOverlay />}
         </div>
       </div>
     );
@@ -44,15 +65,18 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number; 
 
   return (
     <div
-      className="fixed z-[9999] pointer-events-none transition-opacity duration-75"
+      className="fixed z-[9999] pointer-events-none"
       style={{
         top: adjustedPos.top,
         left: adjustedPos.left
       }}
     >
-      <div className="relative w-[300px] rounded-xl overflow-hidden shadow-2xl border-4 border-slate-900 bg-black">
+      <div className={`relative w-[300px] rounded-xl overflow-hidden shadow-2xl border-4 border-slate-900 bg-black transition-all duration-300 ${isActive ? 'scale-100 opacity-100 ease-out' : 'scale-95 opacity-0 ease-in'}`}>
         <img ref={imgRef} src={card.image} alt={card.name} className="w-full h-auto" />
-        {isFoil && <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 mix-blend-overlay animate-pulse"></div>}
+        {/* Universal mild brightening overlay */}
+        <div className="absolute inset-0 bg-white/10 pointer-events-none mix-blend-overlay" />
+        {/* CSS-based Holographic Pattern & Glare */}
+        {isFoil && <FoilOverlay />}
       </div>
     </div>
   );
@@ -82,8 +106,8 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
       if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
       setRenderPreview(true);
     } else {
-      // Delay unmount for mobile animation
-      if (isMobile && renderPreview) {
+      // Delay unmount for animation (all devices)
+      if (renderPreview) {
         closeTimerRef.current = setTimeout(() => {
           setRenderPreview(false);
         }, 300); // 300ms matches duration-300
@@ -144,7 +168,7 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      setIsLongPressing(false);
+      // Do not close if already long pressing
     }
   };
 

@@ -41,3 +41,16 @@
 - [Mobile Long-Press Preview](./devlog/2025-12-17-005500_mobile_long_press.md): Completed. Implemented long-press trigger for card magnification on small screens.
 - [Mobile Fullscreen Preview](./devlog/2025-12-17-010000_mobile_fullscreen_preview.md): Completed. Updated mobile preview to be a centered fullscreen overlay.
 - [Mobile Preview Animations](./devlog/2025-12-17-010500_mobile_preview_animations.md): Completed. Implemented phase-in layout and phase-out animations for mobile preview.
+- [Mobile Preview Polish](./devlog/2025-12-17-011000_mobile_preview_polish.md): Completed. Refined mobile enter/exit easing and added premium foil finish.
+- [Enhanced Foil Effects](./devlog/2025-12-17-011500_enhanced_foils.md): Completed. implemented a multi-layer holographic sheen for foil cards.
+- [Rolling Rainbow Foil](./devlog/2025-12-17-012000_rolling_rainbow_foil.md): Completed. Updated foil effect to feature a scrolling, milder rainbow shimmer.
+- [Card Visibility Boost](./devlog/2025-12-17-013000_card_visibility_boost.md): Completed. Added mild white overlay to all card previews for better visibility on dark backgrounds.
+- [Optimized Rolling Foil](./devlog/2025-12-17-013500_optimized_rolling_foil.md): Completed. Implemented continuous full-spectrum rainbow foil effect with mild white sheen.
+- [Metallic Foil Refinement](./devlog/2025-12-17-014000_metallic_foil_refinement.md): Completed. Adjusted foil to emphasize metallic shimmer/glare over rainbow color saturation.
+- [Circular Foil Animation](./devlog/2025-12-17-014500_circular_foil_animation.md): Completed. Replaced linear glare with a rotating gaussian circular sheen.
+- [Mild Foil Animation](./devlog/2025-12-17-015000_mild_foil_animation.md): Completed. Tuned down foil brightness and overlay intensity to be milder and consistent with non-foils.
+- [Pro Foil Implementation](./devlog/2025-12-17-020000_pro_foil_implementation.md): Completed. Implemented advanced CSS-based holographic texture and animation.
+- [Universal Preview Animations](./devlog/2025-12-17-020500_universal_preview_animations.md): Completed. Enabled entrance/exit animations for card previews on all devices.
+- [Mobile Touch Interaction](./devlog/2025-12-17-021000_mobile_touch_fix.md): Completed. Updated long-press logic to persist preview during finger movement, closing only on release.
+- [Entrance Animation Fix](./devlog/2025-12-17-021500_entrance_animation_fix.md): Completed. Implemented 'isMounted' state to ensuring scale-in animation triggers correctly on first render.
+- [Foil Bug Fix](./devlog/2025-12-17-022000_foil_bug_fix.md): Completed. Fixed regression where foil animations applied to non-foil cards on desktop.
