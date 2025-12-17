@@ -53,15 +53,15 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
     try {
       const saved = localStorage.getItem('cube_filters');
       return saved ? JSON.parse(saved) : {
-        ignoreBasicLands: true,
-        ignoreCommander: true,
-        ignoreTokens: true
+        ignoreBasicLands: false,
+        ignoreCommander: false,
+        ignoreTokens: false
       };
     } catch {
       return {
-        ignoreBasicLands: true,
-        ignoreCommander: true,
-        ignoreTokens: true
+        ignoreBasicLands: false,
+        ignoreCommander: false,
+        ignoreTokens: false
       };
     }
   });

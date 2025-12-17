@@ -139,9 +139,9 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
 
     // Default filters if missing
     const activeFilters = filters || {
-      ignoreBasicLands: true,
-      ignoreCommander: true,
-      ignoreTokens: true
+      ignoreBasicLands: false,
+      ignoreCommander: false,
+      ignoreTokens: false
     };
 
     const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters);

@@ -64,3 +64,4 @@
 - [Synchronized Display Boundaries](./devlog/2025-12-17-030000_synchronized_boundaries.md): Completed. Aligned "Art Crop" and "Preview Suppression" thresholds to 200px (50% slider value) for a unified UI behavior.
 - [Squared Art Crops](./devlog/2025-12-17-030500_squared_art_crops.md): Completed. Enforced square aspect ratio for art-crop thumbnails to optimize visual density and stacking.
 - [Fix Expansion Generation Limit](./devlog/2025-12-17-024500_fix_expansion_generation_limit.md): Completed. Implemented "Unlimited Pool" mode for expansion drafts to allow generating large numbers of packs from singleton set data.
+- [Change Default Filter Flags](./devlog/2025-12-17-025500_change_default_flags.md): Completed. Updated client and server defaults for "Ignore Basic Lands", "Ignore Commander Sets", and "Ignore Tokens" to be unchecked (false).
