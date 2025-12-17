@@ -1,7 +1,7 @@
- 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Play, Copy, Check, Layers, LogOut } from 'lucide-react';
+import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
@@ -149,20 +149,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     }
   };
 
-  const handleStartGame = () => {
-    const testDeck = Array.from({ length: 40 }).map((_, i) => ({
-      id: `card-${i}`,
-      name: i % 2 === 0 ? "Mountain" : "Lightning Bolt",
-      image_uris: {
-        normal: i % 2 === 0
-          ? "https://cards.scryfall.io/normal/front/1/9/194459f0-2586-444a-be7d-786d5e7e9bc4.jpg"
-          : "https://cards.scryfall.io/normal/front/f/2/f29ba16f-c8fb-42fe-aabf-87089cb211a7.jpg"
-      }
-    }));
 
-    const decks = room.players.reduce((acc, p) => ({ ...acc, [p.id]: testDeck }), {});
-    socketService.socket.emit('start_game', { roomId: room.id, decks });
-  };
 
   const handleStartDraft = () => {
     socketService.socket.emit('start_draft', { roomId: room.id });
@@ -237,16 +224,9 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
               disabled={room.status !== 'waiting'}
               className="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Layers className="w-5 h-5" /> Start Real Draft
+              <Layers className="w-5 h-5" /> Start Draft
             </button>
-            <span className="text-xs text-slate-500 text-center">- OR -</span>
-            <button
-              onClick={handleStartGame}
-              disabled={room.status !== 'waiting'}
-              className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed text-xs uppercase tracking-wider"
-            >
-              <Play className="w-4 h-4" /> Quick Play (Test Decks)
-            </button>
+
           </div>
         )}
       </div>
@@ -268,6 +248,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
             {room.players.map(p => {
               const isReady = (p as any).ready;
               const isMe = p.id === currentPlayerId;
+              const isSolo = room.players.length === 1 && room.status === 'playing';
 
               return (
                 <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 group">
@@ -287,14 +268,18 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                     </div>
                   </div>
 
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className={`flex gap-2 ${isSolo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
                     {isMe && (
                       <button
                         onClick={onExit}
-                        className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-red-400"
-                        title="Leave Room"
+                        className={`p-1 rounded flex items-center gap-2 transition-colors ${isSolo
+                          ? 'bg-red-900/40 text-red-200 hover:bg-red-900/60 px-3 py-1.5'
+                          : 'hover:bg-slate-700 text-slate-400 hover:text-red-400'
+                          }`}
+                        title={isSolo ? "End Solo Session" : "Leave Room"}
                       >
                         <LogOut className="w-4 h-4" />
+                        {isSolo && <span className="text-xs font-bold">End Test</span>}
                       </button>
                     )}
                     {isMeHost && !isMe && (

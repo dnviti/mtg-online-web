@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle } from 'lucide-react';
 import { ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
+import { socketService } from '../../services/SocketService';
+import { useToast } from '../../components/Toast';
 
 interface CubeManagerProps {
   packs: Pack[];
   setPacks: React.Dispatch<React.SetStateAction<Pack[]>>;
+  availableLands: any[];
   setAvailableLands: React.Dispatch<React.SetStateAction<any[]>>;
   onGoToLobby: () => void;
 }
 
-import { useToast } from '../../components/Toast';
-
-export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, setAvailableLands, onGoToLobby }) => {
+export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, availableLands, setAvailableLands, onGoToLobby }) => {
   const { showToast } = useToast();
 
   // --- Services ---
@@ -277,6 +278,84 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, setAv
     } finally {
       setLoading(false);
       setProgress('');
+    }
+  };
+
+  const handleStartSoloTest = async () => {
+    if (packs.length === 0) return;
+
+    // Validate Lands
+    if (!availableLands || availableLands.length === 0) {
+      if (!confirm("No basic lands detected in the current pool. The generated deck will have 0 lands. Continue?")) {
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      // Collect all cards
+      const allCards = packs.flatMap(p => p.cards);
+
+      // Random Deck Construction Logic
+      // 1. Separate lands and non-lands (Exclude existing Basic Lands from spells to be safe)
+      const spells = allCards.filter(c => !c.typeLine?.includes('Basic Land') && !c.typeLine?.includes('Land'));
+
+      // 2. Select 23 Spells randomly
+      const deckSpells: any[] = [];
+      const spellPool = [...spells];
+
+      // Fisher-Yates Shuffle
+      for (let i = spellPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [spellPool[i], spellPool[j]] = [spellPool[j], spellPool[i]];
+      }
+
+      // Take up to 23 spells, or all if fewer
+      deckSpells.push(...spellPool.slice(0, Math.min(23, spellPool.length)));
+
+      // 3. Select 17 Lands (or fill to 40)
+      const deckLands: any[] = [];
+      const landCount = 40 - deckSpells.length; // Aim for 40 cards total
+
+      if (availableLands.length > 0) {
+        for (let i = 0; i < landCount; i++) {
+          const land = availableLands[Math.floor(Math.random() * availableLands.length)];
+          deckLands.push(land);
+        }
+      }
+
+      const fullDeck = [...deckSpells, ...deckLands];
+
+      // Emit socket event
+      const playerId = localStorage.getItem('player_id') || 'tester-' + Date.now();
+      const playerName = localStorage.getItem('player_name') || 'Tester';
+
+      if (!socketService.socket.connected) socketService.connect();
+
+      const response = await socketService.emitPromise('start_solo_test', {
+        playerId,
+        playerName,
+        deck: fullDeck
+      });
+
+      if (response.success) {
+        localStorage.setItem('active_room_id', response.room.id);
+        localStorage.setItem('player_id', playerId);
+
+        // Brief delay to allow socket events to propagate
+        setTimeout(() => {
+          onGoToLobby();
+        }, 100);
+      } else {
+        alert("Failed to start test game: " + response.message);
+      }
+
+    } catch (e: any) {
+      console.error(e);
+      alert("Error: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -675,6 +754,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, setAv
                     }`}
                 >
                   <Users className="w-4 h-4" /> <span className="hidden sm:inline">Play Online</span>
+                </button>
+                <button
+                  onClick={handleStartSoloTest}
+                  disabled={loading}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in zoom-in"
+                  title="Test a randomized deck from these packs right now"
+                >
+                  <PlayCircle className="w-4 h-4 text-emerald-400" /> <span className="hidden sm:inline">Test Solo</span>
                 </button>
                 <button
                   onClick={handleExportCsv}

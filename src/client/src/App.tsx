@@ -100,6 +100,7 @@ export const App: React.FC = () => {
             <CubeManager
               packs={generatedPacks}
               setPacks={setGeneratedPacks}
+              availableLands={availableLands}
               setAvailableLands={setAvailableLands}
               onGoToLobby={() => setActiveTab('lobby')}
             />

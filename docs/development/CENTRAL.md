@@ -82,3 +82,4 @@
 - [Land Advice & Unlimited Time](./devlog/2025-12-17-155500_land_advice_and_unlimited_time.md): Completed. Implemented land suggestion algorithm and disabled deck builder timer.
 - [Deck Builder Magnified View](./devlog/2025-12-17-160500_deck_builder_magnified_view.md): Completed. Added magnified card preview sidebar to deck builder.
 - [Gameplay Magnified View & Timeout](./devlog/2025-12-17-161500_gameplay_magnified_view_and_timeout.md): Completed. Added magnified view with full card details (Oracle text, type, mana) to gameplay and disabled timeout.
+- [Test Deck Feature](./devlog/2025-12-17-162500_test_deck_feature.md): Completed. Implemented "Test Solo" button in Cube Manager to instantly start a solo game with a randomized deck from generated packs.

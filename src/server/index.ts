@@ -294,9 +294,16 @@ io.on('connection', (socket) => {
           if (currentDraft) socket.emit('draft_update', currentDraft);
         }
 
+        // Prepare Game State if exists
+        let currentGame = null;
+        if (room.status === 'playing') {
+          currentGame = gameManager.getGame(roomId);
+          if (currentGame) socket.emit('game_update', currentGame);
+        }
+
         // ACK Callback
         if (typeof callback === 'function') {
-          callback({ success: true, room, draftState: currentDraft });
+          callback({ success: true, room, draftState: currentDraft, gameState: currentGame });
         }
       } else {
         // Room found but player not in it? Or room not found?
