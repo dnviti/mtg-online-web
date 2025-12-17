@@ -711,12 +711,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
             <p>No packs generated.</p>
           </div>
         ) : (
-          <div className={`grid gap-6 pb-20 ${cardWidth <= 150
-              ? viewMode === 'list'
-                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
-                : 'grid-cols-1 2xl:grid-cols-2'
-              : 'grid-cols-1'
-            }`}>
+          <div
+            className="grid gap-6 pb-20"
+            style={{
+              gridTemplateColumns: cardWidth <= 150
+                ? `repeat(auto-fill, minmax(${viewMode === 'list' ? '320px' : '550px'}, 1fr))`
+                : '1fr'
+            }}
+          >
             {packs.map((pack) => (
               <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
             ))}

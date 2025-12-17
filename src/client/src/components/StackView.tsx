@@ -54,7 +54,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
   }, [cards]);
 
   return (
-    <div className="flex flex-row gap-2 overflow-x-auto pb-8 snap-x">
+    <div className="flex flex-row gap-4 overflow-x-auto pb-8 snap-x">
       {CATEGORY_ORDER.map(category => {
         const catCards = categorizedCards[category];
         if (catCards.length === 0) return null;

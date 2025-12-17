@@ -76,3 +76,4 @@
 - [Fix Expansion Pack Generation](./devlog/2025-12-17-140000_fix_expansion_generation.md): Completed. Enforced infinite card pool for expansion drafts to ensure correct pack counts and prevent depletion.
 - [Responsive Pack Grid Layout](./devlog/2025-12-17-142500_responsive_pack_grid.md): Completed. Implemented responsive multi-column grid for generated packs when card size is reduced (<25% slider).
 - [Stack View Consistency Fix](./devlog/2025-12-17-143000_stack_view_consistency.md): Completed. Removed transparent overrides for Stack View, ensuring it renders with the standard unified container graphic.
+- [Dynamic Pack Grid Layout](./devlog/2025-12-17-144000_dynamic_pack_grid.md): Completed. Implemented responsive CSS grid with `minmax(550px, 1fr)` for Stack/Grid views to auto-fit packs based on screen width without explicit column limits.
