@@ -90,3 +90,6 @@
 - [Customizable Deck Builder Layout](./devlog/2025-12-17-170000_customizable_deck_builder.md): Completed. Implemented switchable Vertical (Side-by-Side) and Horizontal (Top-Bottom) layouts, with an integrated, improved Land Station.
 - [Draft View Layout Selection](./devlog/2025-12-17-185000_draft_view_layout.md): Completed. Implemented Vertical/Horizontal layout selection for Draft View to match Deck Builder, optimizing screen space and preventing overlap.
 - [Fix Cube Sidebar Scrolling](./devlog/2025-12-18-004109_fix_cube_sidebar_scrolling.md): Completed. Adjusted sidebar max-height to ensure autonomous scrolling and button accessibility on tablet screens.
+- [PWA Install Prompt](./devlog/2025-12-18-004600_pwa_install_prompt.md): Completed. Implemented `PWAInstallPrompt` component in `App.tsx` and enabled PWA dev options.
+- [Fix PWA Install Prompt](./devlog/2025-12-18-005000_fix_pwa_prompt.md): Completed. Implemented global event capture, iOS detection, and explicit service worker registration to ensure install prompt appears.
+- [Persist PWA Dismissal](./devlog/2025-12-18-005300_persist_pwa_dismissal.md): Completed. Implemented logic to remember user's choice to dismiss or install the PWA, preventing repeated prompts.
