@@ -10,6 +10,7 @@ export interface DraftCard {
   layout?: string;
   colors: string[];
   image: string;
+  imageArtCrop?: string;
   set: string;
   setCode: string;
   setType: string;
@@ -95,6 +96,7 @@ export class PackGeneratorService {
         layout: layout,
         colors: cardData.colors || [],
         image: cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || '',
+        imageArtCrop: cardData.image_uris?.art_crop || cardData.card_faces?.[0]?.image_uris?.art_crop || '',
         set: cardData.set_name,
         setCode: cardData.set,
         setType: setType,

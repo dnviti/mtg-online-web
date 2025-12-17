@@ -73,9 +73,11 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                 // Margin calculation: Negative margin to pull up next cards. 
                 // To show a "strip" of say 35px at the top of each card.
                 const isLast = index === catCards.length - 1;
+                const useArtCrop = cardWidth < 170 && !!card.imageArtCrop;
+                const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
-                  <CardHoverWrapper key={card.id} card={card} className="relative w-full z-0 hover:z-50 transition-all duration-200">
+                  <CardHoverWrapper key={card.id} card={card} className="relative w-full z-0 hover:z-50 transition-all duration-200" preventPreview={cardWidth >= 200}>
                     <div
                       className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group`}
                       style={{
@@ -85,7 +87,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150 }) 
                         aspectRatio: '2.5/3.5'
                       }}
                     >
-                      <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
+                      <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
                       {/* Optional: Shine effect for foils if visible? */}
                       {card.finish === 'foil' && <FoilOverlay />}
                     </div>

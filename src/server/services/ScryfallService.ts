@@ -31,7 +31,7 @@ export interface ScryfallCard {
   image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
   card_faces?: {
     name: string;
-    image_uris?: { normal: string; };
+    image_uris?: { normal: string; art_crop?: string; };
     type_line?: string;
     mana_cost?: string;
     oracle_text?: string;

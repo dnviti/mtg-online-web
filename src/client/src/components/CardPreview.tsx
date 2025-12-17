@@ -83,7 +83,7 @@ export const FloatingPreview: React.FC<{ card: DraftCard; x: number; y: number; 
 };
 
 // --- Hover Wrapper to handle mouse events ---
-export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.ReactNode; className?: string }> = ({ card, children, className }) => {
+export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.ReactNode; className?: string; preventPreview?: boolean }> = ({ card, children, className, preventPreview }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [isLongPressing, setIsLongPressing] = useState(false);
   const [renderPreview, setRenderPreview] = useState(false);
@@ -127,11 +127,12 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
 
   const handleMouseEnter = (e: React.MouseEvent) => {
     if (isMobile) return;
+    if (preventPreview) return;
 
     // Check if the card is already "big enough" on screen
     const rect = e.currentTarget.getBoundingClientRect();
-    // Width > 240 && Height > 300 targets large grid items but excludes thin list rows
-    if (rect.width > 240 && rect.height > 300) {
+    // Width > 200 && Height > 270 targets readable cards (Stack/Grid) but excludes list rows
+    if (rect.width > 200 && rect.height > 270) {
       return;
     }
 

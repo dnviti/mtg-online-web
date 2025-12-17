@@ -58,3 +58,6 @@
 - [Smart Preview Suppression](./devlog/2025-12-17-023000_smart_preview_suppression.md): Completed. Disabled hover preview for card elements that are already rendered large enough on screen.
 - [Compact Card Layout](./devlog/2025-12-17-023500_compact_card_layout.md): Completed. Decreased card sizes in Grid and Stack views for a denser UI.
 - [View Scale Slider](./devlog/2025-12-17-024000_view_scale_slider.md): Completed. Added a slider to dynamically adjust card dimensions, synced across Grid and Stack views.
+- [Dynamic Art Cropping](./devlog/2025-12-17-024500_dynamic_art_cropping.md): Completed. Implemented automatic switching to full-art/art-crop images when card size is reduced below readability threshold.
+- [Refined Preview Suppression](./devlog/2025-12-17-025000_refined_preview_suppression.md): Completed. Adjusted suppression threshold to 200px to better support Stack View's pop-up behavior.
+- [Explicit Preview Suppression](./devlog/2025-12-17-025500_explicit_preview_suppression.md): Completed. Implemented strict `preventPreview` prop to enforce suppression logic reliably regardless of card overlap or DOM state.
