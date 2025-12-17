@@ -39,15 +39,28 @@ export const App: React.FC = () => {
 
   React.useEffect(() => {
     try {
-      localStorage.setItem('generatedPacks', JSON.stringify(generatedPacks));
+      // Optimiziation: Strip 'definition' (ScryfallCard) from cards to save huge amount of space
+      // We only need the properties mapped to DraftCard for the UI and Game
+      const optimizedPacks = generatedPacks.map(p => ({
+        ...p,
+        cards: p.cards.map(c => {
+          const { definition, ...rest } = c;
+          return rest;
+        })
+      }));
+      localStorage.setItem('generatedPacks', JSON.stringify(optimizedPacks));
     } catch (e) {
-      console.error("Failed to save packs to storage", e);
+      console.error("Failed to save packs to storage (Quota likely exceeded)", e);
     }
   }, [generatedPacks]);
 
   React.useEffect(() => {
     try {
-      localStorage.setItem('availableLands', JSON.stringify(availableLands));
+      const optimizedLands = availableLands.map(l => {
+        const { definition, ...rest } = l;
+        return rest;
+      });
+      localStorage.setItem('availableLands', JSON.stringify(optimizedLands));
     } catch (e) {
       console.error("Failed to save lands to storage", e);
     }

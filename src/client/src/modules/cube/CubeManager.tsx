@@ -72,7 +72,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   });
 
   // UI State
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>(() => {
+    return (localStorage.getItem('cube_viewMode') as 'list' | 'grid' | 'stack') || 'list';
+  });
 
   // Generation Settings
   const [genSettings, setGenSettings] = useState<PackGenerationSettings>(() => {
@@ -100,7 +102,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   });
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [gameTypeFilter, setGameTypeFilter] = useState<'all' | 'paper' | 'digital'>('all'); // Filter state
+  const [gameTypeFilter, setGameTypeFilter] = useState<'all' | 'paper' | 'digital'>(() => {
+    return (localStorage.getItem('cube_gameTypeFilter') as 'all' | 'paper' | 'digital') || 'all';
+  });
   const [numBoxes, setNumBoxes] = useState<number>(() => {
     const saved = localStorage.getItem('cube_numBoxes');
     return saved ? parseInt(saved) : 3;
@@ -119,6 +123,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   useEffect(() => localStorage.setItem('cube_selectedSets', JSON.stringify(selectedSets)), [selectedSets]);
   useEffect(() => localStorage.setItem('cube_numBoxes', numBoxes.toString()), [numBoxes]);
   useEffect(() => localStorage.setItem('cube_cardWidth', cardWidth.toString()), [cardWidth]);
+  useEffect(() => localStorage.setItem('cube_viewMode', viewMode), [viewMode]);
+  useEffect(() => localStorage.setItem('cube_gameTypeFilter', gameTypeFilter), [gameTypeFilter]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -182,6 +188,11 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     // Validate inputs
     if (sourceMode === 'set' && selectedSets.length === 0) return;
     if (sourceMode === 'upload' && !inputText) return;
+
+    if (sourceMode === 'set' && numBoxes > 10) {
+      showToast("Maximum limit is 10 Boxes (360 Packs) to avoid instability.", "error");
+      return;
+    }
 
     setLoading(true);
     setPacks([]); // Clear old packs to avoid confusion
@@ -427,11 +438,15 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       setInputText('');
       setRawScryfallData(null);
       setProcessedData(null);
-      setProcessedData(null);
+      setAvailableLands([]);
       setSelectedSets([]);
       localStorage.removeItem('cube_inputText');
       localStorage.removeItem('cube_rawScryfallData');
       localStorage.removeItem('cube_selectedSets');
+      localStorage.removeItem('cube_viewMode');
+      localStorage.removeItem('cube_gameTypeFilter');
+      setViewMode('list');
+      setGameTypeFilter('all');
       // We keep filters and settings as they are user preferences
     }
   };
@@ -686,7 +701,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                     <input
                       type="number"
                       min={1}
-                      max={20}
+                      max={10}
                       value={numBoxes}
                       onChange={(e) => setNumBoxes(parseInt(e.target.value))}
                       className="w-16 bg-slate-700 border-none rounded p-1 text-center text-white font-mono"
