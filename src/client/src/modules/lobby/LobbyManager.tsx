@@ -7,9 +7,10 @@ import { Users, PlusCircle, LogIn, AlertCircle, Loader2 } from 'lucide-react';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
+  availableLands: any[]; // DraftCard[]
 }
 
-export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) => {
+export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, availableLands = [] }) => {
   const [activeRoom, setActiveRoom] = useState<any>(null);
   const [playerName, setPlayerName] = useState(() => localStorage.getItem('player_name') || '');
   const [joinRoomId, setJoinRoomId] = useState('');
@@ -51,14 +52,17 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
     connect();
 
     try {
-      // Collect all cards
+      // Collect all cards for caching (packs + basic lands)
       const allCards = generatedPacks.flatMap(p => p.cards);
+      const allCardsAndLands = [...allCards, ...availableLands];
+
       // Deduplicate by Scryfall ID
-      const uniqueCards = Array.from(new Map(allCards.map(c => [c.scryfallId, c])).values());
+      const uniqueCards = Array.from(new Map(allCardsAndLands.map(c => [c.scryfallId, c])).values());
 
       // Prepare payload for server (generic structure expected by CardService)
       const cardsToCache = uniqueCards.map(c => ({
         id: c.scryfallId,
+        set: c.setCode, // Required for folder organization
         image_uris: { normal: c.image }
       }));
 
@@ -76,7 +80,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
       const cacheResult = await cacheResponse.json();
       console.log('Cached result:', cacheResult);
 
-      // Transform packs to use local URLs
+      // Transform packs and lands to use local URLs
       // Note: For multiplayer, clients need to access this URL.
       const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
 
@@ -85,14 +89,20 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks }) =>
         cards: pack.cards.map(c => ({
           ...c,
           // Update the single image property used by DraftCard
-          image: `${baseUrl}/${c.scryfallId}.jpg`
+          image: `${baseUrl}/${c.setCode}/${c.scryfallId}.jpg`
         }))
+      }));
+
+      const updatedBasicLands = availableLands.map(l => ({
+        ...l,
+        image: `${baseUrl}/${l.setCode}/${l.scryfallId}.jpg`
       }));
 
       const response = await socketService.emitPromise('create_room', {
         hostId: playerId,
         hostName: playerName,
-        packs: updatedPacks
+        packs: updatedPacks,
+        basicLands: updatedBasicLands
       });
 
       if (response.success) {

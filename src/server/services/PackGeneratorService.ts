@@ -15,6 +15,8 @@ export interface DraftCard {
   setCode: string;
   setType: string;
   finish?: 'foil' | 'normal';
+  oracleText?: string;
+  manaCost?: string;
   [key: string]: any; // Allow extended props
 }
 
@@ -102,6 +104,8 @@ export class PackGeneratorService {
         setCode: cardData.set,
         setType: setType,
         finish: cardData.finish || 'normal',
+        oracleText: cardData.oracle_text || cardData.card_faces?.[0]?.oracle_text || '',
+        manaCost: cardData.mana_cost || cardData.card_faces?.[0]?.mana_cost || '',
       };
 
       // Add to pools

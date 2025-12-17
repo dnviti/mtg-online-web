@@ -12,6 +12,9 @@ interface CardInstance {
   position: { x: number; y: number; z: number }; // For freeform placement
   counters: { type: string; count: number }[];
   ptModification: { power: number; toughness: number };
+  typeLine?: string;
+  oracleText?: string;
+  manaCost?: string;
 }
 
 interface PlayerState {

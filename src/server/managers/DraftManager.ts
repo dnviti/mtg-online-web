@@ -190,7 +190,8 @@ export class DraftManager extends EventEmitter {
         }
       } else if (draft.status === 'deck_building') {
         // Check global deck building timer (e.g., 120 seconds)
-        const DECK_BUILDING_Duration = 120000;
+        // Disabling timeout as per request. Set to ~11.5 days.
+        const DECK_BUILDING_Duration = 999999999;
         if (draft.startTime && (now > draft.startTime + DECK_BUILDING_Duration)) {
           draft.status = 'complete'; // Signal that time is up
           updates.push({ roomId, draft });

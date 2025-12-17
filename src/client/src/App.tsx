@@ -23,6 +23,16 @@ export const App: React.FC = () => {
     }
   });
 
+  const [availableLands, setAvailableLands] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('availableLands');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("Failed to load lands from storage", e);
+      return [];
+    }
+  });
+
   React.useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
@@ -34,6 +44,14 @@ export const App: React.FC = () => {
       console.error("Failed to save packs to storage", e);
     }
   }, [generatedPacks]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('availableLands', JSON.stringify(availableLands));
+    } catch (e) {
+      console.error("Failed to save lands to storage", e);
+    }
+  }, [availableLands]);
 
   return (
     <ToastProvider>
@@ -82,10 +100,11 @@ export const App: React.FC = () => {
             <CubeManager
               packs={generatedPacks}
               setPacks={setGeneratedPacks}
+              setAvailableLands={setAvailableLands}
               onGoToLobby={() => setActiveTab('lobby')}
             />
           )}
-          {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} />}
+          {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
           {activeTab === 'tester' && <DeckTester />}
           {activeTab === 'bracket' && <TournamentManager />}
         </main>

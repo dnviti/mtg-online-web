@@ -6,10 +6,12 @@ interface CardComponentProps {
   onDragStart: (e: React.DragEvent, cardId: string) => void;
   onClick: (cardId: string) => void;
   onContextMenu?: (cardId: string, e: React.MouseEvent) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   style?: React.CSSProperties;
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, style }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, style }) => {
   return (
     <div
       draggable
@@ -21,6 +23,8 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
           onContextMenu(card.instanceId, e);
         }
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={`
         relative rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 select-none
         ${card.tapped ? 'rotate-90' : ''}

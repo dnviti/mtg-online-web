@@ -21,6 +21,7 @@ interface Room {
   hostId: string;
   players: Player[];
   packs: any[]; // Store generated packs (JSON)
+  basicLands?: any[];
   status: 'waiting' | 'drafting' | 'deck_building' | 'playing' | 'finished';
   messages: ChatMessage[];
   maxPlayers: number;
@@ -29,13 +30,14 @@ interface Room {
 export class RoomManager {
   private rooms: Map<string, Room> = new Map();
 
-  createRoom(hostId: string, hostName: string, packs: any[], socketId?: string): Room {
+  createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string): Room {
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const room: Room = {
       id: roomId,
       hostId,
       players: [{ id: hostId, name: hostName, isHost: true, role: 'player', ready: false, socketId, isOffline: false }],
       packs,
+      basicLands,
       status: 'waiting',
       messages: [],
       maxPlayers: 8

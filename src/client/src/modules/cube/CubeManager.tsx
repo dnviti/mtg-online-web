@@ -7,13 +7,15 @@ import { PackCard } from '../../components/PackCard';
 interface CubeManagerProps {
   packs: Pack[];
   setPacks: React.Dispatch<React.SetStateAction<Pack[]>>;
+  setAvailableLands: React.Dispatch<React.SetStateAction<any[]>>;
   onGoToLobby: () => void;
 }
 
 import { useToast } from '../../components/Toast';
 
-export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoToLobby }) => {
+export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, setAvailableLands, onGoToLobby }) => {
   const { showToast } = useToast();
+
   // --- Services ---
   // Memoize services to persist cache across renders
   const generatorService = React.useMemo(() => new PackGeneratorService(), []);
@@ -251,12 +253,23 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         throw new Error(err.error || "Generation failed");
       }
 
-      const newPacks: Pack[] = await response.json();
+      const data = await response.json();
+
+      let newPacks: Pack[] = [];
+      let newLands: any[] = [];
+
+      if (Array.isArray(data)) {
+        newPacks = data;
+      } else {
+        newPacks = data.packs;
+        newLands = data.basicLands || [];
+      }
 
       if (newPacks.length === 0) {
         alert(`No packs generated. Check your card pool settings.`);
       } else {
         setPacks(newPacks);
+        setAvailableLands(newLands);
       }
     } catch (err: any) {
       console.error("Process failed", err);

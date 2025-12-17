@@ -1,4 +1,4 @@
-
+ 
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
 import { Users, MessageSquare, Send, Play, Copy, Check, Layers, LogOut } from 'lucide-react';
@@ -26,6 +26,7 @@ interface Room {
   id: string;
   hostId: string;
   players: Player[];
+  basicLands?: any[];
   status: string;
   messages: ChatMessage[];
 }
@@ -205,7 +206,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       }
 
       const myPool = draftState.players[currentPlayerId]?.pool || [];
-      return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} />;
+      return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} availableBasicLands={room.basicLands} />;
     }
 
     return (

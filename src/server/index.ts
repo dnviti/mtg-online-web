@@ -151,8 +151,20 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
 
     const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters);
 
+    // Extract available basic lands for deck building
+    const basicLands = pools.lands.filter(c => c.typeLine?.includes('Basic'));
+    // Deduplicate by Scryfall ID to get unique arts
+    const uniqueBasicLands: any[] = [];
+    const seenLandIds = new Set();
+    for (const land of basicLands) {
+      if (!seenLandIds.has(land.scryfallId)) {
+        seenLandIds.add(land.scryfallId);
+        uniqueBasicLands.push(land);
+      }
+    }
+
     const packs = packGeneratorService.generatePacks(pools, sets, settings, numPacks || 108);
-    res.json(packs);
+    res.json({ packs, basicLands: uniqueBasicLands });
   } catch (e: any) {
     console.error("Generation error", e);
     res.status(500).json({ error: e.message });
@@ -195,7 +207,10 @@ const draftInterval = setInterval(() => {
                 oracleId: card.oracle_id || card.id,
                 name: card.name,
                 imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-                zone: 'library'
+                zone: 'library',
+                typeLine: card.typeLine || card.type_line || '',
+                oracleText: card.oracleText || card.oracle_text || '',
+                manaCost: card.manaCost || card.mana_cost || ''
               });
             });
           }
@@ -213,8 +228,8 @@ io.on('connection', (socket) => {
   // Timer management
   // Timer management removed (Global loop handled)
 
-  socket.on('create_room', ({ hostId, hostName, packs }, callback) => {
-    const room = roomManager.createRoom(hostId, hostName, packs, socket.id); // Add socket.id
+  socket.on('create_room', ({ hostId, hostName, packs, basicLands }, callback) => {
+    const room = roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id);
     socket.join(room.id);
     console.log(`Room created: ${room.id} by ${hostName}`);
     callback({ success: true, room });
@@ -404,7 +419,10 @@ io.on('connection', (socket) => {
                 oracleId: card.oracle_id || card.id,
                 name: card.name,
                 imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-                zone: 'library'
+                zone: 'library',
+                typeLine: card.typeLine || card.type_line || '',
+                oracleText: card.oracleText || card.oracle_text || '',
+                manaCost: card.manaCost || card.mana_cost || ''
               });
             });
           }
@@ -428,7 +446,10 @@ io.on('connection', (socket) => {
           oracleId: card.id,
           name: card.name,
           imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-          zone: 'library'
+          zone: 'library',
+          typeLine: card.typeLine || card.type_line || '',
+          oracleText: card.oracleText || card.oracle_text || '',
+          manaCost: card.manaCost || card.mana_cost || ''
         });
       });
     }
@@ -456,7 +477,10 @@ io.on('connection', (socket) => {
               oracleId: card.oracle_id || card.id,
               name: card.name,
               imageUrl: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-              zone: 'library'
+              zone: 'library',
+              typeLine: card.typeLine || card.type_line || '',
+              oracleText: card.oracleText || card.oracle_text || '',
+              manaCost: card.manaCost || card.mana_cost || ''
             });
           });
         });

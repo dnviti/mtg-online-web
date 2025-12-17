@@ -78,3 +78,7 @@
 - [Stack View Consistency Fix](./devlog/2025-12-17-143000_stack_view_consistency.md): Completed. Removed transparent overrides for Stack View, ensuring it renders with the standard unified container graphic.
 - [Dynamic Pack Grid Layout](./devlog/2025-12-17-144000_dynamic_pack_grid.md): Completed. Implemented responsive CSS grid with `minmax(550px, 1fr)` for Stack/Grid views to auto-fit packs based on screen width without explicit column limits.
 - [Fix Socket Payload Limit](./devlog/2025-12-17-152700_fix_socket_payload_limit.md): Completed. Increased Socket.IO `maxHttpBufferSize` to 300MB to support massive drafting payloads.
+- [Basic Lands Handling](./devlog/2025-12-17-153300_basic_lands_handling.md): Completed. Implemented flow to cache and provide set-specific basic lands for infinite use during deck building.
+- [Land Advice & Unlimited Time](./devlog/2025-12-17-155500_land_advice_and_unlimited_time.md): Completed. Implemented land suggestion algorithm and disabled deck builder timer.
+- [Deck Builder Magnified View](./devlog/2025-12-17-160500_deck_builder_magnified_view.md): Completed. Added magnified card preview sidebar to deck builder.
+- [Gameplay Magnified View & Timeout](./devlog/2025-12-17-161500_gameplay_magnified_view_and_timeout.md): Completed. Added magnified view with full card details (Oracle text, type, mana) to gameplay and disabled timeout.
