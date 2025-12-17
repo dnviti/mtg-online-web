@@ -85,7 +85,38 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   }, [deck]);
 
   const applySuggestion = () => {
-    if (landSuggestion) {
+    if (!landSuggestion) return;
+
+    // Check if we have available basic lands to add as real cards
+    if (availableBasicLands && availableBasicLands.length > 0) {
+      const newLands: any[] = [];
+
+      Object.entries(landSuggestion).forEach(([type, count]) => {
+        if (count <= 0) return;
+
+        // Find matching land in availableBasicLands
+        // We look for strict name match first, then potential fallback (e.g. snow lands)
+        const landCard = availableBasicLands.find(l => l.name === type) ||
+          availableBasicLands.find(l => l.name.includes(type));
+
+        if (landCard) {
+          for (let i = 0; i < count; i++) {
+            const newLand = {
+              ...landCard,
+              // Ensure unique ID with index
+              id: `land-${landCard.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`,
+              image_uris: landCard.image_uris || { normal: landCard.image }
+            };
+            newLands.push(newLand);
+          }
+        }
+      });
+
+      if (newLands.length > 0) {
+        setDeck(prev => [...prev, ...newLands]);
+      }
+    } else {
+      // Fallback: If no basic lands loaded (counter mode), use the old counter logic
       setLands(landSuggestion);
     }
   };

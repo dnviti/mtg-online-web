@@ -83,3 +83,4 @@
 - [Deck Builder Magnified View](./devlog/2025-12-17-160500_deck_builder_magnified_view.md): Completed. Added magnified card preview sidebar to deck builder.
 - [Gameplay Magnified View & Timeout](./devlog/2025-12-17-161500_gameplay_magnified_view_and_timeout.md): Completed. Added magnified view with full card details (Oracle text, type, mana) to gameplay and disabled timeout.
 - [Test Deck Feature](./devlog/2025-12-17-162500_test_deck_feature.md): Completed. Implemented "Test Solo" button in Cube Manager to instantly start a solo game with a randomized deck from generated packs.
+- [Update Deck Auto-Fill](./devlog/2025-12-17-165500_update_deck_autofill.md): Completed. Updated deck builder "Auto-Fill" to add lands as individual cards to the deck list for easier management.
