@@ -287,17 +287,18 @@ export class PackGeneratorService {
     const packCards: DraftCard[] = [];
     const namesInPack = new Set<string>();
 
+    // Standard: 14 cards exactly. Peasant: 13 cards exactly.
+    const targetSize = rarityMode === 'peasant' ? 13 : 14;
+
     // 1. Commons (6)
     const drawC = this.drawUniqueCards(pools.commons, 6, namesInPack);
-    if (!drawC.success && pools.commons.length < 6) return null; // Hard fail if really empty
-    // Accept partial if just duplication is unavoidable? 
-    // "Strict" mode would return null. Let's be lenient but log?
-    packCards.push(...drawC.selected);
-    pools.commons = drawC.remainingPool; // Update ref
-    drawC.selected.forEach(c => namesInPack.add(c.name));
+    if (drawC.selected.length > 0) {
+      packCards.push(...drawC.selected);
+      pools.commons = drawC.remainingPool; // Update ref
+      drawC.selected.forEach(c => namesInPack.add(c.name));
+    }
 
     // 2. Slot 7 (Common or List)
-    // Quick implementation of logic from memo
     let slot7: DraftCard | undefined;
     const roll7 = Math.random() * 100;
     if (roll7 < 87) {
@@ -305,14 +306,10 @@ export class PackGeneratorService {
       const r = this.drawUniqueCards(pools.commons, 1, namesInPack);
       if (r.selected.length) { slot7 = r.selected[0]; pools.commons = r.remainingPool; }
     } else {
-      // Uncommon/List (Simplification: pick uncommon)
+      // Uncommon/List
+      // Strict Mode: If List/Uncommon unavailable, DO NOT fallback to Common.
       const r = this.drawUniqueCards(pools.uncommons, 1, namesInPack);
       if (r.selected.length) { slot7 = r.selected[0]; pools.uncommons = r.remainingPool; }
-      else {
-        // Fallback to common
-        const rc = this.drawUniqueCards(pools.commons, 1, namesInPack);
-        if (rc.selected.length) { slot7 = rc.selected[0]; pools.commons = rc.remainingPool; }
-      }
     }
     if (slot7) { packCards.push(slot7); namesInPack.add(slot7.name); }
 
@@ -320,9 +317,11 @@ export class PackGeneratorService {
     // Memo says: PEASANT slots 8-11 (4 uncommons). STANDARD slots 8-10 (3 uncommons).
     const uNeeded = rarityMode === 'peasant' ? 4 : 3;
     const drawU = this.drawUniqueCards(pools.uncommons, uNeeded, namesInPack);
-    packCards.push(...drawU.selected);
-    pools.uncommons = drawU.remainingPool;
-    drawU.selected.forEach(c => namesInPack.add(c.name));
+    if (drawU.selected.length > 0) {
+      packCards.push(...drawU.selected);
+      pools.uncommons = drawU.remainingPool;
+      drawU.selected.forEach(c => namesInPack.add(c.name));
+    }
 
     // 4. Rare/Mythic (Standard Only)
     if (rarityMode === 'standard') {
@@ -363,22 +362,27 @@ export class PackGeneratorService {
     }
 
     // 6. Wildcards (2 slots) + Foil Wildcard
-
-    // Re-implement Wildcard simply:
     for (let i = 0; i < 2; i++) {
       const isFoil = i === 1; // 2nd is foil
       const wRoll = Math.random() * 100;
       let targetPool = pools.commons;
       let targetKey: keyof ProcessedPools = 'commons';
 
-      if (wRoll > 87) { targetPool = pools.mythics; targetKey = 'mythics'; }
-      else if (wRoll > 74) { targetPool = pools.rares; targetKey = 'rares'; }
-      else if (wRoll > 50) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
-
-      if (targetPool.length === 0) {
-        targetPool = pools.commons;
-        targetKey = 'commons';
+      if (rarityMode === 'peasant') {
+        // Peasant Wildcard: Strictly Common or Uncommon. No Rare/Mythic.
+        // Adjusted probability: 40% Uncommon, 60% Common (arbitrary but peasant-friendly)
+        if (wRoll > 60) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
+        else { targetPool = pools.commons; targetKey = 'commons'; }
+      } else {
+        // Standard Wildcard: Can be anything.
+        if (wRoll > 87) { targetPool = pools.mythics; targetKey = 'mythics'; }
+        else if (wRoll > 74) { targetPool = pools.rares; targetKey = 'rares'; }
+        else if (wRoll > 50) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
       }
+
+      // Strict Mode: NO Fallback if target pool empty.
+      // If targetPool is empty, we simply cannot fill this wildcard slot with the selected rarity.
+      // The slot remains empty, potentially causing valid pack failure.
 
       const res = this.drawUniqueCards(targetPool, 1, namesInPack);
       if (res.selected.length) {
@@ -414,10 +418,19 @@ export class PackGeneratorService {
 
     packCards.sort((a, b) => getWeight(b) - getWeight(a));
 
+    // ENFORCE SIZE STRICTLY
+    // Truncate to target size (ignoring exceeding tokens/extra)
+    const finalCards = packCards.slice(0, targetSize);
+
+    // Strict Validation: If we don't have enough cards, FAIL.
+    if (finalCards.length < targetSize) {
+      return null;
+    }
+
     return {
       id: packId,
       setName: setName,
-      cards: packCards
+      cards: finalCards
     };
   }
 

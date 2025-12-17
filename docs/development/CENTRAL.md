@@ -66,3 +66,4 @@
 - [Fix Expansion Generation Limit](./devlog/2025-12-17-024500_fix_expansion_generation_limit.md): Completed. Implemented "Unlimited Pool" mode for expansion drafts to allow generating large numbers of packs from singleton set data.
 - [Change Default Filter Flags](./devlog/2025-12-17-025500_change_default_flags.md): Completed. Updated client and server defaults for "Ignore Basic Lands", "Ignore Commander Sets", and "Ignore Tokens" to be unchecked (false).
 - [Sidebar Max Width](./devlog/2025-12-17-031000_sidebar_max_width.md): Completed. Constrained the left sidebar in Cube Manager to a maximum width of 400px on large screens to improve layout balance.
+- [Strict Pack Generation Logic](./devlog/2025-12-17-030600_fix_strict_pack_generation.md): Succeeded. Enforced strict 14-card (Standard) and 13-card (Peasant) limits, removing fallback logic to prevent invalid pack generation.
