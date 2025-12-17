@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { LogOut } from 'lucide-react';
+import { LogOut, Columns, LayoutTemplate } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { FoilOverlay } from '../../components/CardPreview';
 import { useCardTouch } from '../../utils/interaction';
@@ -54,6 +54,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     return saved ? parseFloat(saved) : 0.7;
   });
 
+  const [layout, setLayout] = useState<'vertical' | 'horizontal'>('horizontal');
   const [isResizing, setIsResizing] = useState(false);
 
   // Persist settings
@@ -126,6 +127,24 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                 Pack {draftState.packNumber}
               </h2>
               <span className="text-sm text-slate-400 font-medium">Pick {pickedCards.length % 15 + 1}</span>
+            </div>
+
+            {/* Layout Switcher */}
+            <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 h-10 items-center">
+              <button
+                onClick={() => setLayout('vertical')}
+                className={`p-1.5 rounded ${layout === 'vertical' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`}
+                title="Vertical Split"
+              >
+                <Columns className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setLayout('horizontal')}
+                className={`p-1.5 rounded ${layout === 'horizontal' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`}
+                title="Horizontal Split"
+              >
+                <LayoutTemplate className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Card Scalar */}
@@ -225,69 +244,120 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
           </div>
         </div>
 
-        {/* Main Area: Current Pack OR Waiting State */}
-        <div className="flex-1 overflow-y-auto p-4 z-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          {!activePack ? (
-            <div className="flex flex-col items-center justify-center min-h-full pb-10 fade-in animate-in duration-500">
-              <div className="w-24 h-24 mb-6 relative">
-                <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
-                <div className="absolute inset-0 rounded-full border-4 border-t-emerald-500 animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <LogOut className="w-8 h-8 text-emerald-500 rotate-180" /> {/* Just a placeholder icon or similar */}
+        {/* Main Content Area: Handles both Pack and Pool based on layout */}
+        {layout === 'vertical' ? (
+          <div className="flex-1 flex min-w-0">
+            {/* Left: Pack */}
+            <div className="flex-1 overflow-y-auto p-4 z-0 custom-scrollbar border-r border-slate-800">
+              {!activePack ? (
+                <div className="flex flex-col items-center justify-center min-h-full pb-10 fade-in animate-in duration-500">
+                  <div className="w-24 h-24 mb-6 relative">
+                    <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                    <div className="absolute inset-0 rounded-full border-t-4 border-emerald-500 animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <LogOut className="w-8 h-8 text-emerald-500 rotate-180" />
+                    </div>
+                  </div>
+                  <h2 className="text-3xl font-bold text-white mb-2">Waiting...</h2>
+                  <p className="text-slate-400">Your neighbor is picking.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center min-h-full pb-10">
+                  <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
+                  <div className="flex flex-wrap justify-center gap-6">
+                    {activePack.cards.map((rawCard: any) => (
+                      <DraftCardItem
+                        key={rawCard.id}
+                        rawCard={rawCard}
+                        cardScale={cardScale}
+                        handlePick={handlePick}
+                        setHoveredCard={setHoveredCard}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Pool (Vertical Column) */}
+            <div className="flex-1 bg-slate-900/50 flex flex-col min-w-0 border-l border-slate-800">
+              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/80">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Your Pool ({pickedCards.length})
+                </h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                <div className="flex flex-wrap gap-4 content-start">
+                  {pickedCards.map((card: any, idx: number) => (
+                    <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} vertical={true} />
+                  ))}
                 </div>
               </div>
-              <h2 className="text-3xl font-bold text-white mb-2">Waiting for next pack...</h2>
-              <p className="text-slate-400">Your neighbor is selecting a card.</p>
-              <div className="mt-8 flex gap-2">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce"></div>
-              </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center min-h-full pb-10">
-              <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
-              <div className="flex flex-wrap justify-center gap-6 [perspective:1000px]">
-                {activePack.cards.map((rawCard: any) => (
-                  <DraftCardItem
-                    key={rawCard.id}
-                    rawCard={rawCard}
-                    cardScale={cardScale}
-                    handlePick={handlePick}
-                    setHoveredCard={setHoveredCard}
-                  />
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Top: Pack */}
+            <div className="flex-1 overflow-y-auto p-4 z-0 custom-scrollbar">
+              {!activePack ? (
+                <div className="flex flex-col items-center justify-center min-h-full pb-10 fade-in animate-in duration-500">
+                  <div className="w-24 h-24 mb-6 relative">
+                    <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                    <div className="absolute inset-0 rounded-full border-t-4 border-emerald-500 animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <LogOut className="w-8 h-8 text-emerald-500 rotate-180" />
+                    </div>
+                  </div>
+                  <h2 className="text-3xl font-bold text-white mb-2">Waiting...</h2>
+                  <p className="text-slate-400">Your neighbor is picking.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center min-h-full pb-10">
+                  <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
+                  <div className="flex flex-wrap justify-center gap-6">
+                    {activePack.cards.map((rawCard: any) => (
+                      <DraftCardItem
+                        key={rawCard.id}
+                        rawCard={rawCard}
+                        cardScale={cardScale}
+                        handlePick={handlePick}
+                        setHoveredCard={setHoveredCard}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Resize Handle */}
+            <div
+              className="h-1 bg-slate-800 hover:bg-emerald-500 cursor-row-resize z-30 transition-colors w-full flex items-center justify-center shrink-0"
+              onMouseDown={startResizing}
+            >
+              <div className="w-16 h-1 bg-slate-600 rounded-full"></div>
+            </div>
+
+            {/* Bottom: Pool (Horizontal Strip) */}
+            <div
+              className="shrink-0 bg-slate-900/90 backdrop-blur-md flex flex-col z-20 shadow-[-10px_-10px_30px_rgba(0,0,0,0.3)] transition-all ease-out duration-75 border-t border-slate-800"
+              style={{ height: `${poolHeight}px` }}
+            >
+              <div className="px-6 py-2 flex items-center justify-between shrink-0">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Your Pool ({pickedCards.length})
+                </h3>
+              </div>
+              <div className="flex-1 overflow-x-auto flex items-center gap-2 px-6 pb-4 custom-scrollbar">
+                {pickedCards.map((card: any, idx: number) => (
+                  <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} />
                 ))}
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-      </div>
-
-      {/* Resize Handle */}
-      <div
-        className="h-1 bg-slate-800 hover:bg-emerald-500 cursor-row-resize z-30 transition-colors w-full flex items-center justify-center shrink-0"
-        onMouseDown={startResizing}
-      >
-        <div className="w-16 h-1 bg-slate-600 rounded-full"></div>
-      </div>
-
-      {/* Bottom Area: Drafted Pool Preview */}
-      <div
-        className="shrink-0 bg-gradient-to-t from-slate-950 to-slate-900/90 backdrop-blur-md flex flex-col z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-all ease-out duration-75"
-        style={{ height: `${poolHeight}px` }}
-      >
-        <div className="px-6 py-2 flex items-center justify-between shrink-0">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            Your Pool ({pickedCards.length})
-          </h3>
-        </div>
-        <div className="flex-1 overflow-x-auto flex items-center gap-2 px-6 pb-4 custom-scrollbar">
-          {pickedCards.map((card: any, idx: number) => (
-            <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} />
-          ))}
-        </div>
       </div>
       <Modal
         isOpen={confirmExitOpen}
@@ -335,12 +405,12 @@ const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) 
   );
 };
 
-const PoolCardItem = ({ card, setHoveredCard }: any) => {
+const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => { }, card);
 
   return (
     <div
-      className="relative group shrink-0 transition-all h-full flex items-center"
+      className={`relative group shrink-0 transition-all flex items-center cursor-pointer ${vertical ? 'w-24 h-32' : 'h-full'}`}
       onMouseEnter={() => setHoveredCard(card)}
       onMouseLeave={() => setHoveredCard(null)}
       onTouchStart={onTouchStart}
@@ -351,7 +421,7 @@ const PoolCardItem = ({ card, setHoveredCard }: any) => {
       <img
         src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
         alt={card.name}
-        className="h-[90%] w-auto rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all object-contain"
+        className={`${vertical ? 'w-full h-full object-cover' : 'h-[90%] w-auto object-contain'} rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all`}
       />
     </div>
   )

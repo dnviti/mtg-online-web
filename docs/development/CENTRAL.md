@@ -88,3 +88,4 @@
 - [2025-12-17-183500_draft_ui_upgrade](./devlog/2025-12-17-183500_draft_ui_upgrade.md): Completed. Implemented 3D flip preview and consistent foil rendering in Draft View.
 - [2025-12-17-184000_fix_draft_pool_ui](./devlog/2025-12-17-184000_fix_draft_pool_ui.md): Completed. Fixed "Your Pool" resizing bugs and removed unwanted hover animation.
 - [Customizable Deck Builder Layout](./devlog/2025-12-17-170000_customizable_deck_builder.md): Completed. Implemented switchable Vertical (Side-by-Side) and Horizontal (Top-Bottom) layouts, with an integrated, improved Land Station.
+- [Draft View Layout Selection](./devlog/2025-12-17-185000_draft_view_layout.md): Completed. Implemented Vertical/Horizontal layout selection for Draft View to match Deck Builder, optimizing screen space and preventing overlap.
