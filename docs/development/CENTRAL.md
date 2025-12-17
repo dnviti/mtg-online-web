@@ -54,3 +54,4 @@
 - [Mobile Touch Interaction](./devlog/2025-12-17-021000_mobile_touch_fix.md): Completed. Updated long-press logic to persist preview during finger movement, closing only on release.
 - [Entrance Animation Fix](./devlog/2025-12-17-021500_entrance_animation_fix.md): Completed. Implemented 'isMounted' state to ensuring scale-in animation triggers correctly on first render.
 - [Foil Bug Fix](./devlog/2025-12-17-022000_foil_bug_fix.md): Completed. Fixed regression where foil animations applied to non-foil cards on desktop.
+- [Universal Foil Application](./devlog/2025-12-17-022500_universal_foil_application.md): Completed. Applied foil animation to Grid View and Stack View card thumbnails.

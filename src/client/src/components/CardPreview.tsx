@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
 
 // --- Floating Preview Component ---
-const FoilOverlay = () => (
+export const FoilOverlay = () => (
   <div className="absolute inset-0 z-20 pointer-events-none rounded-xl overflow-hidden">
     {/* CSS-based Holographic Pattern */}
     <div className="absolute inset-0 foil-holo" />

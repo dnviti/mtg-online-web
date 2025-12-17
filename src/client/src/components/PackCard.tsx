@@ -8,7 +8,7 @@ interface PackCardProps {
   viewMode: 'list' | 'grid' | 'stack';
 }
 
-import { CardHoverWrapper } from './CardPreview';
+import { CardHoverWrapper, FoilOverlay } from './CardPreview';
 
 
 const ListItem: React.FC<{ card: DraftCard }> = ({ card }) => {
@@ -103,7 +103,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode }) => {
                 <div className="relative group bg-slate-900 rounded-lg">
                   {/* Visual Card */}
                   <div className={`relative aspect-[2.5/3.5] overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
-                    {isFoil(card) && <div className="absolute inset-0 z-20 bg-gradient-to-tr from-purple-500/10 via-transparent to-pink-500/10 mix-blend-color-dodge pointer-events-none" />}
+                    {isFoil(card) && <FoilOverlay />}
                     {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
 
                     {card.image ? (

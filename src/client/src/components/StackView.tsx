@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { DraftCard } from '../services/PackGeneratorService';
-import { CardHoverWrapper } from './CardPreview';
+import { CardHoverWrapper, FoilOverlay } from './CardPreview';
 
 interface StackViewProps {
   cards: DraftCard[];
@@ -86,7 +86,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards }) => {
                     >
                       <img src={card.image} alt={card.name} className="w-full h-full object-cover" />
                       {/* Optional: Shine effect for foils if visible? */}
-                      {card.finish === 'foil' && <div className="absolute inset-0 bg-white/10 opacity-30 pointer-events-none" />}
+                      {card.finish === 'foil' && <FoilOverlay />}
                     </div>
                   </CardHoverWrapper>
                 )
