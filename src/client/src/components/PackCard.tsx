@@ -57,9 +57,9 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
   };
 
   return (
-    <div className={`bg-slate-800 rounded-xl border border-slate-700 shadow-lg flex flex-col ${viewMode === 'stack' ? 'bg-transparent border-none shadow-none' : ''}`}>
+    <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg flex flex-col">
       {/* Header */}
-      <div className={`p-3 bg-slate-900 border-b border-slate-700 flex justify-between items-center rounded-t-xl ${viewMode === 'stack' ? 'bg-slate-800 border border-slate-700 mb-4 rounded-xl' : ''}`}>
+      <div className="p-3 bg-slate-900 border-b border-slate-700 flex justify-between items-center rounded-t-xl">
         <div className="flex flex-col">
           <h3 className="font-bold text-purple-400 text-sm md:text-base">Pack #{pack.id}</h3>
           <span className="text-xs text-slate-500 font-mono">{pack.setName}</span>
@@ -74,7 +74,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
       </div>
 
       {/* Content */}
-      <div className={`${viewMode !== 'stack' ? 'p-4' : ''}`}>
+      <div className="p-4 overflow-x-auto">
         {viewMode === 'list' && (
           <div className="text-sm space-y-4">
             {(mythics.length > 0 || rares.length > 0) && (

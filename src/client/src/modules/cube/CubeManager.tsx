@@ -175,27 +175,30 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
 
 
 
-  const fetchAndParse = async () => {
+  const handleGenerate = async () => {
+    // Validate inputs
+    if (sourceMode === 'set' && selectedSets.length === 0) return;
+    if (sourceMode === 'upload' && !inputText) return;
+
     setLoading(true);
-    setPacks([]);
-    setProgress(sourceMode === 'set' ? 'Fetching set data...' : 'Parsing text...');
+    setPacks([]); // Clear old packs to avoid confusion
 
     try {
-      let expandedCards: ScryfallCard[] = [];
+      // --- Step 1: Fetch/Parse ---
+      let currentCards: ScryfallCard[] = [];
+
+      setProgress(sourceMode === 'set' ? 'Fetching set data...' : 'Parsing text...');
 
       if (sourceMode === 'set') {
-        if (selectedSets.length === 0) throw new Error("Please select at least one set.");
-
-        // We fetch set by set to show progress
+        // Fetch set by set
         for (const [index, setCode] of selectedSets.entries()) {
           setProgress(`Fetching set ${setCode.toUpperCase()} (${index + 1}/${selectedSets.length})...`);
-
           const response = await fetch(`/api/sets/${setCode}/cards`);
           if (!response.ok) throw new Error(`Failed to fetch set ${setCode}`);
-
           const cards: ScryfallCard[] = await response.json();
-          expandedCards.push(...cards);
+          currentCards.push(...cards);
         }
+
       } else {
         // Parse Text
         setProgress('Parsing and fetching from server...');
@@ -210,36 +213,18 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
           throw new Error(err.error || "Failed to parse cards");
         }
 
-        expandedCards = await response.json();
+        currentCards = await response.json();
+
       }
 
-      setRawScryfallData(expandedCards);
-      setLoading(false);
-      setProgress('');
+      // Update local state for UI preview/stats
+      setRawScryfallData(currentCards);
 
-    } catch (err: any) {
-      console.error(err);
-      alert(err.message || "Error during process.");
-      setLoading(false);
-    }
-  };
+      // --- Step 2: Generate ---
+      setProgress('Generating packs on server...');
 
-  const generatePacks = async () => {
-    // if (!processedData) return; // Logic moved to server, but we still use processedData for UI check
-    if (!rawScryfallData || rawScryfallData.length === 0) {
-      if (sourceMode === 'set' && selectedSets.length > 0) {
-        // Allowed to proceed if sets selected (server fetches)
-      } else {
-        return;
-      }
-    }
-
-    setLoading(true);
-    setProgress('Generating packs on server...');
-
-    try {
       const payload = {
-        cards: sourceMode === 'upload' ? rawScryfallData : [],
+        cards: sourceMode === 'upload' ? currentCards : [], // For set mode, we let server refetch or handle it
         sourceMode,
         selectedSets,
         settings: {
@@ -251,7 +236,6 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
         filters
       };
 
-      // Use fetch from server logic
       if (sourceMode === 'set') {
         payload.cards = [];
       }
@@ -274,9 +258,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
       } else {
         setPacks(newPacks);
       }
-    } catch (e: any) {
-      console.error("Generation failed", e);
-      alert("Error generating packs: " + e.message);
+    } catch (err: any) {
+      console.error("Process failed", err);
+      alert(err.message || "Error during process.");
     } finally {
       setLoading(false);
       setProgress('');
@@ -434,13 +418,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                 disabled={loading}
               />
 
-              <button
-                onClick={fetchAndParse}
-                disabled={loading || !inputText}
-                className={`w-full py-2 mb-4 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${loading ? 'bg-slate-700 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}
-              >
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}</> : <><Check className="w-4 h-4" /> 1. Parse Bulk</>}
-              </button>
+              {/* Parse Button Removed per request */}
             </>
           ) : (
             <>
@@ -559,34 +537,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-slate-300 mb-2">Quantity</label>
-                <div className="flex items-center gap-2 bg-slate-900 p-2 rounded-lg border border-slate-700">
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={numBoxes}
-                    onChange={(e) => setNumBoxes(parseInt(e.target.value))}
-                    className="w-16 bg-slate-800 border-none rounded p-1 text-center text-white font-mono"
-                    disabled={loading}
-                  />
-                  <span className="text-slate-400 text-sm">Booster Boxes ({numBoxes * 36} Packs)</span>
-                </div>
-              </div>
-
-              <button
-                onClick={fetchAndParse}
-                disabled={loading || selectedSets.length === 0}
-                className={`w-full py-2 mb-4 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${loading ? 'bg-slate-700 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-              >
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> {progress}</> : <><Check className="w-4 h-4" /> 1. Fetch {selectedSets.length > 1 ? 'Sets' : 'Set'}</>}
-              </button>
+              {/* Fetch Set and Quantity Blocks Removed/Moved */}
             </>
           )}
 
           {/* Generation Settings */}
-          {processedData && Object.keys(processedData.sets).length > 0 && (
+          {(sourceMode === 'set' ? selectedSets.length > 0 : !!inputText) && (
             <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 mb-4 animate-in fade-in slide-in-from-top-4 duration-500">
               <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
                 <Settings className="w-4 h-4 text-emerald-400" /> Configuration
@@ -630,25 +586,46 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
                 </div>
               </div>
 
-              {/* Sets Info */}
-              <div className="max-h-40 overflow-y-auto text-xs space-y-1 pr-2 custom-scrollbar border-t border-slate-800 pt-2">
-                {Object.values(processedData.sets).sort((a, b) => b.commons.length - a.commons.length).map(set => (
-                  <div key={set.code} className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1">
-                    <span className="truncate w-32" title={set.name}>{set.name}</span>
-                    <span className="font-mono text-[10px]">{set.commons.length}C / {set.uncommons.length}U / {set.rares.length}R</span>
+              {/* Quantity - Moved Here */}
+              {sourceMode === 'set' && (
+                <div className="mb-4">
+                  <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">Quantity</label>
+                  <div className="flex items-center gap-2 bg-slate-800 p-2 rounded border border-slate-700">
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={numBoxes}
+                      onChange={(e) => setNumBoxes(parseInt(e.target.value))}
+                      className="w-16 bg-slate-700 border-none rounded p-1 text-center text-white font-mono"
+                      disabled={loading}
+                    />
+                    <span className="text-slate-300 text-xs">Boxes ({numBoxes * 36} Packs)</span>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {/* Sets Info */}
+              {processedData && Object.keys(processedData.sets).length > 0 && (
+                <div className="max-h-40 overflow-y-auto text-xs space-y-1 pr-2 custom-scrollbar border-t border-slate-800 pt-2">
+                  {Object.values(processedData.sets).sort((a, b) => b.commons.length - a.commons.length).map(set => (
+                    <div key={set.code} className="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-1">
+                      <span className="truncate w-32" title={set.name}>{set.name}</span>
+                      <span className="font-mono text-[10px]">{set.commons.length}C / {set.uncommons.length}U / {set.rares.length}R</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           <button
-            onClick={generatePacks}
-            disabled={!processedData || Object.keys(processedData.sets).length === 0 || loading}
-            className={`w-full py-3 px-4 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${!processedData || Object.keys(processedData.sets).length === 0 || loading ? 'bg-slate-700 cursor-not-allowed text-slate-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'}`}
+            onClick={handleGenerate}
+            disabled={((sourceMode === 'set' && selectedSets.length === 0) || (sourceMode === 'upload' && !inputText)) || loading}
+            className={`w-full py-3 px-4 rounded-lg font-bold flex justify-center items-center gap-2 transition-all ${((sourceMode === 'set' && selectedSets.length === 0) || (sourceMode === 'upload' && !inputText)) || loading ? 'bg-slate-700 cursor-not-allowed text-slate-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/20'}`}
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <RotateCcw className="w-5 h-5" />}
-            {loading ? 'Generating...' : '2. Generate Packs'}
+            {loading ? progress : 'Generate Packs'}
           </button>
 
           {/* Reset Button */}
@@ -734,7 +711,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, onGoT
             <p>No packs generated.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 pb-20">
+          <div className={`grid gap-6 pb-20 ${cardWidth <= 150
+              ? viewMode === 'list'
+                ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
+                : 'grid-cols-1 2xl:grid-cols-2'
+              : 'grid-cols-1'
+            }`}>
             {packs.map((pack) => (
               <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
             ))}
