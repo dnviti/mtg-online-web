@@ -51,6 +51,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<any>(initialGameState || null);
   const [draftState, setDraftState] = useState<any>(initialDraftState || null);
+  const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game');
 
   // Derived State
   const host = room.players.find(p => p.isHost);
@@ -234,10 +235,33 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   };
 
   return (
-    <div className="flex h-full gap-4">
-      {renderContent()}
+    <div className="flex h-full flex-col lg:flex-row gap-4 overflow-hidden">
+      {/* Mobile Tab Bar */}
+      <div className="lg:hidden shrink-0 flex items-center bg-slate-800 border-b border-slate-700">
+        <button
+          onClick={() => setMobileTab('game')}
+          className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'game' ? 'text-emerald-400 bg-slate-700/50 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <Layers className="w-4 h-4" /> Game
+        </button>
+        <button
+          onClick={() => setMobileTab('chat')}
+          className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'chat' ? 'text-purple-400 bg-slate-700/50 border-b-2 border-purple-500' : 'text-slate-400 hover:text-slate-200'}`}
+        >
+          <div className="flex items-center gap-1">
+            <Users className="w-4 h-4" />
+            <span className="text-slate-600">/</span>
+            <MessageSquare className="w-4 h-4" />
+          </div>
+          Lobby & Chat
+        </button>
+      </div>
 
-      <div className="w-80 flex flex-col gap-4">
+      <div className={`flex-1 min-h-0 flex flex-col ${mobileTab === 'game' ? 'flex' : 'hidden lg:flex'}`}>
+        {renderContent()}
+      </div>
+
+      <div className={`w-full lg:w-80 shrink-0 flex flex-col gap-4 min-h-0 ${mobileTab === 'chat' ? 'flex' : 'hidden lg:flex'}`}>
         <div className="flex-1 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl overflow-hidden flex flex-col">
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
             <Users className="w-4 h-4" /> Lobby
