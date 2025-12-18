@@ -107,7 +107,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
   const activeGroups = GROUPS[groupBy];
 
   return (
-    <div className="flex flex-row gap-4 overflow-x-auto pb-8 snap-x items-start">
+    <div className="inline-flex flex-row gap-4 pb-8 items-start min-w-full">
       {activeGroups.map(category => {
         const catCards = categorizedCards[category];
         if (catCards.length === 0) return null;

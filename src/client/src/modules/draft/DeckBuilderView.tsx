@@ -161,7 +161,7 @@ const CardsDisplay: React.FC<{
 
   if (viewMode === 'stack') {
     return (
-      <div className="w-full h-full"> {/* Allow native scrolling from parent */}
+      <div className="h-full min-w-full w-max"> {/* Allow native scrolling from parent */}
         {/* StackView doesn't support DnD yet, so we disable it or handle it differently. 
             For now, drag from StackView is not implemented, falling back to Click. */}
         <StackView
@@ -820,7 +820,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                   {renderLandStation()}
-                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
+                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                 </div>
               </DroppableZone>
 
@@ -830,7 +830,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
+                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
                 </div>
               </DroppableZone>
             </div>
@@ -847,7 +847,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   </div>
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                     {renderLandStation()}
-                    <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
+                    <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                   </div>
                 </DroppableZone>
               </div>
