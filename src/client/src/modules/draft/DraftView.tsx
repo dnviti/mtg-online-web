@@ -66,7 +66,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
 
   const [cardScale, setCardScale] = useState<number>(() => {
     const saved = localStorage.getItem('draft_cardScale');
-    return saved ? parseFloat(saved) : 0.5;
+    return saved ? parseFloat(saved) : 0.35;
   });
 
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('horizontal');
@@ -190,8 +190,8 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                 <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Card Size</label>
                 <input
                   type="range"
-                  min="0.5"
-                  max="1.5"
+                  min="0.35"
+                  max="1.0"
                   step="0.01"
                   value={cardScale}
                   onChange={(e) => setCardScale(parseFloat(e.target.value))}

@@ -134,7 +134,8 @@ const CardsDisplay: React.FC<{
   onHover: (c: any) => void;
   emptyMessage: string;
   source: 'pool' | 'deck';
-}> = ({ cards, viewMode, cardWidth, onCardClick, onHover, emptyMessage, source }) => {
+  groupBy?: 'type' | 'color' | 'cmc' | 'rarity';
+}> = ({ cards, viewMode, cardWidth, onCardClick, onHover, emptyMessage, source, groupBy = 'color' }) => {
   if (cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50 p-8 border-2 border-dashed border-slate-700/50 rounded-lg">
@@ -174,6 +175,7 @@ const CardsDisplay: React.FC<{
           }}
           onHover={(c) => onHover(c)}
           disableHoverPreview={true}
+          groupBy={groupBy}
         />
       </div>
     )
@@ -213,8 +215,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical');
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('grid');
-  const [cardWidth, setCardWidth] = useState(100);
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('stack'); // Default to stack as requested? Or keep grid. User didn't say default view, just default Order.
+  const [groupBy, setGroupBy] = useState<'type' | 'color' | 'cmc' | 'rarity'>('color');
+  const [cardWidth, setCardWidth] = useState(60);
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
@@ -460,14 +463,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     <div className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {/* Global Toolbar */}
+        {/* Global Toolbar */}
         <div className="h-14 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-4 shrink-0 overflow-x-auto text-xs sm:text-sm">
           <div className="flex items-center gap-4">
-            {/* Layout Switcher */}
-            <div className="hidden sm:flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-              <button onClick={() => setLayout('vertical')} className={`p-1.5 rounded ${layout === 'vertical' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Vertical Split"><Columns className="w-4 h-4" /></button>
-              <button onClick={() => setLayout('horizontal')} className={`p-1.5 rounded ${layout === 'horizontal' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Horizontal Split"><LayoutTemplate className="w-4 h-4" /></button>
-            </div>
-
             {/* View Mode Switcher */}
             <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
               <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="List View"><List className="w-4 h-4" /></button>
@@ -475,13 +473,36 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <button onClick={() => setViewMode('stack')} className={`p-1.5 rounded ${viewMode === 'stack' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-4 h-4" /></button>
             </div>
 
+            {/* Group By Dropdown (Only relevant for Stack View usually, but nice to have) */}
+            {viewMode === 'stack' && (
+              <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 h-9 items-center px-2 gap-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Sort:</span>
+                <select
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as any)}
+                  className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                >
+                  <option value="color">Color</option>
+                  <option value="type">Type</option>
+                  <option value="cmc">Mana Value</option>
+                  <option value="rarity">Rarity</option>
+                </select>
+              </div>
+            )}
+
+            {/* Layout Switcher */}
+            <div className="hidden sm:flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+              <button onClick={() => setLayout('vertical')} className={`p-1.5 rounded ${layout === 'vertical' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Vertical Split"><Columns className="w-4 h-4" /></button>
+              <button onClick={() => setLayout('horizontal')} className={`p-1.5 rounded ${layout === 'horizontal' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Horizontal Split"><LayoutTemplate className="w-4 h-4" /></button>
+            </div>
+
             {/* Slider */}
             <div className="hidden sm:flex items-center gap-2 bg-slate-900 rounded-lg px-2 py-1 border border-slate-700 h-9">
               <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" />
               <input
                 type="range"
-                min="100"
-                max="300"
+                min="60"
+                max="200"
                 step="1"
                 value={cardWidth}
                 onChange={(e) => setCardWidth(parseInt(e.target.value))}
@@ -570,7 +591,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                   {renderLandStation()}
-                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" />
+                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                 </div>
               </DroppableZone>
               {/* Deck Column */}
@@ -579,7 +600,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" />
+                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
                 </div>
               </DroppableZone>
             </div>
@@ -592,7 +613,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                   {renderLandStation()}
-                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" />
+                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                 </div>
               </DroppableZone>
               {/* Bottom: Deck */}
@@ -601,7 +622,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" />
+                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
                 </div>
               </DroppableZone>
             </div>

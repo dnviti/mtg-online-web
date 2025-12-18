@@ -97,3 +97,4 @@
 - [Mobile Touch Preview](./devlog/2025-12-18-012500_mobile_touch_preview.md): Completed. Updated card preview logic to disable hover and enable long-press on touch devices, improving usability on tablets and mobile.
 - [Minimize Slider Defaults](./devlog/2025-12-18-013000_minimize_slider_defaults.md): Completed. Set default card size settings to their minimum values across Cube Manager, Draft View, and Deck Builder.
 - [Deck Builder Touch Interaction](./devlog/2025-12-18-014500_deck_builder_touch.md): Completed. Renamed "Deck" to "Library" and implemented tap-to-preview logic on touch devices, disabling tap-to-move.
+- [Stack View Sorting & Sliders](./devlog/2025-12-18-020000_stack_sorting_sliders.md): Completed. Refactored StackView to group by Color by default, added sorting controls to Deck Builder, and reduced slider scales globally to allow smaller sizes.

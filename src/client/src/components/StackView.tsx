@@ -3,63 +3,111 @@ import { DraftCard } from '../services/PackGeneratorService';
 import { FoilOverlay, CardHoverWrapper } from './CardPreview';
 import { useCardTouch } from '../utils/interaction';
 
+
+type GroupMode = 'type' | 'color' | 'cmc' | 'rarity';
+
 interface StackViewProps {
   cards: DraftCard[];
   cardWidth?: number;
   onCardClick?: (card: DraftCard) => void;
   onHover?: (card: DraftCard | null) => void;
   disableHoverPreview?: boolean;
+  groupBy?: GroupMode;
 }
 
-const CATEGORY_ORDER = [
-  'Creature',
-  'Planeswalker',
-  'Instant',
-  'Sorcery',
-  'Enchantment',
-  'Artifact',
-  'Land',
-  'Battle',
-  'Other'
-];
+const GROUPS: Record<GroupMode, string[]> = {
+  type: ['Creature', 'Planeswalker', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Battle', 'Land', 'Other'],
+  color: ['White', 'Blue', 'Black', 'Red', 'Green', 'Multicolor', 'Colorless'],
+  cmc: ['0', '1', '2', '3', '4', '5', '6', '7+'],
+  rarity: ['Mythic', 'Rare', 'Uncommon', 'Common']
+};
 
-export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false }) => {
+const getCardGroup = (card: DraftCard, mode: GroupMode): string => {
+  if (mode === 'type') {
+    const typeLine = card.typeLine || '';
+    if (typeLine.includes('Creature')) return 'Creature';
+    if (typeLine.includes('Planeswalker')) return 'Planeswalker';
+    if (typeLine.includes('Instant')) return 'Instant';
+    if (typeLine.includes('Sorcery')) return 'Sorcery';
+    if (typeLine.includes('Enchantment')) return 'Enchantment';
+    if (typeLine.includes('Artifact')) return 'Artifact';
+    if (typeLine.includes('Battle')) return 'Battle';
+    if (typeLine.includes('Land')) return 'Land';
+    return 'Other';
+  }
+
+  if (mode === 'color') {
+    const colors = card.colors || [];
+    if (colors.length > 1) return 'Multicolor';
+    if (colors.length === 0) {
+      // Check if land
+      if ((card.typeLine || '').includes('Land')) return 'Colorless';
+      // Artifacts etc
+      return 'Colorless';
+    }
+    if (colors[0] === 'W') return 'White';
+    if (colors[0] === 'U') return 'Blue';
+    if (colors[0] === 'B') return 'Black';
+    if (colors[0] === 'R') return 'Red';
+    if (colors[0] === 'G') return 'Green';
+    return 'Colorless';
+  }
+
+  if (mode === 'cmc') {
+    const cmc = Math.floor(card.cmc || 0);
+    if (cmc >= 7) return '7+';
+    return cmc.toString();
+  }
+
+  if (mode === 'rarity') {
+    const r = (card.rarity || 'common').toLowerCase();
+    if (r === 'mythic') return 'Mythic';
+    if (r === 'rare') return 'Rare';
+    if (r === 'uncommon') return 'Uncommon';
+    return 'Common';
+  }
+
+  return 'Other';
+};
+
+
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false, groupBy = 'color' }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
-    CATEGORY_ORDER.forEach(c => categories[c] = []);
+    const groupKeys = GROUPS[groupBy];
+    groupKeys.forEach(k => categories[k] = []);
 
     cards.forEach(card => {
-      let category = 'Other';
-      const typeLine = card.typeLine || '';
-
-      if (typeLine.includes('Creature')) category = 'Creature'; // Includes Artifact Creature, Ench Creature
-      else if (typeLine.includes('Planeswalker')) category = 'Planeswalker';
-      else if (typeLine.includes('Instant')) category = 'Instant';
-      else if (typeLine.includes('Sorcery')) category = 'Sorcery';
-      else if (typeLine.includes('Enchantment')) category = 'Enchantment';
-      else if (typeLine.includes('Artifact')) category = 'Artifact';
-      else if (typeLine.includes('Battle')) category = 'Battle';
-      else if (typeLine.includes('Land')) category = 'Land';
-
-      // Special handling: Commander? usually Creature or Planeswalker
-      // Ensure it lands in one of the predefined bins
-
-      categories[category].push(card);
+      const group = getCardGroup(card, groupBy);
+      if (categories[group]) {
+        categories[group].push(card);
+      } else {
+        // Fallback for unexpected (shouldn't happen with defined logic coverage)
+        if (!categories['Other']) categories['Other'] = [];
+        categories['Other'].push(card);
+      }
     });
 
-    // Sort cards within categories by CMC (low to high)? Or Rarity?
-    // Archidekt usually sorts by CMC.
+    // Sort cards within categories by CMC (low to high)
+    // Secondary sort by Name
     Object.keys(categories).forEach(key => {
-      categories[key].sort((a, b) => (a.cmc || 0) - (b.cmc || 0));
+      categories[key].sort((a, b) => {
+        const cmcA = a.cmc || 0;
+        const cmcB = b.cmc || 0;
+        if (cmcA !== cmcB) return cmcA - cmcB;
+        return a.name.localeCompare(b.name);
+      });
     });
 
     return categories;
-  }, [cards]);
+  }, [cards, groupBy]);
+
+  const activeGroups = GROUPS[groupBy];
 
   return (
     <div className="flex flex-row gap-4 overflow-x-auto pb-8 snap-x items-start">
-      {CATEGORY_ORDER.map(category => {
+      {activeGroups.map(category => {
         const catCards = categorizedCards[category];
         if (catCards.length === 0) return null;
 
