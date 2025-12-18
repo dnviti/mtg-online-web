@@ -702,8 +702,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
             </div>
 
             {/* Slider */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-900 rounded-lg px-2 py-1 border border-slate-700 h-9">
-              <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" />
+            <div className="hidden sm:flex items-center gap-2 bg-slate-900 rounded-lg px-2 border border-slate-700 h-9">
+              <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
               <input
                 type="range"
                 min="60"
@@ -719,7 +719,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 onTouchEnd={() => setCardWidth(localCardWidth)}
                 className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
               />
-              <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" />
+              <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
             </div>
           </div>
 

@@ -268,8 +268,8 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
               </div>
 
               {/* Card Scalar */}
-              <div className="flex flex-col gap-1 w-24 md:w-32">
-                <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Card Size</label>
+              <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-2 border border-slate-700 h-10">
+                <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
                 <input
                   type="range"
                   min="0.35"
@@ -286,8 +286,9 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   }}
                   onMouseUp={() => setCardScale(localCardScale)}
                   onTouchEnd={() => setCardScale(localCardScale)}
-                  className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                  className="w-24 accent-emerald-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
                 />
+                <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
               </div>
             </div>
 
