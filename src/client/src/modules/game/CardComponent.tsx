@@ -1,5 +1,7 @@
 import React from 'react';
 import { CardInstance } from '../../types/game';
+import { useGesture } from './GestureManager';
+import { useRef, useEffect } from 'react';
 
 interface CardComponentProps {
   card: CardInstance;
@@ -12,8 +14,19 @@ interface CardComponentProps {
 }
 
 export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, style }) => {
+  const { registerCard, unregisterCard } = useGesture();
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (cardRef.current) {
+      registerCard(card.instanceId, cardRef.current);
+    }
+    return () => unregisterCard(card.instanceId);
+  }, [card.instanceId]);
+
   return (
     <div
+      ref={cardRef}
       draggable
       onDragStart={(e) => onDragStart(e, card.instanceId)}
       onClick={() => onClick(card.instanceId)}

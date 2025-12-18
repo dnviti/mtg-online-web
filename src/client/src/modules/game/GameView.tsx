@@ -5,6 +5,10 @@ import { socketService } from '../../services/SocketService';
 import { CardComponent } from './CardComponent';
 import { GameContextMenu, ContextMenuRequest } from './GameContextMenu';
 import { ZoneOverlay } from './ZoneOverlay';
+import { PhaseStrip } from './PhaseStrip';
+import { SmartButton } from './SmartButton';
+import { StackVisualizer } from './StackVisualizer';
+import { GestureManager } from './GestureManager';
 
 interface GameViewProps {
   gameState: GameState;
@@ -330,6 +334,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
       {/* Main Game Area */}
       <div className="flex-1 flex flex-col h-full relative">
+        <StackVisualizer gameState={gameState} />
 
         {/* Top Area: Opponent */}
         <div className="flex-[2] relative flex flex-col pointer-events-none">
@@ -393,46 +398,48 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, 'battlefield')}
         >
-          <div
-            className="w-full h-full relative bg-slate-900/20 border-y border-white/5 shadow-inner"
-            style={{
-              transform: 'rotateX(25deg)',
-              transformOrigin: 'center 40%',
-              boxShadow: 'inset 0 0 100px rgba(0,0,0,0.8)'
-            }}
-          >
-            {/* Battlefield Texture/Grid */}
-            <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
+          <GestureManager>
+            <div
+              className="w-full h-full relative bg-slate-900/20 border-y border-white/5 shadow-inner"
+              style={{
+                transform: 'rotateX(25deg)',
+                transformOrigin: 'center 40%',
+                boxShadow: 'inset 0 0 100px rgba(0,0,0,0.8)'
+              }}
+            >
+              {/* Battlefield Texture/Grid */}
+              <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
 
-            {myBattlefield.map(card => (
-              <div
-                key={card.instanceId}
-                className="absolute transition-all duration-200"
-                style={{
-                  left: `${card.position?.x || Math.random() * 80}%`,
-                  top: `${card.position?.y || Math.random() * 80}%`,
-                  zIndex: card.position?.z ?? (Math.floor((card.position?.y || 0)) + 10),
-                }}
-              >
-                <CardComponent
-                  card={card}
-                  onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
-                  onClick={toggleTap}
-                  onContextMenu={(id, e) => {
-                    handleContextMenu(e, 'card', id);
+              {myBattlefield.map(card => (
+                <div
+                  key={card.instanceId}
+                  className="absolute transition-all duration-200"
+                  style={{
+                    left: `${card.position?.x || Math.random() * 80}%`,
+                    top: `${card.position?.y || Math.random() * 80}%`,
+                    zIndex: card.position?.z ?? (Math.floor((card.position?.y || 0)) + 10),
                   }}
-                  onMouseEnter={() => setHoveredCard(card)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                />
-              </div>
-            ))}
+                >
+                  <CardComponent
+                    card={card}
+                    onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
+                    onClick={toggleTap}
+                    onContextMenu={(id, e) => {
+                      handleContextMenu(e, 'card', id);
+                    }}
+                    onMouseEnter={() => setHoveredCard(card)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                  />
+                </div>
+              ))}
 
-            {myBattlefield.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="text-white/10 text-4xl font-bold uppercase tracking-widest">Battlefield</span>
-              </div>
-            )}
-          </div>
+              {myBattlefield.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="text-white/10 text-4xl font-bold uppercase tracking-widest">Battlefield</span>
+                </div>
+              )}
+            </div>
+          </GestureManager>
         </div>
 
         {/* Bottom Area: Controls & Hand */}
@@ -440,46 +447,58 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
           {/* Left Controls: Library/Grave */}
           <div className="w-40 p-2 flex flex-col gap-2 items-center justify-center border-r border-white/10">
-            <div
-              className="group relative w-16 h-24 bg-slate-800 rounded border border-slate-600 cursor-pointer shadow-lg transition-transform hover:-translate-y-1 hover:shadow-cyan-500/20"
-              onClick={() => socketService.socket.emit('game_action', { action: { type: 'DRAW_CARD' } })}
-              onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'library')}
-            >
-              <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 rounded"></div>
-              {/* Deck look */}
-              <div className="absolute top-[-2px] left-[-2px] right-[-2px] bottom-[2px] bg-slate-700 rounded z-[-1]"></div>
-              <div className="absolute top-[-4px] left-[-4px] right-[-4px] bottom-[4px] bg-slate-800 rounded z-[-2]"></div>
-
-              <div className="absolute inset-0 flex items-center justify-center flex-col">
-                <span className="text-xs font-bold text-slate-300 shadow-black drop-shadow-md">Library</span>
-                <span className="text-lg font-bold text-white shadow-black drop-shadow-md">{myLibrary.length}</span>
-              </div>
+            {/* Phase Strip Integration */}
+            <div className="mb-2 scale-75 origin-center">
+              <PhaseStrip gameState={gameState} />
             </div>
 
-            <div
-              className="w-16 h-24 border-2 border-dashed border-slate-600 rounded flex items-center justify-center mt-2 transition-colors hover:border-slate-400 hover:bg-white/5"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'graveyard')}
-              onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'graveyard')}
-            >
-              <div className="text-center">
-                <span className="block text-slate-500 text-[10px] uppercase">Graveyard</span>
-                <span className="text-sm font-bold text-slate-400">{myGraveyard.length}</span>
+            <div className="flex gap-2">
+              <div
+                className="group relative w-12 h-16 bg-slate-800 rounded border border-slate-600 cursor-pointer shadow-lg transition-transform hover:-translate-y-1 hover:shadow-cyan-500/20"
+                onClick={() => socketService.socket.emit('game_action', { action: { type: 'DRAW_CARD' } })}
+                onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'library')}
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 rounded"></div>
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <span className="text-[8px] font-bold text-slate-300">Lib</span>
+                  <span className="text-sm font-bold text-white">{myLibrary.length}</span>
+                </div>
+              </div>
+
+              <div
+                className="w-12 h-16 border-2 border-dashed border-slate-600 rounded flex items-center justify-center transition-colors hover:border-slate-400 hover:bg-white/5"
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, 'graveyard')}
+                onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'graveyard')}
+              >
+                <div className="text-center">
+                  <span className="block text-slate-500 text-[8px] uppercase">GY</span>
+                  <span className="text-sm font-bold text-slate-400">{myGraveyard.length}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Hand Area */}
+          {/* Hand Area & Smart Button */}
           <div
-            className="flex-1 relative flex items-end justify-center px-4 pb-2"
+            className="flex-1 relative flex flex-col items-center justify-end px-4 pb-2"
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, 'hand')}
           >
+            {/* Smart Button Floating above Hand */}
+            <div className="mb-4 z-40">
+              <SmartButton
+                gameState={gameState}
+                playerId={currentPlayerId}
+                onAction={(type, payload) => socketService.socket.emit(type, { action: payload })}
+              />
+            </div>
+
             <div className="flex justify-center -space-x-12 w-full h-full items-end pb-4 perspective-500">
               {myHand.map((card, index) => (
                 <div
                   key={card.instanceId}
-                  className="transition-all duration-300 hover:-translate-y-12 hover:scale-110 hover:z-50 hover:rotate-0 origin-bottom"
+                  className="transition-all duration-300 hover:-translate-y-16 hover:scale-110 hover:z-50 hover:rotate-0 origin-bottom"
                   style={{
                     transform: `rotate(${(index - (myHand.length - 1) / 2) * 5}deg) translateY(${Math.abs(index - (myHand.length - 1) / 2) * 5}px)`,
                     zIndex: index

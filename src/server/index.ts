@@ -544,6 +544,17 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('game_strict_action', ({ action }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const game = gameManager.handleStrictAction(room.id, action, player.id);
+    if (game) {
+      io.to(room.id).emit('game_update', game);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected', socket.id);
 
