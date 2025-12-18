@@ -835,7 +835,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               </DroppableZone>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col min-h-0 relative">
+            <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
               {/* Top: Pool + Land Station */}
               <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/50 overflow-hidden min-h-0">
                 <DroppableZone
