@@ -884,14 +884,21 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {draggedCard ? (
-            <div
-              style={{ width: `${localCardWidth}px` }}
-              className={`rounded-xl shadow-2xl opacity-90 rotate-3 cursor-grabbing overflow-hidden ring-2 ring-emerald-500 bg-slate-900 aspect-[2.5/3.5]`}
-            >
-              <img src={draggedCard.image || draggedCard.image_uris?.normal} alt={draggedCard.name} className="w-full h-full object-cover" draggable={false} />
-            </div>
-          ) : null}
+          {draggedCard ? (() => {
+            const useArtCrop = localCardWidth < 130 && !!draggedCard.imageArtCrop;
+            const displayImage = useArtCrop ? draggedCard.imageArtCrop : (draggedCard.image || draggedCard.image_uris?.normal);
+            // Default to square for crop, standard ratio otherwise
+            const aspectRatio = useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]';
+
+            return (
+              <div
+                style={{ width: `${localCardWidth}px` }}
+                className={`rounded-xl shadow-2xl opacity-90 rotate-3 cursor-grabbing overflow-hidden ring-2 ring-emerald-500 bg-slate-900 ${aspectRatio}`}
+              >
+                <img src={displayImage} alt={draggedCard.name} className="w-full h-full object-cover" draggable={false} />
+              </div>
+            );
+          })() : null}
         </DragOverlay>
       </DndContext>
     </div>
