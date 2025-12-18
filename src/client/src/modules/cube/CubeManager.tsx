@@ -115,6 +115,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     const saved = localStorage.getItem('cube_cardWidth');
     return saved ? parseInt(saved) : 60;
   });
+  // Local state for smooth slider
+  const [localCardWidth, setLocalCardWidth] = useState(cardWidth);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalCardWidth(cardWidth);
+    if (containerRef.current) containerRef.current.style.setProperty('--card-width', `${cardWidth}px`);
+  }, [cardWidth]);
 
   // --- Persistence Effects ---
   useEffect(() => localStorage.setItem('cube_inputText', inputText), [inputText]);
@@ -453,7 +461,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   };
 
   return (
-    <div className="h-full overflow-y-auto w-full flex flex-col lg:flex-row gap-8 p-4 md:p-6">
+    <div ref={containerRef} className="h-full overflow-y-auto w-full flex flex-col lg:flex-row gap-8 p-4 md:p-6" style={{ '--card-width': `${localCardWidth}px` } as React.CSSProperties}>
 
       {/* --- LEFT COLUMN: CONTROLS --- */}
       <div className="w-full lg:w-1/3 lg:max-w-[400px] shrink-0 flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto custom-scrollbar p-1">
@@ -841,10 +849,16 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                     min="60"
                     max="200"
                     step="1"
-                    value={cardWidth}
-                    onChange={(e) => setCardWidth(parseInt(e.target.value))}
+                    value={localCardWidth}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setLocalCardWidth(val);
+                      if (containerRef.current) containerRef.current.style.setProperty('--card-width', `${val}px`);
+                    }}
+                    onMouseUp={() => setCardWidth(localCardWidth)}
+                    onTouchEnd={() => setCardWidth(localCardWidth)}
                     className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-600 rounded-lg appearance-none"
-                    title={`Card Size: ${cardWidth}px`}
+                    title={`Card Size: ${localCardWidth}px`}
                   />
                   <div className="w-4 h-6 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
                 </div>
@@ -870,12 +884,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
               className="grid gap-6 pb-20"
               style={{
                 gridTemplateColumns: cardWidth <= 150
-                  ? `repeat(auto-fill, minmax(${viewMode === 'list' ? '320px' : '550px'}, 1fr))`
+                  ? `repeat(auto-fill, minmax(var(--card-width, ${viewMode === 'list' ? '320px' : '550px'}), 1fr))`
                   : '1fr'
               }}
             >
               {packs.map((pack) => (
-                <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={cardWidth} />
+                <PackCard key={pack.id} pack={pack} viewMode={viewMode} cardWidth={localCardWidth} />
               ))}
             </div>
           )

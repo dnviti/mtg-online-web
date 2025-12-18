@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
 import { LogOut, Columns, LayoutTemplate } from 'lucide-react';
 import { Modal } from '../../components/Modal';
@@ -58,19 +58,49 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     return () => clearInterval(interval);
   }, [pickExpiresAt]);
 
+
+
   // --- UI State & Persistence ---
+  const [sidebarWidth, setSidebarWidth] = useState(320);
   const [poolHeight, setPoolHeight] = useState<number>(() => {
     const saved = localStorage.getItem('draft_poolHeight');
     return saved ? parseInt(saved, 10) : 220;
   });
 
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+  const poolRef = React.useRef<HTMLDivElement>(null);
+  const resizingState = React.useRef<{
+    startX: number,
+    startY: number,
+    startWidth: number,
+    startHeight: number,
+    active: 'sidebar' | 'pool' | null
+  }>({ startX: 0, startY: 0, startWidth: 0, startHeight: 0, active: null });
+
+  // Apply initial sizes visually without causing re-renders
+  useEffect(() => {
+    if (sidebarRef.current) sidebarRef.current.style.width = `${sidebarWidth}px`;
+    if (poolRef.current) poolRef.current.style.height = `${poolHeight}px`;
+  }, []); // Only on mount to set initial visual state, subsequent updates handled by resize logic
+
+
   const [cardScale, setCardScale] = useState<number>(() => {
     const saved = localStorage.getItem('draft_cardScale');
     return saved ? parseFloat(saved) : 0.35;
   });
+  // Local state for smooth slider
+  const [localCardScale, setLocalCardScale] = useState(cardScale);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Sync local state if external update happens
+  useEffect(() => {
+    setLocalCardScale(cardScale);
+    if (containerRef.current) {
+      containerRef.current.style.setProperty('--card-scale', cardScale.toString());
+    }
+  }, [cardScale]);
 
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('horizontal');
-  const [isResizing, setIsResizing] = useState(false);
 
   // Persist settings
   useEffect(() => {
@@ -81,34 +111,68 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     localStorage.setItem('draft_cardScale', cardScale.toString());
   }, [cardScale]);
 
-  // Resize Handlers
-  const startResizing = (e: React.MouseEvent) => {
-    setIsResizing(true);
-    e.preventDefault();
+  const handleResizeStart = (type: 'sidebar' | 'pool', e: React.MouseEvent | React.TouchEvent) => {
+    // Prevent default to avoid scrolling/selection
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    resizingState.current = {
+      startX: clientX,
+      startY: clientY,
+      startWidth: sidebarRef.current?.getBoundingClientRect().width || 320,
+      startHeight: poolRef.current?.getBoundingClientRect().height || 220,
+      active: type
+    };
+
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('touchmove', onResizeMove, { passive: false });
+    document.addEventListener('mouseup', onResizeEnd);
+    document.addEventListener('touchend', onResizeEnd);
+    document.body.style.cursor = type === 'sidebar' ? 'col-resize' : 'row-resize';
   };
 
-  useEffect(() => {
-    const stopResizing = () => setIsResizing(false);
-    const resize = (e: MouseEvent) => {
-      if (isResizing) {
-        const newHeight = window.innerHeight - e.clientY;
-        // Limits: Min 100px, Max 60% of screen
-        const maxHeight = window.innerHeight * 0.6;
-        if (newHeight >= 100 && newHeight <= maxHeight) {
-          setPoolHeight(newHeight);
-        }
-      }
-    };
+  const onResizeMove = React.useCallback((e: MouseEvent | TouchEvent) => {
+    if (!resizingState.current.active) return;
 
-    if (isResizing) {
-      document.addEventListener('mousemove', resize);
-      document.addEventListener('mouseup', stopResizing);
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = (e as TouchEvent).touches ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+    const clientY = (e as TouchEvent).touches ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+
+    // Direct DOM manipulation for performance
+    requestAnimationFrame(() => {
+      if (resizingState.current.active === 'sidebar' && sidebarRef.current) {
+        const delta = clientX - resizingState.current.startX;
+        const newWidth = Math.max(200, Math.min(600, resizingState.current.startWidth + delta));
+        sidebarRef.current.style.width = `${newWidth}px`;
+      }
+
+      if (resizingState.current.active === 'pool' && poolRef.current) {
+        const delta = resizingState.current.startY - clientY; // Dragging up increases height
+        const newHeight = Math.max(100, Math.min(window.innerHeight * 0.6, resizingState.current.startHeight + delta));
+        poolRef.current.style.height = `${newHeight}px`;
+      }
+    });
+  }, []);
+
+  const onResizeEnd = React.useCallback(() => {
+    // Commit final state
+    if (resizingState.current.active === 'sidebar' && sidebarRef.current) {
+      setSidebarWidth(parseInt(sidebarRef.current.style.width));
     }
-    return () => {
-      document.removeEventListener('mousemove', resize);
-      document.removeEventListener('mouseup', stopResizing);
-    };
-  }, [isResizing]);
+    if (resizingState.current.active === 'pool' && poolRef.current) {
+      setPoolHeight(parseInt(poolRef.current.style.height));
+    }
+
+    resizingState.current.active = null;
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('touchmove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
+    document.removeEventListener('touchend', onResizeEnd);
+    document.body.style.cursor = 'default';
+  }, []);
 
   const [hoveredCard, setHoveredCard] = useState<any>(null);
   const [displayCard, setDisplayCard] = useState<any>(null);
@@ -152,7 +216,12 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
   };
 
   return (
-    <div className="flex-1 w-full flex flex-col h-full bg-slate-950 text-white overflow-hidden relative select-none" onContextMenu={(e) => e.preventDefault()}>
+    <div
+      ref={containerRef}
+      className="flex-1 w-full flex flex-col h-full bg-slate-950 text-white overflow-hidden relative select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ '--card-scale': localCardScale } as React.CSSProperties}
+    >
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black opacity-50 pointer-events-none"></div>
 
@@ -193,8 +262,17 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   min="0.35"
                   max="1.0"
                   step="0.01"
-                  value={cardScale}
-                  onChange={(e) => setCardScale(parseFloat(e.target.value))}
+                  value={localCardScale}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setLocalCardScale(val);
+                    // Direct DOM update for performance
+                    if (containerRef.current) {
+                      containerRef.current.style.setProperty('--card-scale', val.toString());
+                    }
+                  }}
+                  onMouseUp={() => setCardScale(localCardScale)}
+                  onTouchEnd={() => setCardScale(localCardScale)}
                   className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                 />
               </div>
@@ -225,7 +303,11 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
         <div className="flex-1 flex overflow-hidden">
 
           {/* Dedicated Zoom Zone (Left Sidebar) */}
-          <div className="hidden lg:flex w-80 shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10 transition-all" style={{ perspective: '1000px' }}>
+          <div
+            ref={sidebarRef}
+            className="hidden lg:flex shrink-0 flex-col items-center justify-start pt-8 border-r border-slate-800/50 bg-slate-900/20 backdrop-blur-sm z-10 relative"
+            style={{ perspective: '1000px' }}
+          >
             <div className="w-full relative sticky top-8 px-6">
               <div
                 className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
@@ -281,6 +363,14 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-2 last:mb-0">{line}</p>)}
                 </div>
               )}
+            </div>
+            {/* Resize Handle for Sidebar */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-1 bg-transparent hover:bg-emerald-500/50 cursor-col-resize z-50 flex flex-col justify-center items-center group transition-colors"
+              onMouseDown={(e) => handleResizeStart('sidebar', e)}
+              onTouchStart={(e) => handleResizeStart('sidebar', e)}
+            >
+              <div className="h-8 w-1 bg-slate-700/50 rounded-full group-hover:bg-emerald-400 transition-colors" />
             </div>
           </div>
 
@@ -372,29 +462,31 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
 
               {/* Resize Handle */}
               <div
-                className="h-1 bg-slate-800 hover:bg-emerald-500 cursor-row-resize z-30 transition-colors w-full flex items-center justify-center shrink-0"
-                onMouseDown={startResizing}
+                className="h-2 bg-slate-800 hover:bg-emerald-500/50 cursor-row-resize z-30 transition-colors w-full flex items-center justify-center shrink-0 group touch-none"
+                onMouseDown={(e) => handleResizeStart('pool', e)}
+                onTouchStart={(e) => handleResizeStart('pool', e)}
               >
-                <div className="w-16 h-1 bg-slate-600 rounded-full"></div>
+                <div className="w-16 h-1 bg-slate-600 rounded-full group-hover:bg-emerald-300"></div>
               </div>
 
               {/* Bottom: Pool (Horizontal Strip) */}
-              <PoolDroppable
-                className="shrink-0 bg-slate-900/90 backdrop-blur-md flex flex-col z-20 shadow-[-10px_-10px_30px_rgba(0,0,0,0.3)] transition-all ease-out duration-75 border-t border-slate-800"
-                style={{ height: `${poolHeight}px` }}
-              >
-                <div className="px-6 py-2 flex items-center justify-between shrink-0">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    Your Pool ({pickedCards.length})
-                  </h3>
-                </div>
-                <div className="flex-1 overflow-x-auto flex items-center gap-2 px-6 pb-4 custom-scrollbar">
-                  {pickedCards.map((card: any, idx: number) => (
-                    <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} />
-                  ))}
-                </div>
-              </PoolDroppable>
+              <div ref={poolRef} style={{ height: `${poolHeight}px` }} className="shrink-0 flex flex-col overflow-hidden">
+                <PoolDroppable
+                  className="flex-1 bg-slate-900/90 backdrop-blur-md flex flex-col z-20 shadow-[-10px_-10px_30px_rgba(0,0,0,0.3)] border-t border-slate-800 min-h-0"
+                >
+                  <div className="px-6 py-2 flex items-center justify-between shrink-0">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      Your Pool ({pickedCards.length})
+                    </h3>
+                  </div>
+                  <div className="flex-1 overflow-x-auto flex gap-2 px-6 pb-2 pt-2 custom-scrollbar min-h-0">
+                    {pickedCards.map((card: any, idx: number) => (
+                      <PoolCardItem key={`${card.id}-${idx}`} card={card} setHoveredCard={setHoveredCard} />
+                    ))}
+                  </div>
+                </PoolDroppable>
+              </div>
             </div>
           )}
 
@@ -415,7 +507,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
           {draggedCard ? (
             <div
               className="opacity-90 rotate-3 cursor-grabbing shadow-2xl rounded-xl"
-              style={{ width: `${14 * cardScale}rem`, aspectRatio: '2.5/3.5' }}
+              style={{ width: `calc(14rem * var(--card-scale, ${localCardScale}))`, aspectRatio: '2.5/3.5' }}
             >
               <img src={draggedCard.image} alt={draggedCard.name} className="w-full h-full object-cover rounded-xl" draggable={false} />
             </div>
@@ -474,7 +566,7 @@ const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) 
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, width: `${14 * cardScale}rem` }}
+      style={{ ...style, width: `calc(14rem * var(--card-scale))` }}
       {...attributes}
       {...mergedListeners}
       className="group relative transition-all duration-300 hover:scale-110 hover:-translate-y-4 hover:z-50 cursor-pointer"
@@ -506,7 +598,7 @@ const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
 
   return (
     <div
-      className={`relative group shrink-0 transition-all flex items-center cursor-pointer ${vertical ? 'w-24 h-32' : 'h-full'}`}
+      className={`relative group shrink-0 flex items-center justify-center cursor-pointer ${vertical ? 'w-24 h-32' : 'h-full aspect-[2.5/3.5] p-2'}`}
       onMouseEnter={() => setHoveredCard(card)}
       onMouseLeave={() => setHoveredCard(null)}
       onTouchStart={onTouchStart}
@@ -517,7 +609,7 @@ const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
       <img
         src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
         alt={card.name}
-        className={`${vertical ? 'w-full h-full object-cover' : 'h-[90%] w-auto object-contain'} rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all`}
+        className={`${vertical ? 'w-full h-full object-cover' : 'h-full w-auto object-contain'} rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all`}
         draggable={false}
       />
     </div>

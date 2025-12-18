@@ -100,3 +100,11 @@
 - [Stack View Sorting & Sliders](./devlog/2025-12-18-020000_stack_sorting_sliders.md): Completed. Refactored StackView to group by Color by default, added sorting controls to Deck Builder, and reduced slider scales globally to allow smaller sizes.
 - [Lobby UI & Notifications](./devlog/2025-12-18-023000_lobby_ui_update.md): Completed. Refactored Lobby/Chat into collapsible floating panels, implemented player event notifications (Join/Leave/Disconnect), and updated Deck Builder card size triggers.
 - [Card Preview Threshold](./devlog/2025-12-18-024000_preview_threshold.md): Completed. Updated card art crop threshold to 130px (new 50% mark) across the application components.
+- [UI Enhancements](./devlog/2025-12-18-030000_ui_enhancements.md): Completed. Implemented drag-and-drop for Stack View, custom sort dropdown, and resizable layouts for both Deck Builder and Draft UI.
+- [Resize Optimization](./devlog/2025-12-18-033000_resize_optimization.md): Completed. Refactored resize interactions for Panels.
+- [Slider Optimization](./devlog/2025-12-18-034500_slider_optimization.md): Completed. Applied the same performance logic (CSS Variables + Deferred State) to Card Size Sliders in all views to eliminate lag.
+- [Sidebar Resize Fix](./devlog/2025-12-18-040000_sidebar_resize_fix.md): Completed. Removed conflicting CSS transition classes from sidebars to ensure smooth 1:1 resize tracking.
+- [Touch Resize Support](./devlog/2025-12-18-041500_touch_resize.md): Completed. Implemented unified Mouse/Touch handlers for all resize handles to support mobile usage.
+- [Pool Card Sizing](./devlog/2025-12-18-042500_pool_card_sizing.md): Completed. Fixed "enormous" card bug in horizontal pool by enforcing percentage-based height constraint.
+- [Final Pool Layout Fix](./devlog/2025-12-18-043500_pool_sizing_final.md): Completed. Overhauled flex layout for Horizontal Pool to ensure card images scale 1:1 with panel height during resize, removing layout-blocking transitions.
+- [Pool Overflow Constraint](./devlog/2025-12-18-044500_pool_overflow_fix.md): Completed. Enforce flex shrinkage with `min-h-0` and `overflow-hidden` to strictly bind card height to resizeable panel.

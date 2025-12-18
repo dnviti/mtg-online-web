@@ -13,6 +13,7 @@ interface StackViewProps {
   onHover?: (card: DraftCard | null) => void;
   disableHoverPreview?: boolean;
   groupBy?: GroupMode;
+  renderWrapper?: (card: DraftCard, children: React.ReactNode) => React.ReactNode;
 }
 
 const GROUPS: Record<GroupMode, string[]> = {
@@ -71,7 +72,7 @@ const getCardGroup = (card: DraftCard, mode: GroupMode): string => {
 };
 
 
-export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false, groupBy = 'color' }) => {
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false, groupBy = 'color', renderWrapper }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
@@ -139,6 +140,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                     onHover={onHover}
                     onCardClick={onCardClick}
                     disableHoverPreview={disableHoverPreview}
+                    renderWrapper={renderWrapper}
                   />
                 );
               })}
@@ -150,10 +152,10 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
   );
 };
 
-const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHover, onCardClick, disableHoverPreview }: any) => {
+const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHover, onCardClick, disableHoverPreview, renderWrapper }: any) => {
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover || (() => { }), () => onCardClick && onCardClick(card), card);
 
-  return (
+  const content = (
     <div
       className="relative w-full z-0 hover:z-50 transition-all duration-200 group"
       onMouseEnter={() => onHover && onHover(card)}
@@ -177,4 +179,10 @@ const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHo
       </CardHoverWrapper>
     </div>
   );
+
+  if (renderWrapper) {
+    return renderWrapper(card, content);
+  }
+
+  return content;
 };

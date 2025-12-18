@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, GripVertical } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { DraftCard } from '../../services/PackGeneratorService';
@@ -145,6 +145,7 @@ const CardsDisplay: React.FC<{
     )
   }
 
+  // Use CSS var for grid
   if (viewMode === 'list') {
     const sorted = [...cards].sort((a, b) => (a.cmc || 0) - (b.cmc || 0));
     return (
@@ -176,6 +177,11 @@ const CardsDisplay: React.FC<{
           onHover={(c) => onHover(c)}
           disableHoverPreview={true}
           groupBy={groupBy}
+          renderWrapper={(card, children) => (
+            <DraggableCardWrapper key={card.id} card={card} source={source}>
+              {children}
+            </DraggableCardWrapper>
+          )}
         />
       </div>
     )
@@ -186,7 +192,7 @@ const CardsDisplay: React.FC<{
     <div
       className="grid gap-4 pb-20 content-start"
       style={{
-        gridTemplateColumns: `repeat(auto-fill, minmax(${cardWidth}px, 1fr))`
+        gridTemplateColumns: `repeat(auto-fill, minmax(var(--card-width, ${cardWidth}px), 1fr))`
       }}
     >
       {cards.map(c => {
@@ -218,6 +224,39 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('stack'); // Default to stack as requested? Or keep grid. User didn't say default view, just default Order.
   const [groupBy, setGroupBy] = useState<'type' | 'color' | 'cmc' | 'rarity'>('color');
   const [cardWidth, setCardWidth] = useState(60);
+  // Local state for smooth slider
+  const [localCardWidth, setLocalCardWidth] = useState(cardWidth);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  // Sync
+  React.useEffect(() => {
+    setLocalCardWidth(cardWidth);
+    if (containerRef.current) {
+      containerRef.current.style.setProperty('--card-width', `${cardWidth}px`);
+    }
+  }, [cardWidth]);
+
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+
+  // --- Resize State ---
+  const [sidebarWidth, setSidebarWidth] = useState(320); // Initial 320px
+  const [poolHeightPercent, setPoolHeightPercent] = useState(60); // Initial 60% for pool (horizontal layout)
+
+  const sidebarRef = React.useRef<HTMLDivElement>(null);
+  const poolRef = React.useRef<HTMLDivElement>(null);
+  const resizingState = React.useRef<{
+    startX: number,
+    startY: number,
+    startWidth: number,
+    startHeightPercent: number,
+    active: 'sidebar' | 'pool' | null
+  }>({ startX: 0, startY: 0, startWidth: 0, startHeightPercent: 0, active: null });
+
+  // Initial visual set
+  React.useEffect(() => {
+    if (sidebarRef.current) sidebarRef.current.style.width = `${sidebarWidth}px`;
+    if (poolRef.current) poolRef.current.style.height = `${poolHeightPercent}%`;
+  }, []);
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
@@ -395,6 +434,79 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     setDraggedCard(null);
   };
 
+  // --- Resize Handlers ---
+  // --- Resize Handlers ---
+  const handleResizeStart = (type: 'sidebar' | 'pool', e: React.MouseEvent | React.TouchEvent) => {
+    // Prevent default to avoid scrolling/selection
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+
+    const containerTop = 56;
+    const containerHeight = window.innerHeight - containerTop;
+    const currentPoolHeight = poolRef.current?.getBoundingClientRect().height || (containerHeight * 0.6);
+
+    resizingState.current = {
+      startX: clientX,
+      startY: clientY,
+      startWidth: sidebarRef.current?.getBoundingClientRect().width || 320,
+      startHeightPercent: poolHeightPercent,
+      active: type
+    };
+
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('touchmove', onResizeMove, { passive: false });
+    document.addEventListener('mouseup', onResizeEnd);
+    document.addEventListener('touchend', onResizeEnd);
+    document.body.style.cursor = type === 'sidebar' ? 'col-resize' : 'row-resize';
+  };
+
+  const onResizeMove = React.useCallback((e: MouseEvent | TouchEvent) => {
+    if (!resizingState.current.active) return;
+
+    if (e.cancelable) e.preventDefault();
+
+    const clientX = (e as TouchEvent).touches ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
+    const clientY = (e as TouchEvent).touches ? (e as TouchEvent).touches[0].clientY : (e as MouseEvent).clientY;
+
+    requestAnimationFrame(() => {
+      if (resizingState.current.active === 'sidebar' && sidebarRef.current) {
+        const delta = clientX - resizingState.current.startX;
+        const newWidth = Math.max(200, Math.min(600, resizingState.current.startWidth + delta));
+        sidebarRef.current.style.width = `${newWidth}px`;
+      }
+
+      if (resizingState.current.active === 'pool' && poolRef.current) {
+        const containerTop = 56;
+        const containerHeight = window.innerHeight - containerTop;
+        const relativeY = clientY - containerTop;
+        const percentage = (relativeY / containerHeight) * 100;
+        const clamped = Math.max(20, Math.min(80, percentage));
+        poolRef.current.style.height = `${clamped}%`;
+      }
+    });
+  }, []);
+
+  const onResizeEnd = React.useCallback(() => {
+    if (resizingState.current.active === 'sidebar' && sidebarRef.current) {
+      setSidebarWidth(parseInt(sidebarRef.current.style.width));
+    }
+    if (resizingState.current.active === 'pool' && poolRef.current) {
+      const hStyle = poolRef.current.style.height;
+      if (hStyle.includes('%')) {
+        setPoolHeightPercent(parseFloat(hStyle));
+      }
+    }
+
+    resizingState.current.active = null;
+    document.removeEventListener('mousemove', onResizeMove);
+    document.removeEventListener('touchmove', onResizeMove);
+    document.removeEventListener('mouseup', onResizeEnd);
+    document.removeEventListener('touchend', onResizeEnd);
+    document.body.style.cursor = 'default';
+  }, []);
+
   // --- Render Functions ---
   const renderLandStation = () => (
     <div className="bg-slate-900/40 rounded border border-slate-700/50 p-2 mb-2 shrink-0 flex flex-col gap-2">
@@ -460,7 +572,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   );
 
   return (
-    <div className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col select-none" onContextMenu={(e) => e.preventDefault()}>
+    <div
+      ref={containerRef}
+      className="flex-1 w-full flex h-full bg-slate-950 text-white overflow-hidden flex-col select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ '--card-width': `${localCardWidth}px` } as React.CSSProperties}
+    >
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         {/* Global Toolbar */}
         {/* Global Toolbar */}
@@ -473,20 +590,43 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               <button onClick={() => setViewMode('stack')} className={`p-1.5 rounded ${viewMode === 'stack' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-4 h-4" /></button>
             </div>
 
-            {/* Group By Dropdown (Only relevant for Stack View usually, but nice to have) */}
+            {/* Group By Dropdown (Custom UI) */}
             {viewMode === 'stack' && (
-              <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 h-9 items-center px-2 gap-2">
-                <span className="text-[10px] text-slate-500 uppercase font-bold">Sort:</span>
-                <select
-                  value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value as any)}
-                  className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+              <div className="relative z-50">
+                <button
+                  onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                  className="flex items-center gap-2 bg-slate-900 rounded-lg p-1.5 border border-slate-700 h-9 px-3 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
                 >
-                  <option value="color">Color</option>
-                  <option value="type">Type</option>
-                  <option value="cmc">Mana Value</option>
-                  <option value="rarity">Rarity</option>
-                </select>
+                  <span className="text-slate-500 uppercase">Sort:</span>
+                  <span className="capitalize">{groupBy === 'cmc' ? 'Mana Value' : groupBy}</span>
+                  <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${sortDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {sortDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSortDropdownOpen(false)} />
+                    <div className="absolute top-full left-0 mt-2 w-40 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                      {[
+                        { value: 'color', label: 'Color' },
+                        { value: 'type', label: 'Type' },
+                        { value: 'cmc', label: 'Mana Value' },
+                        { value: 'rarity', label: 'Rarity' }
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => {
+                            setGroupBy(opt.value as any);
+                            setSortDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center justify-between ${groupBy === opt.value ? 'bg-purple-900/30 text-purple-200' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                        >
+                          {opt.label}
+                          {groupBy === opt.value && <Check className="w-3 h-3 text-purple-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -504,8 +644,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 min="60"
                 max="200"
                 step="1"
-                value={cardWidth}
-                onChange={(e) => setCardWidth(parseInt(e.target.value))}
+                value={localCardWidth}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setLocalCardWidth(val);
+                  if (containerRef.current) containerRef.current.style.setProperty('--card-width', `${val}px`);
+                }}
+                onMouseUp={() => setCardWidth(localCardWidth)}
+                onTouchEnd={() => setCardWidth(localCardWidth)}
                 className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
               />
               <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" />
@@ -527,7 +673,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
         <div className="flex-1 flex overflow-hidden lg:flex-row flex-col">
           {/* Zoom Sidebar */}
-          <div className="hidden xl:flex w-72 shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4" style={{ perspective: '1000px' }}>
+          <div
+            ref={sidebarRef}
+            className="hidden xl:flex shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4 relative"
+            style={{ perspective: '1000px' }}
+          >
+            {/* Front content ... */}
             <div className="w-full relative sticky top-4">
               <div
                 className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
@@ -553,7 +704,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                         <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
                         <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).typeLine || (hoveredCard || displayCard).type_line}</p>
                         {(hoveredCard || displayCard).oracle_text && (
-                          <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed">
+                          <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
                             {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
                           </div>
                         )}
@@ -579,11 +730,31 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 </div>
               </div>
             </div>
+
+            {/* Resize Handle */}
+            <div
+              className="absolute right-0 top-0 bottom-0 w-1 bg-transparent hover:bg-purple-500/50 cursor-col-resize z-50 flex flex-col justify-center items-center group transition-colors touch-none"
+              onMouseDown={(e) => handleResizeStart('sidebar', e)}
+              onTouchStart={(e) => handleResizeStart('sidebar', e)}
+            >
+              <div className="h-8 w-1 bg-slate-700/50 rounded-full group-hover:bg-purple-400 transition-colors" />
+            </div>
           </div>
 
           {/* Content Area */}
           {layout === 'vertical' ? (
-            <div className="flex-1 flex flex-col lg:flex-row">
+            <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+              {/* Vertical layout typically means Pool Left / Deck Right or vice versa. 
+                   The previous code had them side-by-side with equal flex. 
+                   The request asks for Library to be resizable. In vertical mode they share width.
+                   We can add a splitter here if needed, but horizontal split (top/bottom) is more common for resizing. 
+                   Let's stick to equal flex for vertical column mode for now, as it's cleaner, 
+                   or implement width resizing if specifically requested. 
+                   Given the constraints of "library section ... needs to be resizable", a Top/Bottom split is the only one
+                   where resizing makes distinct sense vs side-by-side. 
+                   Wait, "library section" usually implies the Deck list. 
+                   In side-by-side, we can resize the split.
+               */}
               {/* Pool Column */}
               <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-w-0 border-r border-slate-800 bg-slate-900/50">
                 <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
@@ -594,6 +765,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                 </div>
               </DroppableZone>
+
               {/* Deck Column */}
               <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0 bg-slate-900/50">
                 <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
@@ -605,26 +777,45 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               </DroppableZone>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0 relative">
               {/* Top: Pool + Land Station */}
-              <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-h-0 border-b border-slate-800 bg-slate-900/50">
-                <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
-                  <span>Card Pool ({pool.length})</span>
+              {/* Top: Pool + Land Station */}
+              <div ref={poolRef} style={{ height: `${poolHeightPercent}%` }} className="flex flex-col border-b border-slate-800 bg-slate-900/50 overflow-hidden">
+                <DroppableZone
+                  id="pool-zone"
+                  className="flex-1 flex flex-col"
+                >
+                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
+                    <span>Card Pool ({pool.length})</span>
+                  </div>
+                  <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
+                    {renderLandStation()}
+                    <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
+                  </div>
+                </DroppableZone>
+
+                {/* Resizer Handle */}
+                <div
+                  className="h-2 bg-slate-800 hover:bg-purple-500/50 cursor-row-resize flex items-center justify-center shrink-0 z-20 group transition-colors touch-none"
+                  onMouseDown={(e) => handleResizeStart('pool', e)}
+                  onTouchStart={(e) => handleResizeStart('pool', e)}
+                >
+                  <div className="w-16 h-1 bg-slate-600 rounded-full group-hover:bg-purple-300" />
                 </div>
-                <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                  {renderLandStation()}
-                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
-                </div>
-              </DroppableZone>
-              {/* Bottom: Deck */}
-              <DroppableZone id="deck-zone" className="h-[40%] flex flex-col min-h-0 bg-slate-900/50">
-                <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
-                  <span>Library ({deck.length})</span>
-                </div>
-                <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
-                </div>
-              </DroppableZone>
+
+                {/* Bottom: Deck */}
+                <DroppableZone
+                  id="deck-zone"
+                  className="flex-1 flex flex-col min-h-0 bg-slate-900/50 overflow-hidden"
+                >
+                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
+                    <span>Library ({deck.length})</span>
+                  </div>
+                  <div className="flex-1 overflow-auto p-2 custom-scrollbar">
+                    <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
+                  </div>
+                </DroppableZone>
+              </div>
             </div>
           )}
         </div>
@@ -632,7 +823,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
         <DragOverlay dropAnimation={null}>
           {draggedCard ? (
             <div
-              style={{ width: `${cardWidth}px` }}
+              style={{ width: `${localCardWidth}px` }}
               className={`rounded-xl shadow-2xl opacity-90 rotate-3 cursor-grabbing overflow-hidden ring-2 ring-emerald-500 bg-slate-900 aspect-[2.5/3.5]`}
             >
               <img src={draggedCard.image || draggedCard.image_uris?.normal} alt={draggedCard.name} className="w-full h-full object-cover" draggable={false} />
