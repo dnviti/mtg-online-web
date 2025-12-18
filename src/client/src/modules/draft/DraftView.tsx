@@ -329,19 +329,21 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   style={{ backfaceVisibility: 'hidden' }}
                 >
                   {(hoveredCard || displayCard) && (
-                    <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl relative overflow-hidden">
+                    <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl">
                       <img
                         src={(hoveredCard || displayCard).image || (hoveredCard || displayCard).image_uris?.normal || (hoveredCard || displayCard).card_faces?.[0]?.image_uris?.normal}
                         alt={(hoveredCard || displayCard).name}
-                        className="w-full h-full object-cover rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
+                        className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
                         draggable={false}
                       />
-                      {/* Foil Overlay for Preview */}
-                      {((hoveredCard || displayCard).finish === 'foil') && <FoilOverlay />}
-
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 text-center z-20">
+                      <div className="mt-4 text-center">
                         <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
-                        <p className="text-xs text-slate-300 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).type_line}</p>
+                        <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).typeLine || (hoveredCard || displayCard).type_line}</p>
+                        {(hoveredCard || displayCard).oracle_text && (
+                          <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
+                            {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -363,13 +365,6 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   />
                 </div>
               </div>
-
-              {/* Oracle Text Box Below Card */}
-              {(hoveredCard || displayCard)?.oracle_text && (
-                <div className={`mt-6 text-xs text-slate-300 text-left bg-slate-900/80 backdrop-blur p-4 rounded-lg border border-slate-700 leading-relaxed transition-opacity duration-300 ${hoveredCard ? 'opacity-100' : 'opacity-0'}`}>
-                  {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-2 last:mb-0">{line}</p>)}
-                </div>
-              )}
             </div>
             {/* Resize Handle for Sidebar */}
             <div
