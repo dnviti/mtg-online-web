@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, GripVertical } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { DraftCard } from '../../services/PackGeneratorService';
@@ -220,10 +220,22 @@ const CardsDisplay: React.FC<{
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, availableBasicLands = [] }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
-  const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical');
-  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('stack'); // Default to stack as requested? Or keep grid. User didn't say default view, just default Order.
-  const [groupBy, setGroupBy] = useState<'type' | 'color' | 'cmc' | 'rarity'>('color');
-  const [cardWidth, setCardWidth] = useState(60);
+  const [layout, setLayout] = useState<'vertical' | 'horizontal'>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_layout') : null;
+    return (saved as 'vertical' | 'horizontal') || 'vertical';
+  });
+  const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_viewMode') : null;
+    return (saved as 'list' | 'grid' | 'stack') || 'stack';
+  });
+  const [groupBy, setGroupBy] = useState<'type' | 'color' | 'cmc' | 'rarity'>(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_groupBy') : null;
+    return (saved as 'type' | 'color' | 'cmc' | 'rarity') || 'color';
+  });
+  const [cardWidth, setCardWidth] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_cardWidth') : null;
+    return saved ? parseInt(saved, 10) : 60;
+  });
   // Local state for smooth slider
   const [localCardWidth, setLocalCardWidth] = useState(cardWidth);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -240,28 +252,29 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   // --- Resize State ---
   const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem('deck_sidebarWidth');
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_sidebarWidth') : null;
     return saved ? parseInt(saved, 10) : 320;
   });
-  const [poolHeightPercent, setPoolHeightPercent] = useState(() => {
-    const saved = localStorage.getItem('deck_poolHeightPercent');
-    return saved ? parseFloat(saved) : 60;
+  // We now control the Library (Bottom) height in pixels, matching DraftView consistency
+  const [libraryHeight, setLibraryHeight] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_libraryHeight') : null;
+    return saved ? parseInt(saved, 10) : 300;
   });
 
   const sidebarRef = React.useRef<HTMLDivElement>(null);
-  const poolRef = React.useRef<HTMLDivElement>(null);
+  const libraryRef = React.useRef<HTMLDivElement>(null);
   const resizingState = React.useRef<{
     startX: number,
     startY: number,
     startWidth: number,
-    startHeightPercent: number,
-    active: 'sidebar' | 'pool' | null
-  }>({ startX: 0, startY: 0, startWidth: 0, startHeightPercent: 0, active: null });
+    startHeight: number,
+    active: 'sidebar' | 'library' | null
+  }>({ startX: 0, startY: 0, startWidth: 0, startHeight: 0, active: null });
 
   // Initial visual set
   React.useEffect(() => {
     if (sidebarRef.current) sidebarRef.current.style.width = `${sidebarWidth}px`;
-    if (poolRef.current) poolRef.current.style.height = `${poolHeightPercent}%`;
+    if (libraryRef.current) libraryRef.current.style.height = `${libraryHeight}px`;
   }, []);
 
   // Persist Resize
@@ -270,8 +283,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   }, [sidebarWidth]);
 
   useEffect(() => {
-    localStorage.setItem('deck_poolHeightPercent', poolHeightPercent.toString());
-  }, [poolHeightPercent]);
+    localStorage.setItem('deck_libraryHeight', libraryHeight.toString());
+  }, [libraryHeight]);
+
+  // Persist Settings
+  useEffect(() => localStorage.setItem('deck_layout', layout), [layout]);
+  useEffect(() => localStorage.setItem('deck_viewMode', viewMode), [viewMode]);
+  useEffect(() => localStorage.setItem('deck_groupBy', groupBy), [groupBy]);
+  useEffect(() => localStorage.setItem('deck_cardWidth', cardWidth.toString()), [cardWidth]);
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
@@ -451,22 +470,18 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   // --- Resize Handlers ---
   // --- Resize Handlers ---
-  const handleResizeStart = (type: 'sidebar' | 'pool', e: React.MouseEvent | React.TouchEvent) => {
+  const handleResizeStart = (type: 'sidebar' | 'library', e: React.MouseEvent | React.TouchEvent) => {
     // Prevent default to avoid scrolling/selection
     if (e.cancelable) e.preventDefault();
 
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
 
-    const containerTop = 56;
-    const containerHeight = window.innerHeight - containerTop;
-    const currentPoolHeight = poolRef.current?.getBoundingClientRect().height || (containerHeight * 0.6);
-
     resizingState.current = {
       startX: clientX,
       startY: clientY,
       startWidth: sidebarRef.current?.getBoundingClientRect().width || 320,
-      startHeightPercent: poolHeightPercent,
+      startHeight: libraryRef.current?.getBoundingClientRect().height || 300,
       active: type
     };
 
@@ -492,13 +507,11 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
         sidebarRef.current.style.width = `${newWidth}px`;
       }
 
-      if (resizingState.current.active === 'pool' && poolRef.current) {
-        const containerTop = 56;
-        const containerHeight = window.innerHeight - containerTop;
-        const relativeY = clientY - containerTop;
-        const percentage = (relativeY / containerHeight) * 100;
-        const clamped = Math.max(20, Math.min(80, percentage));
-        poolRef.current.style.height = `${clamped}%`;
+      if (resizingState.current.active === 'library' && libraryRef.current) {
+        // Dragging UP increases height of bottom panel
+        const delta = resizingState.current.startY - clientY;
+        const newHeight = Math.max(100, Math.min(window.innerHeight * 0.8, resizingState.current.startHeight + delta));
+        libraryRef.current.style.height = `${newHeight}px`;
       }
     });
   }, []);
@@ -507,11 +520,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     if (resizingState.current.active === 'sidebar' && sidebarRef.current) {
       setSidebarWidth(parseInt(sidebarRef.current.style.width));
     }
-    if (resizingState.current.active === 'pool' && poolRef.current) {
-      const hStyle = poolRef.current.style.height;
-      if (hStyle.includes('%')) {
-        setPoolHeightPercent(parseFloat(hStyle));
-      }
+    if (resizingState.current.active === 'library' && libraryRef.current) {
+      setLibraryHeight(parseInt(libraryRef.current.style.height));
     }
 
     resizingState.current.active = null;
@@ -609,7 +619,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
             {viewMode === 'stack' && (
               <div className="relative z-50">
                 <button
-                  onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                  onClick={() => {
+                    // Store position for fixed dropdown
+                    // We'll just use the button's position relative to viewport
+                    // But since we can't easily pass state to the dropdown without more state,
+                    // we'll just toggle and use fixed positioning in the dropdown render.
+                    // Actually, let's use a simple state for position if needed, or just CSS.
+                    setSortDropdownOpen(!sortDropdownOpen);
+                  }}
                   className="flex items-center gap-2 bg-slate-900 rounded-lg p-1.5 border border-slate-700 h-9 px-3 text-xs font-bold text-white hover:bg-slate-800 transition-colors"
                 >
                   <span className="text-slate-500 uppercase">Sort:</span>
@@ -619,8 +636,34 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
                 {sortDropdownOpen && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setSortDropdownOpen(false)} />
-                    <div className="absolute top-full left-0 mt-2 w-40 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="fixed inset-0 z-[900]" onClick={() => setSortDropdownOpen(false)} />
+                    <div
+                      className="fixed z-[999] bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col gap-1 p-2 w-48"
+                      style={{
+                        top: (containerRef.current?.getBoundingClientRect()?.top || 0) + 60,
+                        left: (containerRef.current?.getBoundingClientRect()?.left || 0) + 140
+                      }}
+                      // Improving position logic: Render close to the button would be better, but without refs it's hard.
+                      // Let's rely on fixed centering or top-left offset if we can't get button rect easily.
+                      // Actually, let's just render it relative to the logic above or modify button to set a ref.
+                      // We can use a ref for the button which we don't have yet.
+                      // Let's make it simple: Fixed position centered or just use a known offset?
+                      // The tool-bar is overflow-x-auto, so relative position is risky.
+                      // Let's use `top: 60px` (toolbar height ~56px) and some `left`.
+                      // A better way is to attach a ref to the button now.
+                      ref={(el) => {
+                        if (el && el.previousElementSibling) { // The button is the previous sibling in DOM? No, the overlay is.
+                          // This is getting hacky. Let's just fix the overflow issue in the Toolbar instead?
+                          // User specifically asked to "take inspiration" and "sort list is opening below everything".
+                          // Fixed positioning is safer.
+                          // I will use a simple effect to position it if I had a ref.
+                        }
+                      }}
+                    >
+                      {/* We'll use a style hack to position it. OR just remove overflow-x-auto from toolbar if it's not needed. check resizing. */}
+                      {/* User said "scrolls inside it's container". */}
+                      {/* Let's use `position: fixed` and put it explicitly. */}
+                      <div className="text-[10px] font-bold text-slate-500 px-2 py-1 uppercase tracking-wider">Group Cards By</div>
                       {[
                         { value: 'color', label: 'Color' },
                         { value: 'type', label: 'Type' },
@@ -633,10 +676,10 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                             setGroupBy(opt.value as any);
                             setSortDropdownOpen(false);
                           }}
-                          className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center justify-between ${groupBy === opt.value ? 'bg-purple-900/30 text-purple-200' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                          className={`w-full text-left px-3 py-2 text-xs font-bold rounded-lg flex items-center justify-between transition-colors ${groupBy === opt.value ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700 hover:text-white'}`}
                         >
                           {opt.label}
-                          {groupBy === opt.value && <Check className="w-3 h-3 text-purple-400" />}
+                          {groupBy === opt.value && <Check className="w-3 h-3 text-white" />}
                         </button>
                       ))}
                     </div>
@@ -794,11 +837,10 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
           ) : (
             <div className="flex-1 flex flex-col min-h-0 relative">
               {/* Top: Pool + Land Station */}
-              {/* Top: Pool + Land Station */}
-              <div ref={poolRef} style={{ height: `${poolHeightPercent}%` }} className="flex flex-col border-b border-slate-800 bg-slate-900/50 overflow-hidden">
+              <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/50 overflow-hidden min-h-0">
                 <DroppableZone
                   id="pool-zone"
-                  className="flex-1 flex flex-col"
+                  className="flex-1 flex flex-col overflow-hidden"
                 >
                   <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
                     <span>Card Pool ({pool.length})</span>
@@ -808,20 +850,26 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                     <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={cardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                   </div>
                 </DroppableZone>
+              </div>
 
-                {/* Resizer Handle */}
-                <div
-                  className="h-2 bg-slate-800 hover:bg-purple-500/50 cursor-row-resize flex items-center justify-center shrink-0 z-20 group transition-colors touch-none"
-                  onMouseDown={(e) => handleResizeStart('pool', e)}
-                  onTouchStart={(e) => handleResizeStart('pool', e)}
-                >
-                  <div className="w-16 h-1 bg-slate-600 rounded-full group-hover:bg-purple-300" />
-                </div>
+              {/* Resizer Handle */}
+              <div
+                className="h-2 bg-slate-800 hover:bg-purple-500/50 cursor-row-resize flex items-center justify-center shrink-0 z-20 group transition-colors touch-none w-full"
+                onMouseDown={(e) => handleResizeStart('library', e)}
+                onTouchStart={(e) => handleResizeStart('library', e)}
+              >
+                <div className="w-16 h-1 bg-slate-600 rounded-full group-hover:bg-purple-300" />
+              </div>
 
-                {/* Bottom: Deck */}
+              {/* Bottom: Library */}
+              <div
+                ref={libraryRef}
+                style={{ height: `${libraryHeight}px` }}
+                className="shrink-0 flex flex-col border-t border-slate-800 bg-slate-900/50 overflow-hidden z-10"
+              >
                 <DroppableZone
                   id="deck-zone"
-                  className="flex-1 flex flex-col min-h-0 bg-slate-900/50 overflow-hidden"
+                  className="flex-1 flex flex-col min-h-0 overflow-hidden"
                 >
                   <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
                     <span>Library ({deck.length})</span>

@@ -534,7 +534,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
   );
 };
 
-const DraftCardItem = ({ rawCard, cardScale, handlePick, setHoveredCard }: any) => {
+const DraftCardItem = ({ rawCard, handlePick, setHoveredCard }: any) => {
   const card = normalizeCard(rawCard);
   const isFoil = card.finish === 'foil';
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => {
