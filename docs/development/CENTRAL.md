@@ -135,3 +135,8 @@
 - [Cache Art Crops](./devlog/2025-12-18-204000_cache_art_crops.md): Completed. Implemented server-side caching for art-crop images and updated client to use local assets when available.
 - [Organized Caching Subdirectories](./devlog/2025-12-18-205000_cache_folder_organization.md): Completed. Restructured image cache to store full art in `art_full` and crops in `art_crop` subdirectories.
 - [Fix Cube Session Clear](./devlog/2025-12-18-210000_fix_cube_session_clear.md): Completed. Updated `CubeManager` to strictly clear all session data including parent-persisted storage keys.
+- [Update Session Clear Logic](./devlog/2025-12-18-202618_update_clear_session.md): Completed. Further refined `handleReset` to exhaustively reset filters, generation settings, and source modes to defaults.
+- [Preserve Preferences in Clear](./devlog/2025-12-18-210500_preserve_preferences_in_clear.md): Completed. Updated "Clear Session" to preserve UI preferences (card size, view mode) while still resetting generation content.
+- [Strict Cache Structure](./devlog/2025-12-18-213300_strict_cache_structure.md): Completed. Enforced cache structure `/cards/[code]/full` and `/cards/[code]/crop`, removing the `images` subdirectory and ensuring strict local file usage.
+- [Implicit Image Caching](./devlog/2025-12-18-213900_implicit_image_caching.md): Completed. Updated API routes `/api/sets/:code/cards` and `/api/cards/parse` to implicitly trigger and await image caching, ensuring assets are available immediately for generators.
+- [Restore Images Subdirectory](./devlog/2025-12-18-214300_restore_images_subdir.md): Completed. Corrected cache folder structure to `/cards/images/[set]/full` and `/cards/images/[set]/crop` as per user request.

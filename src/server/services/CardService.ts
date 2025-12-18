@@ -9,17 +9,11 @@ const __dirname = path.dirname(__filename);
 const CARDS_DIR = path.join(__dirname, '../public/cards');
 
 export class CardService {
-  private imagesDir: string;
+  // Remove imagesDir property as we use CARDS_DIR directly
   private metadataDir: string;
 
   constructor() {
-    this.imagesDir = path.join(CARDS_DIR, 'images');
     this.metadataDir = path.join(CARDS_DIR, 'metadata');
-
-    // Directory creation is handled by FileStorageManager on write for Local, 
-    // and not needed for Redis.
-    // Migration logic removed as it's FS specific and one-time. 
-    // If we need migration to Redis, it should be a separate script.
   }
 
   async cacheImages(cards: any[]): Promise<number> {
@@ -54,9 +48,9 @@ export class CardService {
 
         const tasks: Promise<void>[] = [];
 
-        // Task 1: Normal Image (art_full)
+        // Task 1: Normal Image (full)
         if (imageUrl) {
-          const filePath = path.join(this.imagesDir, setCode, 'art_full', `${uuid}.jpg`);
+          const filePath = path.join(CARDS_DIR, 'images', setCode, 'full', `${uuid}.jpg`);
           tasks.push((async () => {
             if (await fileStorageManager.exists(filePath)) return;
             try {
@@ -65,19 +59,19 @@ export class CardService {
                 const buffer = await response.arrayBuffer();
                 await fileStorageManager.saveFile(filePath, Buffer.from(buffer));
                 downloadedCount++;
-                console.log(`Cached art_full: ${setCode}/${uuid}.jpg`);
+                console.log(`Cached full: ${setCode}/${uuid}.jpg`);
               } else {
-                console.error(`Failed to download art_full ${imageUrl}: ${response.statusText}`);
+                console.error(`Failed to download full ${imageUrl}: ${response.statusText}`);
               }
             } catch (err) {
-              console.error(`Error downloading art_full for ${uuid}:`, err);
+              console.error(`Error downloading full for ${uuid}:`, err);
             }
           })());
         }
 
-        // Task 2: Art Crop (art_crop)
+        // Task 2: Art Crop (crop)
         if (cropUrl) {
-          const cropPath = path.join(this.imagesDir, setCode, 'art_crop', `${uuid}.jpg`);
+          const cropPath = path.join(CARDS_DIR, 'images', setCode, 'crop', `${uuid}.jpg`);
           tasks.push((async () => {
             if (await fileStorageManager.exists(cropPath)) return;
             try {
@@ -85,12 +79,12 @@ export class CardService {
               if (response.ok) {
                 const buffer = await response.arrayBuffer();
                 await fileStorageManager.saveFile(cropPath, Buffer.from(buffer));
-                console.log(`Cached art_crop: ${setCode}/${uuid}.jpg`);
+                console.log(`Cached crop: ${setCode}/${uuid}.jpg`);
               } else {
-                console.error(`Failed to download art_crop ${cropUrl}: ${response.statusText}`);
+                console.error(`Failed to download crop ${cropUrl}: ${response.statusText}`);
               }
             } catch (err) {
-              console.error(`Error downloading art_crop for ${uuid}:`, err);
+              console.error(`Error downloading crop for ${uuid}:`, err);
             }
           })());
         }

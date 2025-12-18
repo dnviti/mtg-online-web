@@ -116,6 +116,16 @@ app.get('/api/sets', async (_req: Request, res: Response) => {
 app.get('/api/sets/:code/cards', async (req: Request, res: Response) => {
   try {
     const cards = await scryfallService.fetchSetCards(req.params.code);
+
+    // Implicitly cache images for these cards so local URLs work
+    if (cards.length > 0) {
+      console.log(`[API] Triggering image cache for set ${req.params.code} (${cards.length} potential images)...`);
+      // We await this to ensure images are ready before user views them, 
+      // although it might slow down the "Fetching..." phase.
+      // Given the user requirement "upon downloading metadata, also ... must be cached", we wait.
+      await cardService.cacheImages(cards);
+    }
+
     res.json(cards);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -130,6 +140,12 @@ app.post('/api/cards/parse', async (req: Request, res: Response) => {
     // Resolve
     const uniqueIds = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
     const uniqueCards = await scryfallService.fetchCollection(uniqueIds);
+
+    // Cache Images for the resolved cards
+    if (uniqueCards.length > 0) {
+      console.log(`[API] Triggering image cache for parsed lists (${uniqueCards.length} unique cards)...`);
+      await cardService.cacheImages(uniqueCards);
+    }
 
     // Expand
     const expanded: any[] = [];

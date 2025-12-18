@@ -454,24 +454,27 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
         localStorage.removeItem('generatedPacks');
         localStorage.removeItem('availableLands');
 
-        // 3. Reset Local State
+        // 3. Reset Local State to Defaults
+        // This will trigger the useEffect hooks to update localStorage accordingly
         setInputText('');
         setRawScryfallData(null);
         setProcessedData(null);
         setSelectedSets([]);
+        setSearchTerm(''); // Clear search
 
-        // 4. Clear Local Persistence
-        localStorage.removeItem('cube_inputText');
-        localStorage.removeItem('cube_rawScryfallData');
-        localStorage.removeItem('cube_selectedSets');
-        localStorage.removeItem('cube_viewMode');
-        localStorage.removeItem('cube_gameTypeFilter');
-        // We can optionally clear source mode, or leave it. Let's leave it for UX continuity or clear it?
-        // Let's clear it to full reset.
-        // localStorage.removeItem('cube_sourceMode'); 
+        setFilters({
+          ignoreBasicLands: false,
+          ignoreCommander: false,
+          ignoreTokens: false
+        });
 
-        // 5. Reset UI Filters/Views to defaults
-        setViewMode('list');
+        setGenSettings({
+          mode: 'mixed',
+          rarityMode: 'peasant'
+        });
+
+        setSourceMode('upload');
+        setNumBoxes(1);
         setGameTypeFilter('all');
 
         showToast("Session cleared successfully.", "success");

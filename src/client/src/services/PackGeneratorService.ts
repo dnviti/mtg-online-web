@@ -107,10 +107,10 @@ export class PackGeneratorService {
         layout: layout,
         colors: cardData.colors || [],
         image: useLocalImages
-          ? `${window.location.origin}/cards/images/${cardData.set}/art_full/${cardData.id}.jpg`
+          ? `${window.location.origin}/cards/images/${cardData.set}/full/${cardData.id}.jpg`
           : (cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || ''),
         imageArtCrop: useLocalImages
-          ? `${window.location.origin}/cards/images/${cardData.set}/art_crop/${cardData.id}.jpg`
+          ? `${window.location.origin}/cards/images/${cardData.set}/crop/${cardData.id}.jpg`
           : (cardData.image_uris?.art_crop || cardData.card_faces?.[0]?.image_uris?.art_crop || ''),
         set: cardData.set_name,
         setCode: cardData.set,
