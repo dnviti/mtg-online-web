@@ -94,9 +94,23 @@ export const CardHoverWrapper: React.FC<{ card: DraftCard; children: React.React
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const hasImage = !!card.image;
-  // Use a stable value for isMobile to avoid hydration mismatches if using SSR, 
-  // but since this is client-side mostly, window check is okay.
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+  // Use state for isMobile to handle window resizing and touch capability detection
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      // "Mobile" behavior (No hover, long-press, modal preview) applies if:
+      // 1. Device is primarily touch (pointer: coarse) - e.g. Tablets, Phones
+      // 2. Screen is small (< 1024px) - e.g. Phone in Desktop mode or small window
+      const isTouch = window.matchMedia('(pointer: coarse)').matches;
+      const isSmall = window.innerWidth < 1024;
+      setIsMobile(isTouch || isSmall);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const shouldShow = (isHovering && !isMobile) || isLongPressing;
 
