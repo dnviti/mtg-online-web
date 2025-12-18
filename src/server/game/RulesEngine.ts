@@ -60,6 +60,14 @@ export class RulesEngine {
     return true;
   }
 
+  public startGame() {
+    console.log("RulesEngine: Starting Game...");
+    // Ensure specific setup if needed (life total, etc is done elsewhere)
+
+    // Trigger Initial Draw
+    this.performTurnBasedActions();
+  }
+
   public castSpell(playerId: string, cardId: string, targets: string[] = [], position?: { x: number, y: number }) {
     if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
@@ -136,6 +144,7 @@ export class RulesEngine {
     });
 
     console.log(`Player ${playerId} declared ${attackers.length} attackers.`);
+    this.state.attackersDeclared = true; // Flag for UI/Engine state
 
     // 508.2. Active Player gets priority
     // But usually passing happens immediately after declaration in digital?
@@ -361,6 +370,21 @@ export class RulesEngine {
       nextStep = structure[nextPhase][0];
     }
 
+    // SKIP Logic for Combat
+    // 508.8. If no creatures are declared as attackers... skip declare blockers/combat damage steps.
+    if (this.state.phase === 'combat') {
+      const attackers = Object.values(this.state.cards).filter(c => !!c.attacking);
+
+      // If we are about to enter declare_blockers or combat_damage and NO attackers exist
+      // Note: We check 'attacking' status. If we just finished declare_attackers, we might have reset it? 
+      // No, 'attacking' property persists until end of combat.
+
+      if (nextStep === 'declare_blockers' && attackers.length === 0) {
+        console.log("No attackers. Skipping directly to End of Combat.");
+        nextStep = 'end_combat';
+      }
+    }
+
     // Rule 500.4: Mana empties at end of each step and phase
     this.emptyManaPools();
 
@@ -523,7 +547,7 @@ export class RulesEngine {
     });
   }
 
-  private drawCard(playerId: string) {
+  public drawCard(playerId: string) {
     const library = Object.values(this.state.cards).filter(c => c.ownerId === playerId && c.zone === 'library');
     if (library.length > 0) {
       // Draw top card (random for now if not ordered?)
@@ -546,6 +570,9 @@ export class RulesEngine {
         c.modifiers = c.modifiers.filter(m => !m.untilEndOfTurn);
       }
     });
+
+    this.state.attackersDeclared = false;
+    this.state.blockersDeclared = false;
   }
 
   // --- State Based Actions ---

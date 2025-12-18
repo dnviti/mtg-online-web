@@ -46,29 +46,56 @@ export class CardService {
           imageUrl = card.card_faces[0].image_uris?.normal;
         }
 
-        if (!imageUrl) continue;
-
-        const filePath = path.join(this.imagesDir, setCode, `${uuid}.jpg`);
-
-        // Check if exists
-        if (await fileStorageManager.exists(filePath)) {
-          continue;
+        // Check for art crop
+        let cropUrl = card.image_uris?.art_crop;
+        if (!cropUrl && card.card_faces && card.card_faces.length > 0) {
+          cropUrl = card.card_faces[0].image_uris?.art_crop;
         }
 
-        try {
-          // Download
-          const response = await fetch(imageUrl);
-          if (response.ok) {
-            const buffer = await response.arrayBuffer();
-            await fileStorageManager.saveFile(filePath, Buffer.from(buffer));
-            downloadedCount++;
-            console.log(`Cached image: ${setCode}/${uuid}.jpg`);
-          } else {
-            console.error(`Failed to download ${imageUrl}: ${response.statusText}`);
-          }
-        } catch (err) {
-          console.error(`Error downloading image for ${uuid}:`, err);
+        const tasks: Promise<void>[] = [];
+
+        // Task 1: Normal Image (art_full)
+        if (imageUrl) {
+          const filePath = path.join(this.imagesDir, setCode, 'art_full', `${uuid}.jpg`);
+          tasks.push((async () => {
+            if (await fileStorageManager.exists(filePath)) return;
+            try {
+              const response = await fetch(imageUrl);
+              if (response.ok) {
+                const buffer = await response.arrayBuffer();
+                await fileStorageManager.saveFile(filePath, Buffer.from(buffer));
+                downloadedCount++;
+                console.log(`Cached art_full: ${setCode}/${uuid}.jpg`);
+              } else {
+                console.error(`Failed to download art_full ${imageUrl}: ${response.statusText}`);
+              }
+            } catch (err) {
+              console.error(`Error downloading art_full for ${uuid}:`, err);
+            }
+          })());
         }
+
+        // Task 2: Art Crop (art_crop)
+        if (cropUrl) {
+          const cropPath = path.join(this.imagesDir, setCode, 'art_crop', `${uuid}.jpg`);
+          tasks.push((async () => {
+            if (await fileStorageManager.exists(cropPath)) return;
+            try {
+              const response = await fetch(cropUrl);
+              if (response.ok) {
+                const buffer = await response.arrayBuffer();
+                await fileStorageManager.saveFile(cropPath, Buffer.from(buffer));
+                console.log(`Cached art_crop: ${setCode}/${uuid}.jpg`);
+              } else {
+                console.error(`Failed to download art_crop ${cropUrl}: ${response.statusText}`);
+              }
+            } catch (err) {
+              console.error(`Error downloading art_crop for ${uuid}:`, err);
+            }
+          })());
+        }
+
+        await Promise.all(tasks);
       }
     };
 

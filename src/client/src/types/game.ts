@@ -39,8 +39,12 @@ export interface CardInstance {
   baseToughness?: number; // Base Toughness
   position: { x: number; y: number; z: number }; // For freeform placement
   typeLine?: string;
+  types?: string[];
+  supertypes?: string[];
+  subtypes?: string[];
   oracleText?: string;
   manaCost?: string;
+  definition?: any;
 }
 
 export interface PlayerState {
@@ -68,4 +72,6 @@ export interface GameState {
   stack?: StackObject[];
   activePlayerId?: string; // Explicitly tracked in strict
   priorityPlayerId?: string;
+  attackersDeclared?: boolean;
+  blockersDeclared?: boolean;
 }

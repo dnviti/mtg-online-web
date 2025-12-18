@@ -26,10 +26,16 @@ export const SmartButton: React.FC<SmartButtonProps> = ({ gameState, playerId, o
     actionType = 'CANCEL_YIELD';
   } else if (isMyPriority) {
     if (gameState.step === 'declare_attackers') {
-      const count = contextData?.attackers?.length || 0;
-      label = count > 0 ? `Attack with ${count}` : "Skip Combat";
-      colorClass = "bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse";
-      actionType = 'DECLARE_ATTACKERS';
+      if (gameState.attackersDeclared) {
+        label = "Pass (to Blockers)";
+        colorClass = "bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] animate-pulse";
+        actionType = 'PASS_PRIORITY';
+      } else {
+        const count = contextData?.attackers?.length || 0;
+        label = count > 0 ? `Attack with ${count}` : "Skip Combat";
+        colorClass = "bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.5)] animate-pulse";
+        actionType = 'DECLARE_ATTACKERS';
+      }
     } else if (gameState.step === 'declare_blockers') {
       // Todo: blockers context
       label = "Declare Blockers";

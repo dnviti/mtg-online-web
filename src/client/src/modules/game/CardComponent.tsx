@@ -15,9 +15,10 @@ interface CardComponentProps {
   onDragEnd?: (e: React.DragEvent) => void;
   style?: React.CSSProperties;
   className?: string;
+  viewMode?: 'normal' | 'cutout';
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal' }) => {
   const { registerCard, unregisterCard } = useGesture();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -27,6 +28,16 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
     }
     return () => unregisterCard(card.instanceId);
   }, [card.instanceId]);
+
+  // Robustly resolve Art Crop
+  let imageSrc = card.imageUrl;
+  if (viewMode === 'cutout' && card.definition) {
+    if (card.definition.image_uris?.art_crop) {
+      imageSrc = card.definition.image_uris.art_crop;
+    } else if (card.definition.card_faces?.[0]?.image_uris?.art_crop) {
+      imageSrc = card.definition.card_faces[0].image_uris.art_crop;
+    }
+  }
 
   return (
     <div
@@ -55,7 +66,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       onMouseLeave={onMouseLeave}
       className={`
         relative rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 select-none
-        ${card.tapped ? 'rotate-90' : ''}
+        ${card.tapped ? 'rotate-45' : ''}
         ${card.zone === 'hand' ? 'w-32 h-44 -ml-12 first:ml-0 hover:z-10 hover:-translate-y-4' : 'w-24 h-32'}
         ${className || ''}
       `}
@@ -64,7 +75,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       <div className="w-full h-full relative overflow-hidden rounded-lg bg-slate-800 border-2 border-slate-700">
         {!card.faceDown ? (
           <img
-            src={card.imageUrl}
+            src={imageSrc}
             alt={card.name}
             className="w-full h-full object-cover"
             draggable={false}

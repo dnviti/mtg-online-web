@@ -96,7 +96,7 @@ export class GameManager {
           return null;
       }
     } catch (e: any) {
-      console.error(`Rule Violation [${action.type}]: ${e.message}`);
+      console.error(`Rule Violation [${action?.type || 'UNKNOWN'}]: ${e.message}`);
       // TODO: Return error to user?
       // For now, just logging and not updating state (transactional-ish)
       return null;
@@ -111,16 +111,32 @@ export class GameManager {
     if (!game) return null;
 
     // Basic Validation: Ensure actor exists in game (or is host/admin?)
-    if (!game.players[actorId]) return null;
+    if (!game.players[actorId]) {
+      console.warn(`handleAction: Player ${actorId} not found in room ${roomId}`);
+      return null;
+    }
+
+    console.log(`[GameManager] Handling Action: ${action.type} for ${roomId} by ${actorId}`);
 
     switch (action.type) {
+      case 'UPDATE_LIFE':
+        if (game.players[actorId]) {
+          game.players[actorId].life += (action.amount || 0);
+        }
+        break;
       case 'MOVE_CARD':
         this.moveCard(game, action, actorId);
         break;
       case 'TAP_CARD':
         this.tapCard(game, action, actorId);
         break;
-      // ... (Other cases can be ported if needed)
+      case 'DRAW_CARD':
+        const engine = new RulesEngine(game);
+        engine.drawCard(actorId);
+        break;
+      case 'RESTART_GAME':
+        this.restartGame(roomId);
+        break;
     }
 
     return game;
@@ -188,8 +204,100 @@ export class GameManager {
       name: '',
       ...cardData,
       damageMarked: 0,
-      controlledSinceTurn: 0 // Will be updated on draw/play
+      controlledSinceTurn: 0, // Will be updated on draw/play
+      definition: cardData.definition // Ensure definition is passed
     };
+
+    // Auto-Parse Types if missing
+    if (card.types.length === 0 && card.typeLine) {
+      const [typePart, subtypePart] = card.typeLine.split('—').map(s => s.trim());
+      const typeWords = typePart.split(' ');
+
+      const supertypeList = ['Legendary', 'Basic', 'Snow', 'World'];
+      const typeList = ['Land', 'Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Instant', 'Sorcery', 'Tribal', 'Battle', 'Kindred']; // Kindred = Tribal
+
+      card.supertypes = typeWords.filter(w => supertypeList.includes(w));
+      card.types = typeWords.filter(w => typeList.includes(w));
+
+      if (subtypePart) {
+        card.subtypes = subtypePart.split(' ');
+      }
+    }
+
+    // Auto-Parse P/T from cardData if provided specifically as strings or numbers, ensuring numbers
+    if (cardData.power !== undefined) card.basePower = Number(cardData.power);
+    if (cardData.toughness !== undefined) card.baseToughness = Number(cardData.toughness);
+
+    // Set current values to base
+    card.power = card.basePower;
+    card.toughness = card.baseToughness;
+
     game.cards[card.instanceId] = card;
+  }
+
+  private restartGame(roomId: string) {
+    const game = this.games.get(roomId);
+    if (!game) return;
+
+    // 1. Reset Game Global State
+    game.turnCount = 1;
+    game.phase = 'setup';
+    game.step = 'mulligan';
+    game.stack = [];
+    game.activePlayerId = game.turnOrder[0];
+    game.priorityPlayerId = game.activePlayerId;
+    game.passedPriorityCount = 0;
+    game.landsPlayedThisTurn = 0;
+    game.attackersDeclared = false;
+    game.blockersDeclared = false;
+    game.maxZ = 100;
+
+    // 2. Reset Players
+    Object.keys(game.players).forEach(pid => {
+      const p = game.players[pid];
+      p.life = 20;
+      p.poison = 0;
+      p.energy = 0;
+      p.isActive = (pid === game.activePlayerId);
+      p.hasPassed = false;
+      p.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+      p.handKept = false;
+      p.mulliganCount = 0;
+    });
+
+    // 3. Reset Cards
+    const tokensToRemove: string[] = [];
+    Object.values(game.cards).forEach(c => {
+      if (c.oracleId.startsWith('token-')) {
+        tokensToRemove.push(c.instanceId);
+      } else {
+        // Move to Library
+        c.zone = 'library';
+        c.tapped = false;
+        c.faceDown = true;
+        c.counters = [];
+        c.modifiers = [];
+        c.damageMarked = 0;
+        c.controlledSinceTurn = 0;
+        c.power = c.basePower;
+        c.toughness = c.baseToughness;
+        c.attachedTo = undefined;
+        c.blocking = undefined;
+        c.attacking = undefined;
+        // Reset position?
+        c.position = undefined;
+      }
+    });
+
+    // Remove tokens
+    tokensToRemove.forEach(id => {
+      delete game.cards[id];
+    });
+
+    console.log(`Game ${roomId} restarted.`);
+
+    // 4. Trigger Start Game (Draw Hands via Rules Engine)
+    const engine = new RulesEngine(game);
+    engine.startGame();
   }
 }

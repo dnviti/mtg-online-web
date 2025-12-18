@@ -443,20 +443,42 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
   const handleReset = () => {
     if (window.confirm("Are you sure you want to clear this session? All parsed cards and generated packs will be lost.")) {
-      setPacks([]);
-      setInputText('');
-      setRawScryfallData(null);
-      setProcessedData(null);
-      setAvailableLands([]);
-      setSelectedSets([]);
-      localStorage.removeItem('cube_inputText');
-      localStorage.removeItem('cube_rawScryfallData');
-      localStorage.removeItem('cube_selectedSets');
-      localStorage.removeItem('cube_viewMode');
-      localStorage.removeItem('cube_gameTypeFilter');
-      setViewMode('list');
-      setGameTypeFilter('all');
-      // We keep filters and settings as they are user preferences
+      try {
+        console.log("Clearing session...");
+
+        // 1. Reset Parent State (App.tsx)
+        setPacks([]);
+        setAvailableLands([]);
+
+        // 2. Explicitly clear parent persistence keys to ensure they are gone immediately
+        localStorage.removeItem('generatedPacks');
+        localStorage.removeItem('availableLands');
+
+        // 3. Reset Local State
+        setInputText('');
+        setRawScryfallData(null);
+        setProcessedData(null);
+        setSelectedSets([]);
+
+        // 4. Clear Local Persistence
+        localStorage.removeItem('cube_inputText');
+        localStorage.removeItem('cube_rawScryfallData');
+        localStorage.removeItem('cube_selectedSets');
+        localStorage.removeItem('cube_viewMode');
+        localStorage.removeItem('cube_gameTypeFilter');
+        // We can optionally clear source mode, or leave it. Let's leave it for UX continuity or clear it?
+        // Let's clear it to full reset.
+        // localStorage.removeItem('cube_sourceMode'); 
+
+        // 5. Reset UI Filters/Views to defaults
+        setViewMode('list');
+        setGameTypeFilter('all');
+
+        showToast("Session cleared successfully.", "success");
+      } catch (error) {
+        console.error("Error clearing session:", error);
+        showToast("Failed to clear session fully.", "error");
+      }
     }
   };
 

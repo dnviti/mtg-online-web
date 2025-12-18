@@ -62,6 +62,7 @@ export interface CardObject {
 
   // Metadata
   controlledSinceTurn: number; // For Summoning Sickness check
+  definition?: any;
 }
 
 export interface PlayerState {
@@ -108,6 +109,8 @@ export interface StrictGameState {
   // Rules State
   passedPriorityCount: number; // 0..N. If N, advance.
   landsPlayedThisTurn: number;
+  attackersDeclared?: boolean;
+  blockersDeclared?: boolean;
 
   maxZ: number; // Visual depth (legacy support)
 }

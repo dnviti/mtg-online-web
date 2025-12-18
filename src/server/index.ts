@@ -11,6 +11,7 @@ import { ScryfallService } from './services/ScryfallService';
 import { PackGeneratorService } from './services/PackGeneratorService';
 import { CardParserService } from './services/CardParserService';
 import { PersistenceManager } from './managers/PersistenceManager';
+import { RulesEngine } from './game/RulesEngine';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -255,6 +256,11 @@ const draftInterval = setInterval(() => {
             });
           }
         });
+
+        // Initialize Game State (Draw Hands)
+        const engine = new RulesEngine(game);
+        engine.startGame();
+
         io.to(roomId).emit('game_update', game);
       }
     }
@@ -471,12 +477,19 @@ io.on('connection', (socket) => {
                 oracleText: card.oracleText || card.oracle_text || '',
                 manaCost: card.manaCost || card.mana_cost || '',
                 keywords: card.keywords || [],
+                power: card.power, // Add Power
+                toughness: card.toughness, // Add Toughness
                 damageMarked: 0,
                 controlledSinceTurn: 0
               });
             });
           }
         });
+
+        // Initialize Game State (Draw Hands)
+        const engine = new RulesEngine(game);
+        engine.startGame();
+
         io.to(room.id).emit('game_update', game);
       }
     }
@@ -501,11 +514,18 @@ io.on('connection', (socket) => {
           oracleText: card.oracleText || card.oracle_text || '',
           manaCost: card.manaCost || card.mana_cost || '',
           keywords: card.keywords || [],
+          power: card.power,
+          toughness: card.toughness,
           damageMarked: 0,
           controlledSinceTurn: 0
         });
       });
     }
+
+    // Initialize Game State (Draw Hands)
+    const engine = new RulesEngine(game);
+    engine.startGame();
+
     callback({ success: true, room, game });
     io.to(room.id).emit('room_update', room);
     io.to(room.id).emit('game_update', game);
@@ -535,12 +555,19 @@ io.on('connection', (socket) => {
               oracleText: card.oracleText || card.oracle_text || '',
               manaCost: card.manaCost || card.mana_cost || '',
               keywords: card.keywords || [],
+              power: card.power,
+              toughness: card.toughness,
               damageMarked: 0,
               controlledSinceTurn: 0
             });
           });
         });
       }
+
+      // Initialize Game State (Draw Hands)
+      const engine = new RulesEngine(game);
+      engine.startGame();
+
       io.to(room.id).emit('game_update', game);
     }
   });

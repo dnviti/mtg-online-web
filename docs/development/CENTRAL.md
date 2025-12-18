@@ -115,3 +115,23 @@
 - [Engine Enhancements](./devlog/2024-12-18-200000_engine_enhancements.md): Completed. Implemented Basic Layers (P/T Modifiers), Token Creation, London Mulligan System, and Basic Aura Validation SBA.
 - [High Velocity UX & Strict Engine Completion](./devlog/2024-12-18-220000_ux_and_engine_completion.md): Completed. Finalized Rules Engine (SBAs, Layers), implemented Inspector Overlay, Smart Button Yield, and Radial Menus.
 - [Archived Plan: MTG Engine & UX](./devlog/2025-12-18-184500_mtg_engine_and_ux_archived_plan.md): Archived. The original implementation plan for the strict engine and high-velocity UX.
+- [Fix Initial Draw Logic](./devlog/2024-12-18-185000_fix_initial_draw.md): Completed. Fixed issue where players started with empty hands during Mulligan phase.
+- [Manual Draw Fix](./devlog/2024-12-18-185500_manual_draw_fix.md): Completed. Implemented handler for manual "Draw Card" action in Game Manager.
+- [Fix Actions Post-Mulligan](./devlog/2024-12-18-190000_fix_actions_post_mulligan.md): Completed. Aligned client-side strict action capability for Smart Button and Radial Menu.
+- [Parse Card Data Robustness](./devlog/2024-12-18-190500_parsing_robustness.md): Completed. Fixed issue where cards lacked types (going to graveyard) and stats (dying to SBA).
+- [Fix Logging Crash](./devlog/2024-12-18-191000_fix_logging_crash.md): Completed. Fixed server crash when logging rule violations with malformed action payloads.
+- [Fix Strict Action Payload](./devlog/2024-12-18-191500_fix_strict_action_payload.md): Completed. Corrected frontend emission structure for strict actions (lands, spells) to prevent undefined errors.
+- [Fix Combat Skip Logic](./devlog/2024-12-18-192500_fix_combat_skip.md): Completed. Added `attackersDeclared` state flag to allow UI to transition from Declaration to Priority passing.
+- [Force Combat Step Skip](./devlog/2024-12-18-193500_force_combat_skip.md): Completed. Implemented Rule 508.8 to automatically skip Blockers/Damage steps if no attackers are declared.
+- [Implement Restart Game](./devlog/2025-12-18-193855_implement_restart_game.md): Completed. Added a developer button to reset the game state (preserving decks) for rapid testing.
+- [Dev Reliability Fixes](./devlog/2025-12-18-194500_dev_reliability_fixes.md): Completed. Implemented auto-rejoin on socket reconnection to prevent actions failing after server restarts.
+- [Battlefield Restructure](./devlog/2025-12-18-195000_battlefield_restructure.md): Completed. Refactored GameView battlefield into 3 distinct zones (Creatures, Non-Creatures, Lands) with organized flex layout.
+- [Battlefield Card Sizing](./devlog/2025-12-18-195300_battlefield_card_sizing.md): Completed. Increased battlefield card size to be responsive (w-32 to w-40) for better visibility.
+- [DnD Kit Integration](./devlog/2025-12-18-195623_game_dnd_kit.md): Completed. Replaced native DnD with @dnd-kit/core for consistent drag-and-drop experience on desktop and mobile, implementing DraggableCardWrapper and DroppableZone components.
+- [Battlefield Cutout Style](./devlog/2025-12-18-200000_battlefield_cutout_style.md): Completed. Implemented art-crop cutout style for battlefield cards, 45-degree tap rotation, and stacked tapped lands layout.
+- [Fix Battlefield Appearance](./devlog/2025-12-18-201500_fix_battlefield_appearance.md): Completed. Fixed issue where battlefield cards showed full text instead of art crop by propagating metadata, and enforced square aspect ratio.
+- [Robust Artwork Fetching](./devlog/2025-12-18-202000_robust_artwork_fetching.md): Completed. Updated CardComponent to robustly resolve art crop URLs, including support for double-faced cards to ensure consistent battlefield visuals.
+- [Fix Restart Game Action](./devlog/2025-12-18-203000_fix_restart_game.md): Completed. Fixed "Restart Game" button to properly trigger initial card draw by invoking RulesEngine logic after state reset.
+- [Cache Art Crops](./devlog/2025-12-18-204000_cache_art_crops.md): Completed. Implemented server-side caching for art-crop images and updated client to use local assets when available.
+- [Organized Caching Subdirectories](./devlog/2025-12-18-205000_cache_folder_organization.md): Completed. Restructured image cache to store full art in `art_full` and crops in `art_crop` subdirectories.
+- [Fix Cube Session Clear](./devlog/2025-12-18-210000_fix_cube_session_clear.md): Completed. Updated `CubeManager` to strictly clear all session data including parent-persisted storage keys.

@@ -1,6 +1,5 @@
 
-import React, { createContext, useContext, useRef, useState, useEffect } from 'react';
-import { socketService } from '../../services/SocketService';
+import React, { createContext, useContext, useRef, useState } from 'react';
 
 interface GestureContextType {
   registerCard: (id: string, element: HTMLElement) => void;

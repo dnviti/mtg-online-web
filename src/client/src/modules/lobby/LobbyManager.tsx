@@ -215,7 +215,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     }
   }, [activeRoom]);
 
-  // Reconnection logic
+  // Reconnection logic (Initial Mount)
   React.useEffect(() => {
     const savedRoomId = localStorage.getItem('active_room_id');
     if (savedRoomId && !activeRoom && playerId) {
@@ -245,6 +245,29 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         });
     }
   }, []);
+
+  // Auto-Rejoin on Socket Reconnect (e.g. Server Restart)
+  React.useEffect(() => {
+    const socket = socketService.socket;
+
+    const onConnect = () => {
+      if (activeRoom && playerId) {
+        console.log("Socket reconnected. Attempting to restore session for room:", activeRoom.id);
+        socketService.emitPromise('rejoin_room', { roomId: activeRoom.id, playerId })
+          .then((response: any) => {
+            if (response.success) {
+              console.log("Session restored successfully.");
+            } else {
+              console.warn("Failed to restore session:", response.message);
+            }
+          })
+          .catch(err => console.error("Session restore error:", err));
+      }
+    };
+
+    socket.on('connect', onConnect);
+    return () => { socket.off('connect', onConnect); };
+  }, [activeRoom, playerId]);
 
   // Listener for room updates to switch view
   React.useEffect(() => {
