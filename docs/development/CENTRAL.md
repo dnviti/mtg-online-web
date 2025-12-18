@@ -108,3 +108,4 @@
 - [Pool Card Sizing](./devlog/2025-12-18-042500_pool_card_sizing.md): Completed. Fixed "enormous" card bug in horizontal pool by enforcing percentage-based height constraint.
 - [Final Pool Layout Fix](./devlog/2025-12-18-043500_pool_sizing_final.md): Completed. Overhauled flex layout for Horizontal Pool to ensure card images scale 1:1 with panel height during resize, removing layout-blocking transitions.
 - [Pool Overflow Constraint](./devlog/2025-12-18-044500_pool_overflow_fix.md): Completed. Enforce flex shrinkage with `min-h-0` and `overflow-hidden` to strictly bind card height to resizeable panel.
+- [Resize Persistence](./devlog/2025-12-18-050000_resize_persistence.md): Completed. Implemented `localStorage` persistence for Sidebars and Pool Panels in both Draft and Deck Views.

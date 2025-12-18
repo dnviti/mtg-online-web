@@ -61,7 +61,10 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
 
 
   // --- UI State & Persistence ---
-  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('draft_sidebarWidth');
+    return saved ? parseInt(saved, 10) : 320;
+  });
   const [poolHeight, setPoolHeight] = useState<number>(() => {
     const saved = localStorage.getItem('draft_poolHeight');
     return saved ? parseInt(saved, 10) : 220;
@@ -106,6 +109,10 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
   useEffect(() => {
     localStorage.setItem('draft_poolHeight', poolHeight.toString());
   }, [poolHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('draft_sidebarWidth', sidebarWidth.toString());
+  }, [sidebarWidth]);
 
   useEffect(() => {
     localStorage.setItem('draft_cardScale', cardScale.toString());

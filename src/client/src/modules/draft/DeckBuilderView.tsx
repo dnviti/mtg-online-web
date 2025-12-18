@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
 import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, GripVertical } from 'lucide-react';
 import { StackView } from '../../components/StackView';
@@ -239,8 +239,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   // --- Resize State ---
-  const [sidebarWidth, setSidebarWidth] = useState(320); // Initial 320px
-  const [poolHeightPercent, setPoolHeightPercent] = useState(60); // Initial 60% for pool (horizontal layout)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('deck_sidebarWidth');
+    return saved ? parseInt(saved, 10) : 320;
+  });
+  const [poolHeightPercent, setPoolHeightPercent] = useState(() => {
+    const saved = localStorage.getItem('deck_poolHeightPercent');
+    return saved ? parseFloat(saved) : 60;
+  });
 
   const sidebarRef = React.useRef<HTMLDivElement>(null);
   const poolRef = React.useRef<HTMLDivElement>(null);
@@ -257,6 +263,15 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     if (sidebarRef.current) sidebarRef.current.style.width = `${sidebarWidth}px`;
     if (poolRef.current) poolRef.current.style.height = `${poolHeightPercent}%`;
   }, []);
+
+  // Persist Resize
+  useEffect(() => {
+    localStorage.setItem('deck_sidebarWidth', sidebarWidth.toString());
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem('deck_poolHeightPercent', poolHeightPercent.toString());
+  }, [poolHeightPercent]);
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
