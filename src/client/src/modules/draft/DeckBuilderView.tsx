@@ -91,7 +91,13 @@ const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: 
     }
   };
 
-  const { onTouchStart, onTouchEnd, onTouchMove, onClick: handleTouchClick } = useCardTouch(onHover || (() => { }), onClick || (() => { }), card);
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick: handleTouchClick } = useCardTouch(onHover || (() => { }), () => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      if (onHover) onHover(card);
+    } else {
+      if (onClick) onClick();
+    }
+  }, card);
 
   return (
     <div
@@ -159,7 +165,13 @@ const CardsDisplay: React.FC<{
         <StackView
           cards={cards.map(normalizeCard)}
           cardWidth={cardWidth}
-          onCardClick={(c) => onCardClick(c)}
+          onCardClick={(c) => {
+            if (window.matchMedia('(pointer: coarse)').matches) {
+              onHover(c);
+            } else {
+              onCardClick(c);
+            }
+          }}
           onHover={(c) => onHover(c)}
           disableHoverPreview={true}
         />
@@ -564,10 +576,10 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               {/* Deck Column */}
               <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0 bg-slate-900/50">
                 <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
-                  <span>Deck ({deck.length})</span>
+                  <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" source="deck" />
+                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" />
                 </div>
               </DroppableZone>
             </div>
@@ -586,10 +598,10 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               {/* Bottom: Deck */}
               <DroppableZone id="deck-zone" className="h-[40%] flex flex-col min-h-0 bg-slate-900/50">
                 <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
-                  <span>Deck ({deck.length})</span>
+                  <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Deck is Empty" source="deck" />
+                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={cardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" />
                 </div>
               </DroppableZone>
             </div>
@@ -613,7 +625,13 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
 const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
   const displayImage = useArtCrop ? card.imageArtCrop : card.image;
-  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => onCardClick(card), card);
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      onHover(card);
+    } else {
+      onCardClick(card);
+    }
+  }, card);
 
   return (
     <div
