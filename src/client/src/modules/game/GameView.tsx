@@ -9,6 +9,9 @@ import { PhaseStrip } from './PhaseStrip';
 import { SmartButton } from './SmartButton';
 import { StackVisualizer } from './StackVisualizer';
 import { GestureManager } from './GestureManager';
+import { MulliganView } from './MulliganView';
+import { RadialMenu, RadialOption } from './RadialMenu';
+import { InspectorOverlay } from './InspectorOverlay';
 
 interface GameViewProps {
   gameState: GameState;
@@ -16,11 +19,67 @@ interface GameViewProps {
 }
 
 export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }) => {
+  // Assuming useGameSocket is a custom hook that provides game state and player info
+  // This line was added based on the provided snippet, assuming it's part of the intended context.
+  // If useGameSocket is not defined elsewhere, this will cause an error.
+  // For the purpose of this edit, I'm adding it as it appears in the instruction's context.
+  // const { gameState: socketGameState, myPlayerId, isConnected } = useGameSocket();
   const battlefieldRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const [draggedCard, setDraggedCard] = useState<CardInstance | null>(null);
+  const [inspectedCard, setInspectedCard] = useState<CardInstance | null>(null);
+  const [radialOptions, setRadialOptions] = useState<RadialOption[] | null>(null);
+  const [radialPosition, setRadialPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
+  const [isYielding, setIsYielding] = useState(false);
+  const touchStartRef = useRef<{ x: number, y: number, time: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [viewingZone, setViewingZone] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardInstance | null>(null);
+
+  // Auto-Pass Priority if Yielding
+  useEffect(() => {
+    if (isYielding && gameState.priorityPlayerId === currentPlayerId) {
+      // Stop yielding if stack is NOT empty? usually F4 stops if something is on stack that ISN'T what we yielded to.
+      // For simple "Yield All", we just pass. But if it's "Yield until EOT", we pass on empty stack?
+      // Let's implement safe yield: Pass if stack is empty OR if we didn't specify a stop condition.
+      // Actually, for MVP "Yield", just pass everything. User can cancel.
+
+      // Important: Don't yield during Declare Attackers/Blockers (steps where action isn't strictly priority pass)
+      if (['declare_attackers', 'declare_blockers'].includes(gameState.step || '')) {
+        setIsYielding(false); // Auto-stop yield on combat decisions
+        return;
+      }
+
+      console.log("Auto-Yielding Priority...");
+      const timer = setTimeout(() => {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
+      }, 500); // Small delay to visualize "Yielding" state or allow cancel
+      return () => clearTimeout(timer);
+    }
+  }, [isYielding, gameState.priorityPlayerId, gameState.step, currentPlayerId]);
+
+  // Reset Yield on Turn Change
+  useEffect(() => {
+    // If turn changes or phase changes significantly? F4 is until EOT.
+    // We can reset if it's my turn again? Or just let user toggle.
+    // Strict F4 resets at cleanup.
+    if (gameState.step === 'cleanup') {
+      setIsYielding(false);
+    }
+  }, [gameState.step]);
+
+  // --- Combat State ---
+  const [proposedAttackers, setProposedAttackers] = useState<Set<string>>(new Set());
+  const [proposedBlockers, setProposedBlockers] = useState<Map<string, string>>(new Map()); // BlockerId -> AttackerId
+
+  // --- Tether State ---
+  const [tether, setTether] = useState<{ startX: number, startY: number, currentX: number, currentY: number } | null>(null);
+
+  // Reset proposed state when step changes
+  useEffect(() => {
+    setProposedAttackers(new Set());
+    setProposedBlockers(new Map());
+  }, [gameState.step]);
 
   // --- Sidebar State ---
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -97,7 +156,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     return () => document.removeEventListener('contextmenu', handleContext);
   }, []);
 
-  // ... (handlers remain the same) ...
   const handleContextMenu = (e: React.MouseEvent, type: 'background' | 'card' | 'zone', targetId?: string, zoneName?: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -115,6 +173,33 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   };
 
   const handleMenuAction = (actionType: string, payload: any) => {
+    setContextMenu(null); // Close context menu after action
+
+    // Handle local-only actions (Inspect)
+    if (actionType === 'INSPECT') {
+      const card = gameState.cards[payload.cardId];
+      if (card) {
+        setInspectedCard(card);
+      }
+      return;
+    }
+
+    // Handle Radial Menu trigger (MANA)
+    if (actionType === 'MANA') {
+      const card = gameState.cards[payload.cardId];
+      if (card) {
+        setRadialPosition({ x: payload.x || window.innerWidth / 2, y: payload.y || window.innerHeight / 2 });
+        setRadialOptions([
+          { id: 'W', label: 'White', color: '#f0f2eb', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'W' } }) },
+          { id: 'U', label: 'Blue', color: '#aae0fa', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'U' } }) },
+          { id: 'B', label: 'Black', color: '#cbc2bf', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'B' } }) },
+          { id: 'R', label: 'Red', color: '#f9aa8f', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'R' } }) },
+          { id: 'G', label: 'Green', color: '#9bd3ae', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'G' } }) },
+          { id: 'C', label: 'Colorless', color: '#ccc2c0', onSelect: () => socketService.socket.emit('game_action', { action: { type: 'ADD_MANA', color: 'C' } }) },
+        ]);
+      }
+      return;
+    }
 
     if (actionType === 'VIEW_ZONE') {
       setViewingZone(payload.zone);
@@ -141,33 +226,98 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     });
   };
 
-  const handleDrop = (e: React.DragEvent, zone: CardInstance['zone']) => {
+  const activeCardDropRef = useRef<string | null>(null);
+
+  const handleZoneDrop = (e: React.DragEvent, zone: CardInstance['zone']) => {
     e.preventDefault();
     const cardId = e.dataTransfer.getData('cardId');
     if (!cardId) return;
 
+    // Strict Rules Logic for Battlefield Drops
+    if (zone === 'battlefield') {
+      const card = gameState.cards[cardId];
+      if (!card) return;
+
+      const rect = battlefieldRef.current?.getBoundingClientRect();
+      let position;
+
+      if (rect) {
+        const rawX = ((e.clientX - rect.left) / rect.width) * 100;
+        const rawY = ((e.clientY - rect.top) / rect.height) * 100;
+        const x = Math.max(0, Math.min(90, rawX));
+        const y = Math.max(0, Math.min(85, rawY));
+        position = { x, y };
+      }
+
+      if (card.typeLine?.includes('Land')) {
+        socketService.socket.emit('game_strict_action', {
+          type: 'PLAY_LAND',
+          cardId,
+          position
+        });
+      } else {
+        // Cast Spell (No Target - e.g. Creature, Artifact, or Global/Self)
+        socketService.socket.emit('game_strict_action', {
+          type: 'CAST_SPELL',
+          cardId,
+          position: position,
+          targets: []
+        });
+      }
+      return;
+    }
+
+    // Default Move (Hand->Exile, Grave->Hand etc) - Legacy/Sandbox Fallback
     const action: any = {
       type: 'MOVE_CARD',
       cardId,
       toZone: zone
     };
+    socketService.socket.emit('game_action', { action });
+  };
 
-    // Calculate position if dropped on battlefield
-    if (zone === 'battlefield' && battlefieldRef.current) {
-      const rect = battlefieldRef.current.getBoundingClientRect();
-      // Calculate relative position (0-100%)
-      // We clamp values to keep cards somewhat within bounds (0-90 to account for card width)
-      const rawX = ((e.clientX - rect.left) / rect.width) * 100;
-      const rawY = ((e.clientY - rect.top) / rect.height) * 100;
+  const handleCardDrop = (e: React.DragEvent, targetCardId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cardId = e.dataTransfer.getData('cardId');
+    if (!cardId || cardId === targetCardId) return;
 
-      const x = Math.max(0, Math.min(90, rawX));
-      const y = Math.max(0, Math.min(85, rawY)); // 85 to ensure bottom of card isn't cut off too much
+    const sourceCard = gameState.cards[cardId];
+    const targetCard = gameState.cards[targetCardId];
+    if (!sourceCard || !targetCard) return;
 
-      action.position = { x, y };
+    // Blocking Logic: Drag My Battlefied Creature -> Opponent Attacking Creature
+    if (gameState.step === 'declare_blockers' && sourceCard.zone === 'battlefield' && sourceCard.controllerId === currentPlayerId && targetCard.controllerId !== currentPlayerId) {
+      // Toggle Blocking
+      const newMap = new Map(proposedBlockers);
+      // If already blocking this specific one, remove? Or just overwrite?
+      // Basic 1-to-1 for now. If multiple blockers, we can support it.
+      // Let's assume Drag = Assign.
+      newMap.set(sourceCard.instanceId, targetCard.instanceId);
+      setProposedBlockers(newMap);
+      return;
     }
 
-    socketService.socket.emit('game_action', {
-      action
+    // Default: Assume Cast Spell with Target (if from Hand)
+    if (sourceCard.zone === 'hand') {
+      socketService.socket.emit('game_strict_action', {
+        type: 'CAST_SPELL',
+        cardId,
+        targets: [targetCardId]
+      });
+    }
+  };
+
+  const handlePlayerDrop = (e: React.DragEvent, targetPlayerId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const cardId = e.dataTransfer.getData('cardId');
+    if (!cardId) return;
+
+    socketService.socket.emit('game_strict_action', {
+      type: 'CAST_SPELL',
+      cardId,
+      targets: [targetPlayerId]
     });
   };
 
@@ -183,6 +333,55 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
       }
     });
   }
+
+  const handleGesture = (type: 'TAP' | 'ATTACK' | 'CANCEL', cardIds: string[]) => {
+    if (gameState.activePlayerId !== currentPlayerId) return;
+
+    // Combat Logic
+    if (gameState.step === 'declare_attackers') {
+      const newSet = new Set(proposedAttackers);
+      if (type === 'ATTACK') {
+        cardIds.forEach(id => newSet.add(id));
+      } else if (type === 'CANCEL') {
+        cardIds.forEach(id => newSet.delete(id));
+      } else if (type === 'TAP') {
+        // In declare attackers, Tap/Slash might mean "Toggle Attack"
+        cardIds.forEach(id => {
+          if (newSet.has(id)) newSet.delete(id);
+          else newSet.add(id);
+        });
+      }
+      setProposedAttackers(newSet);
+      return;
+    }
+
+    // Default Tap Logic (Outside combat declaration)
+    if (type === 'TAP') {
+      cardIds.forEach(id => {
+        socketService.socket.emit('game_action', {
+          action: { type: 'TAP_CARD', cardId: id }
+        });
+      });
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, cardId: string) => {
+    e.dataTransfer.setData('cardId', cardId);
+    // Hide default drag image to show tether clearly? 
+    // No, keep Ghost image for reference.
+    if (e.clientX !== 0) {
+      setTether({ startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    if (e.clientX === 0 && e.clientY === 0) return; // Ignore invalid end-drag events
+    setTether(prev => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
+  };
+
+  const handleDragEnd = () => {
+    setTether(null);
+  };
 
   const myPlayer = gameState.players[currentPlayerId];
   const opponentId = Object.keys(gameState.players).find(id => id !== currentPlayerId);
@@ -222,6 +421,60 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           cards={getCards(currentPlayerId, viewingZone)}
           onClose={() => setViewingZone(null)}
           onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId)}
+        />
+      )}
+
+      {/* Targeting Tether Overlay */}
+      {tether && (
+        <svg className="absolute inset-0 pointer-events-none z-[100] overflow-visible w-full h-full">
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill={gameState.step === 'declare_blockers' ? '#3b82f6' : '#22d3ee'} />
+            </marker>
+          </defs>
+          <path
+            d={`M ${tether.startX} ${tether.startY} Q ${(tether.startX + tether.currentX) / 2} ${Math.min(tether.startY, tether.currentY) - 50} ${tether.currentX} ${tether.currentY}`}
+            fill="none"
+            stroke={gameState.step === 'declare_blockers' ? '#3b82f6' : '#22d3ee'}
+            strokeWidth="4"
+            strokeDasharray="10,5"
+            markerEnd="url(#arrowhead)"
+            className="drop-shadow-[0_0_10px_rgba(34,211,238,0.8)] animate-pulse"
+          />
+        </svg>
+      )}
+
+      {/* Mulligan Overlay */}
+      {gameState.step === 'mulligan' && !myPlayer?.handKept && (
+        <MulliganView
+          hand={myHand}
+          mulliganCount={myPlayer?.mulliganCount || 0}
+          onDecision={(keep, cardsToBottom) => {
+            socketService.socket.emit('game_strict_action', {
+              action: {
+                type: 'MULLIGAN_DECISION',
+                keep,
+                cardsToBottom
+              }
+            });
+          }}
+        />
+      )}
+
+      {/* Inspector Overlay */}
+      {inspectedCard && (
+        <InspectorOverlay
+          card={inspectedCard}
+          onClose={() => setInspectedCard(null)}
+        />
+      )}
+
+      {/* Radial Menu (Mana Ability Demo) */}
+      {radialOptions && (
+        <RadialMenu
+          options={radialOptions}
+          position={radialPosition}
+          onClose={() => setRadialOptions(null)}
         />
       )}
 
@@ -346,7 +599,11 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           </div>
 
           {/* Opponent Info Bar */}
-          <div className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700">
+          <div
+            className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => opponent && handlePlayerDrop(e, opponent.id)}
+          >
             <div className="flex flex-col">
               <span className="font-bold text-lg text-red-400">{opponent?.name || 'Waiting...'}</span>
               <div className="flex gap-2 text-xs text-slate-400">
@@ -368,25 +625,41 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 transformOrigin: 'center bottom',
               }}
             >
-              {oppBattlefield.map(card => (
-                <div
-                  key={card.instanceId}
-                  className="absolute transition-all duration-300 ease-out"
-                  style={{
-                    left: `${card.position?.x || 50}%`,
-                    top: `${card.position?.y || 50}%`,
-                    zIndex: Math.floor((card.position?.y || 0)),
-                  }}
-                >
-                  <CardComponent
-                    card={card}
-                    onDragStart={() => { }}
-                    onClick={() => { }}
-                    onMouseEnter={() => setHoveredCard(card)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                  />
-                </div>
-              ))}
+              {oppBattlefield.map(card => {
+                const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
+                const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+
+                return (
+                  <div
+                    key={card.instanceId}
+                    className="absolute transition-all duration-300 ease-out"
+                    style={{
+                      left: `${card.position?.x || 50}%`,
+                      top: `${card.position?.y || 50}%`,
+                      zIndex: Math.floor((card.position?.y || 0)),
+                      transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none' // Move towards me
+                    }}
+                  >
+                    <CardComponent
+                      card={card}
+                      onDragStart={() => { }}
+                      onDrop={(e, id) => handleCardDrop(e, id)} // Allow dropping onto opponent card
+                      onClick={() => { }}
+                      onMouseEnter={() => setHoveredCard(card)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                      className={`
+                        ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
+                        ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
+                      `}
+                    />
+                    {isAttacking && (
+                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                        ATTACKING
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -396,9 +669,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           className="flex-[4] relative perspective-1000 z-10"
           ref={battlefieldRef}
           onDragOver={handleDragOver}
-          onDrop={(e) => handleDrop(e, 'battlefield')}
+          onDrop={(e) => handleZoneDrop(e, 'battlefield')}
         >
-          <GestureManager>
+          <GestureManager onGesture={handleGesture}>
             <div
               className="w-full h-full relative bg-slate-900/20 border-y border-white/5 shadow-inner"
               style={{
@@ -410,28 +683,65 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               {/* Battlefield Texture/Grid */}
               <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
 
-              {myBattlefield.map(card => (
-                <div
-                  key={card.instanceId}
-                  className="absolute transition-all duration-200"
-                  style={{
-                    left: `${card.position?.x || Math.random() * 80}%`,
-                    top: `${card.position?.y || Math.random() * 80}%`,
-                    zIndex: card.position?.z ?? (Math.floor((card.position?.y || 0)) + 10),
-                  }}
-                >
-                  <CardComponent
-                    card={card}
-                    onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
-                    onClick={toggleTap}
-                    onContextMenu={(id, e) => {
-                      handleContextMenu(e, 'card', id);
+              {myBattlefield.map(card => {
+                const isAttacking = proposedAttackers.has(card.instanceId);
+                const blockingTargetId = proposedBlockers.get(card.instanceId);
+
+                return (
+                  <div
+                    key={card.instanceId}
+                    className="absolute transition-all duration-300"
+                    style={{
+                      left: `${card.position?.x || Math.random() * 80}%`,
+                      top: `${card.position?.y || Math.random() * 80}%`,
+                      zIndex: card.position?.z ?? (Math.floor((card.position?.y || 0)) + 10),
+                      // Visual feedback for attacking OR blocking
+                      transform: isAttacking
+                        ? 'translateY(-40px) scale(1.1) rotateX(10deg)'
+                        : blockingTargetId
+                          ? 'translateY(-20px) scale(1.05)'
+                          : 'none',
+                      boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none'
                     }}
-                    onMouseEnter={() => setHoveredCard(card)}
-                    onMouseLeave={() => setHoveredCard(null)}
-                  />
-                </div>
-              ))}
+                  >
+                    <CardComponent
+                      card={card}
+                      onDragStart={(e, id) => handleDragStart(e, id)}
+                      onDrag={handleDrag}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e, targetId) => handleCardDrop(e, targetId)}
+                      onClick={(id) => {
+                        // Click logic mimics gesture logic for single card
+                        if (gameState.step === 'declare_attackers') {
+                          const newSet = new Set(proposedAttackers);
+                          if (newSet.has(id)) newSet.delete(id);
+                          else newSet.add(id);
+                          setProposedAttackers(newSet);
+                        } else if (gameState.step === 'declare_blockers') {
+                          // If I click my blocker, maybe select it? 
+                          // For now, dragging is the primary blocking input.
+                        } else {
+                          toggleTap(id);
+                        }
+                      }}
+                      onContextMenu={(id, e) => {
+                        handleContextMenu(e, 'card', id);
+                      }}
+                      onMouseEnter={() => setHoveredCard(card)}
+                      onMouseLeave={() => setHoveredCard(null)}
+                      className={`
+                        ${isAttacking ? "ring-4 ring-red-500 ring-offset-2 ring-offset-slate-900" : ""}
+                        ${blockingTargetId ? "ring-4 ring-blue-500 ring-offset-2 ring-offset-slate-900" : ""}
+                      `}
+                    />
+                    {blockingTargetId && (
+                      <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow z-50 whitespace-nowrap">
+                        Blocking
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
 
               {myBattlefield.length === 0 && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -468,7 +778,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               <div
                 className="w-12 h-16 border-2 border-dashed border-slate-600 rounded flex items-center justify-center transition-colors hover:border-slate-400 hover:bg-white/5"
                 onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, 'graveyard')}
+                onDrop={(e) => handleZoneDrop(e, 'graveyard')}
                 onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'graveyard')}
               >
                 <div className="text-center">
@@ -483,7 +793,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           <div
             className="flex-1 relative flex flex-col items-center justify-end px-4 pb-2"
             onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, 'hand')}
+            onDrop={(e) => handleZoneDrop(e, 'hand')}
           >
             {/* Smart Button Floating above Hand */}
             <div className="mb-4 z-40">
@@ -491,6 +801,12 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 gameState={gameState}
                 playerId={currentPlayerId}
                 onAction={(type, payload) => socketService.socket.emit(type, { action: payload })}
+                contextData={{
+                  attackers: Array.from(proposedAttackers),
+                  blockers: Array.from(proposedBlockers.entries()).map(([blockerId, attackerId]) => ({ blockerId, attackerId }))
+                }}
+                isYielding={isYielding}
+                onYieldToggle={() => setIsYielding(!isYielding)}
               />
             </div>
 
@@ -506,7 +822,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 >
                   <CardComponent
                     card={card}
-                    onDragStart={(e, id) => e.dataTransfer.setData('cardId', id)}
+                    onDragStart={(e, id) => handleDragStart(e, id)}
+                    onDrag={handleDrag}
+                    onDragEnd={handleDragEnd}
                     onClick={toggleTap}
                     onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
                     style={{ transformOrigin: 'bottom center' }}
@@ -541,10 +859,30 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               </div>
             </div>
 
+            {/* Mana Pool Display */}
+            <div className="w-full bg-slate-800/50 rounded-lg p-2 flex flex-wrap justify-between gap-1 border border-white/5">
+              {['W', 'U', 'B', 'R', 'G', 'C'].map(color => {
+                const count = myPlayer?.manaPool?.[color] || 0;
+                const icons: Record<string, string> = {
+                  W: '☀️', U: '💧', B: '💀', R: '🔥', G: '🌳', C: '💎'
+                };
+                const colors: Record<string, string> = {
+                  W: 'text-yellow-100', U: 'text-blue-300', B: 'text-slate-400', R: 'text-red-400', G: 'text-green-400', C: 'text-slate-300'
+                };
+
+                return (
+                  <div key={color} className={`flex flex-col items-center w-[30%] ${count > 0 ? 'opacity-100 scale-110 font-bold' : 'opacity-30'} transition-all`}>
+                    <div className={`text-xs ${colors[color]}`}>{icons[color]}</div>
+                    <div className="text-sm font-mono">{count}</div>
+                  </div>
+                );
+              })}
+            </div>
+
             <div
               className="w-full text-center border-t border-white/5 pt-2 cursor-pointer hover:bg-white/5 rounded p-1"
               onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, 'exile')}
+              onDrop={(e) => handleZoneDrop(e, 'exile')}
               onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'exile')}
             >
               <span className="text-xs text-slate-500 block">Exile Drop Zone</span>

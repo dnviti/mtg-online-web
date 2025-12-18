@@ -247,7 +247,10 @@ const draftInterval = setInterval(() => {
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',
-                manaCost: card.manaCost || card.mana_cost || ''
+                manaCost: card.manaCost || card.mana_cost || '',
+                keywords: card.keywords || [],
+                damageMarked: 0,
+                controlledSinceTurn: 0
               });
             });
           }
@@ -466,7 +469,10 @@ io.on('connection', (socket) => {
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',
-                manaCost: card.manaCost || card.mana_cost || ''
+                manaCost: card.manaCost || card.mana_cost || '',
+                keywords: card.keywords || [],
+                damageMarked: 0,
+                controlledSinceTurn: 0
               });
             });
           }
@@ -493,7 +499,10 @@ io.on('connection', (socket) => {
           zone: 'library',
           typeLine: card.typeLine || card.type_line || '',
           oracleText: card.oracleText || card.oracle_text || '',
-          manaCost: card.manaCost || card.mana_cost || ''
+          manaCost: card.manaCost || card.mana_cost || '',
+          keywords: card.keywords || [],
+          damageMarked: 0,
+          controlledSinceTurn: 0
         });
       });
     }
@@ -524,7 +533,10 @@ io.on('connection', (socket) => {
               zone: 'library',
               typeLine: card.typeLine || card.type_line || '',
               oracleText: card.oracleText || card.oracle_text || '',
-              manaCost: card.manaCost || card.mana_cost || ''
+              manaCost: card.manaCost || card.mana_cost || '',
+              keywords: card.keywords || [],
+              damageMarked: 0,
+              controlledSinceTurn: 0
             });
           });
         });

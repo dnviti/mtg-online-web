@@ -10,10 +10,14 @@ interface CardComponentProps {
   onContextMenu?: (cardId: string, e: React.MouseEvent) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onDrop?: (e: React.DragEvent, targetId: string) => void;
+  onDrag?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
   style?: React.CSSProperties;
+  className?: string;
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, style }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className }) => {
   const { registerCard, unregisterCard } = useGesture();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -29,6 +33,17 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       ref={cardRef}
       draggable
       onDragStart={(e) => onDragStart(e, card.instanceId)}
+      onDrag={(e) => onDrag && onDrag(e)}
+      onDragEnd={(e) => onDragEnd && onDragEnd(e)}
+      onDrop={(e) => {
+        if (onDrop) {
+          e.stopPropagation(); // prevent background drop
+          onDrop(e, card.instanceId);
+        }
+      }}
+      onDragOver={(e) => {
+        if (onDrop) e.preventDefault();
+      }}
       onClick={() => onClick(card.instanceId)}
       onContextMenu={(e) => {
         if (onContextMenu) {
@@ -42,6 +57,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
         relative rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 select-none
         ${card.tapped ? 'rotate-90' : ''}
         ${card.zone === 'hand' ? 'w-32 h-44 -ml-12 first:ml-0 hover:z-10 hover:-translate-y-4' : 'w-24 h-32'}
+        ${className || ''}
       `}
       style={style}
     >

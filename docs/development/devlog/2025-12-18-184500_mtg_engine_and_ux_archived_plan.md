@@ -1,3 +1,8 @@
+# Devlog: MTG Engine & UX Implementation Plan (Archived)
+
+*This document was originally the `mtg-engine-and-ux.md` plan. It has been archived here as a record of the architecture and task breakdown used to build the strict rules engine and high-velocity UX.*
+
+---
 
 # Implementation Plan: MTG Rules Engine & High-Velocity UX
 
@@ -121,26 +126,29 @@ Long-press/Right-click on card.
 
 ## Task Breakdown & Status
 
-### Backend (Rules Engine)
+### Backend (RulesEngine)
 - [x] **Core Structures**: `StrictGameState`, Phase, Step Types.
 - [x] **State Machine Baseline**: Phase advancement logic.
 - [x] **Priority Logic**: Passing, resolving, resetting.
 - [x] **Basic Actions**: Play Land, Cast Spell.
 - [x] **Stack Resolution**: Resolving Spells to Zones.
-- [x] **SBAs Implementation**: Basic (Lethal, 0 Toughness, Legend).
-- [ ] **Advanced SBAs**: Aura Validity check.
-- [ ] **Manual Mana Engine**: Floating Pool Logic.
-- [ ] **Game Setup**: Mulligan (London), Deck Validation.
-- [ ] **Combat Phase Detail**: Declare Attackers/Blockers steps & validation.
-- [ ] **Layer System**: Implement 7-layer P/T calculation.
+- [x] **SBAs Implementation**: Basic (Lethal w/ Damage Marking, 0 Toughness, Legend).
+- [x] **Advanced SBAs**: Aura Validity check.
+- [x] **Manual Mana Engine**: Floating Pool Logic (Backend Support).
+- [x] **Game Setup**: Mulligan (London), Deck Validation.
+- [x] **Combat Phase Detail**: Declare Attackers/Blockers steps & validation (RulesEngine Logic).
+- [x] **Layer System**: Implement 7-layer P/T calculation.
+- [x] **Token Generation**: Backend `createToken` & Context Menu integration.
 
 ### Frontend (High-Velocity UX)
 - [x] **Game View**: Render State Types.
 - [x] **Phase Strip**: Visual progress.
 - [x] **Smart Button**: Basic States (Green/Orange/Red).
-- [x] **Gesture Engine**: Swipe-to-Tap.
+- [x] **Gesture Engine**: Swipe-to-Tap & Swipe-to-Attack.
 - [x] **Stack Visualization**: Basic Component.
-- [ ] **Gesture Polish**: Combat Swipes, Targeting Tether.
-- [ ] **Smart Button Advanced**: "Yield" Toggle.
-- [ ] **Radial Menus**: Pie Menu for Dual Lands/Modes.
-- [ ] **Inspector Overlay**: Live Math & Details.
+- [x] **Gesture Polish**: Combat Swipes, Targeting Tether.
+- [x] **Manual Mana Engine**: Floating Pool Logic & UI.
+- [x] **Mulligan UI**: Modal for Keep/Mull decisions.
+- [x] **Smart Button Advanced**: "Yield" Toggle.
+- [x] **Radial Menus**: Pie Menu for Dual Lands/Modes (Component Added).
+- [x] **Inspector Overlay**: Live Math & Details.

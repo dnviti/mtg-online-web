@@ -16,13 +16,13 @@ export const useGesture = () => useContext(GestureContext);
 
 interface GestureManagerProps {
   children: React.ReactNode;
+  onGesture?: (type: 'TAP' | 'ATTACK' | 'CANCEL', cardIds: string[]) => void;
 }
 
-export const GestureManager: React.FC<GestureManagerProps> = ({ children }) => {
+export const GestureManager: React.FC<GestureManagerProps> = ({ children, onGesture }) => {
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   const [gesturePath, setGesturePath] = useState<{ x: number, y: number }[]>([]);
   const isGesturing = useRef(false);
-  const startPoint = useRef<{ x: number, y: number } | null>(null);
 
   const registerCard = (id: string, element: HTMLElement) => {
     cardRefs.current.set(id, element);
@@ -46,7 +46,6 @@ export const GestureManager: React.FC<GestureManagerProps> = ({ children }) => {
     // Assuming GameView wrapper catches this.
 
     isGesturing.current = true;
-    startPoint.current = { x: e.clientX, y: e.clientY };
     setGesturePath([{ x: e.clientX, y: e.clientY }]);
 
     // Capture pointer
@@ -65,44 +64,60 @@ export const GestureManager: React.FC<GestureManagerProps> = ({ children }) => {
 
     // Analyze Path for "Slash" (Swipe to Tap)
     // Check intersection with cards
-    handleSwipeToTap();
+    analyzeGesture(gesturePath);
 
     setGesturePath([]);
     (e.target as Element).releasePointerCapture(e.pointerId);
   };
 
-  const handleSwipeToTap = () => {
-    // Bounding box of path?
-    // Simple: Check which cards intersect with the path line segments.
-    // Optimization: Just check if path points are inside card rects.
+  const analyzeGesture = (path: { x: number, y: number }[]) => {
+    if (path.length < 5) return; // Too short
 
+    const start = path[0];
+    const end = path[path.length - 1];
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    let gestureType: 'TAP' | 'ATTACK' | 'CANCEL' = 'TAP';
+
+    // If vertical movement is dominant and significant
+    if (absDy > absDx && absDy > 50) {
+      if (dy < 0) gestureType = 'ATTACK'; // Swipe Up
+      else gestureType = 'CANCEL'; // Swipe Down
+    } else {
+      gestureType = 'TAP'; // Horizontal / Slash
+    }
+
+    // Find Logic
     const intersectedCards = new Set<string>();
 
-    const path = gesturePath;
-    if (path.length < 2) return; // Too short
+    // Bounding Box Optimization
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
 
-    // Check every card
     cardRefs.current.forEach((el, id) => {
       const rect = el.getBoundingClientRect();
 
-      // Simple hit test: Does any point in path fall in rect?
-      // Better: Line intersection.
-      // For MVP: Check points.
-      for (const p of path) {
+      // Rough Intersection of Line Segment
+      // Check if rect intersects with bbox of path first
+      if (rect.right < minX || rect.left > maxX || rect.bottom < minY || rect.top > maxY) return;
+
+      // Check points (Simpler)
+      for (let i = 0; i < path.length; i += 2) { // Skip some points for perf
+        const p = path[i];
         if (p.x >= rect.left && p.x <= rect.right && p.y >= rect.top && p.y <= rect.bottom) {
           intersectedCards.add(id);
-          break; // Found hit
+          break;
         }
       }
     });
 
-    // If we hit cards, toggle tap
-    if (intersectedCards.size > 0) {
-      intersectedCards.forEach(id => {
-        socketService.socket.emit('game_action', {
-          action: { type: 'TAP_CARD', cardId: id }
-        });
-      });
+    if (intersectedCards.size > 0 && onGesture) {
+      onGesture(gestureType, Array.from(intersectedCards));
     }
   };
 

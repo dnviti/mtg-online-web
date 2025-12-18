@@ -110,3 +110,8 @@
 - [Pool Overflow Constraint](./devlog/2025-12-18-044500_pool_overflow_fix.md): Completed. Enforce flex shrinkage with `min-h-0` and `overflow-hidden` to strictly bind card height to resizeable panel.
 - [Resize Persistence](./devlog/2025-12-18-050000_resize_persistence.md): Completed. Implemented `localStorage` persistence for Sidebars and Pool Panels in both Draft and Deck Views.
 - [Resolve 413 Errors](./devlog/2025-12-18-112633_resolve_413_errors.md): Completed. Updated Helm ingress annotations and server limits to allow unlimited upload size.
+- [High Velocity UX & Strict Engine](./devlog/2024-12-18-182500_high_velocity_ux_part2.md): Completed. Implemented manual mana engine, combat strict rules (Attacking/Blocking), Swipe-to-Attack gestures, and context-aware Smart Button.
+- [Strict Rules & Blocking UI](./devlog/2024-12-18-193000_strict_blocking_ui.md): Completed. Implemented visual blocking UI, targeting tether, and positioning support for strictly enforced rules.
+- [Engine Enhancements](./devlog/2024-12-18-200000_engine_enhancements.md): Completed. Implemented Basic Layers (P/T Modifiers), Token Creation, London Mulligan System, and Basic Aura Validation SBA.
+- [High Velocity UX & Strict Engine Completion](./devlog/2024-12-18-220000_ux_and_engine_completion.md): Completed. Finalized Rules Engine (SBAs, Layers), implemented Inspector Overlay, Smart Button Yield, and Radial Menus.
+- [Archived Plan: MTG Engine & UX](./devlog/2025-12-18-184500_mtg_engine_and_ux_archived_plan.md): Archived. The original implementation plan for the strict engine and high-velocity UX.

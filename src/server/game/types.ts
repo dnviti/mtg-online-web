@@ -1,7 +1,8 @@
 
-export type Phase = 'beginning' | 'main1' | 'combat' | 'main2' | 'ending';
+export type Phase = 'setup' | 'beginning' | 'main1' | 'combat' | 'main2' | 'ending';
 
 export type Step =
+  | 'mulligan' // Setup
   // Beginning
   | 'untap' | 'upkeep' | 'draw'
   // Main
@@ -26,6 +27,7 @@ export interface CardObject {
   faceDown: boolean;
   attacking?: string; // Player/Planeswalker ID
   blocking?: string[]; // List of attacker IDs blocked by this car
+  attachedTo?: string; // ID of card/player this aura/equipment is attached to
   damageAssignment?: Record<string, number>; // TargetID -> Amount
 
   // Characteristics (Base + Modified)
@@ -38,12 +40,28 @@ export interface CardObject {
   toughness: number;
   basePower: number;
   baseToughness: number;
+  damageMarked: number;
 
   // Counters & Mods
   counters: { type: string; count: number }[];
+  keywords: string[]; // e.g. ["Haste", "Flying"]
+
+  // Continuous Effects (Layers)
+  modifiers: {
+    sourceId: string;
+    type: 'pt_boost' | 'set_pt' | 'ability_grant' | 'type_change';
+    value: any; // ({power: +3, toughness: +3} or "Flying")
+    untilEndOfTurn: boolean;
+  }[];
 
   // Visual
   imageUrl: string;
+  typeLine?: string;
+  oracleText?: string;
+  position?: { x: number; y: number; z: number };
+
+  // Metadata
+  controlledSinceTurn: number; // For Summoning Sickness check
 }
 
 export interface PlayerState {
@@ -54,6 +72,9 @@ export interface PlayerState {
   energy: number;
   isActive: boolean; // Is it their turn?
   hasPassed: boolean; // For priority loop
+  handKept?: boolean; // For Mulligan phase
+  mulliganCount?: number;
+  manaPool: Record<string, number>; // { W: 0, U: 1, ... }
 }
 
 export interface StackObject {
@@ -66,6 +87,7 @@ export interface StackObject {
   targets: string[];
   modes?: number[]; // Selected modes
   costPaid?: boolean;
+  resolutionPosition?: { x: number, y: number };
 }
 
 export interface StrictGameState {

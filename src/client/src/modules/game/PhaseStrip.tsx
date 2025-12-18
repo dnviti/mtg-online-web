@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { GameState, Phase, Step } from '../../types/game';
-import { Sun, Shield, Swords, ArrowRightToLine, Hourglass } from 'lucide-react';
+import { Sun, Shield, Swords, Hourglass } from 'lucide-react';
 
 interface PhaseStripProps {
   gameState: GameState;

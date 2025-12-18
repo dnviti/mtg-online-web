@@ -185,23 +185,63 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
             Battlefield
           </div>
           <MenuItem
-            label="Create Token (1/1)"
+            label="Create Token (1/1 Soldier)"
             onClick={() => handleAction('CREATE_TOKEN', {
-              tokenData: { name: 'Soldier', power: 1, toughness: 1 },
+              definition: {
+                name: 'Soldier',
+                colors: ['W'],
+                types: ['Creature'],
+                subtypes: ['Soldier'],
+                power: 1,
+                toughness: 1,
+                imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' // Generic Soldier?
+              },
               position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
             })}
           />
           <MenuItem
-            label="Create Token (2/2)"
+            label="Create Token (2/2 Zombie)"
             onClick={() => handleAction('CREATE_TOKEN', {
-              tokenData: { name: 'Zombie', power: 2, toughness: 2, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
+              definition: {
+                name: 'Zombie',
+                colors: ['B'],
+                types: ['Creature'],
+                subtypes: ['Zombie'],
+                power: 2,
+                toughness: 2,
+                imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' // Re-use or find standard
+              },
               position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
             })}
+          />
+          <MenuItem
+            label="Add Mana..."
+            onClick={() => handleAction('MANA', { x: request.x, y: request.y })} // Adjusted to use request.x/y as MenuItem's onClick doesn't pass event
+          // icon={<Zap size={14} />} // Zap is not defined in this scope.
+          />
+          <MenuItem
+            label="Inspect Details"
+            onClick={() => handleAction('INSPECT', {})}
+          // icon={<Maximize size={14} />} // Maximize and RotateCw are not defined in this scope.
+          />
+          <MenuItem
+            label="Tap / Untap"
+            onClick={() => handleAction('TAP', {})}
+          // icon={<RotateCw size={14} />} // Maximize and RotateCw are not defined in this scope.
           />
           <MenuItem
             label="Create Treasure"
             onClick={() => handleAction('CREATE_TOKEN', {
-              tokenData: { name: 'Treasure', power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
+              definition: {
+                name: 'Treasure',
+                colors: [],
+                types: ['Artifact'],
+                subtypes: ['Treasure'],
+                power: 0,
+                toughness: 0,
+                keywords: [],
+                imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg'
+              },
               position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
             })}
           />

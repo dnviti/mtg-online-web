@@ -1,21 +1,34 @@
+# High Velocity UX & Strict Engine (Part 2)
 
-# 2024-12-18 18:25:00 - High-Velocity UX Implementation (Part 2: Gestures & Backend Polish)
+## Status: Completed
 
-## Description
-Advanced the High-Velocity UX implementation by introducing the Gesture Engine and refining the backend Rules Engine to support card movement during resolution.
+## Objectives
+- Implement "Manual Mana Engine" allowing players to add mana to their pool via interaction.
+- Implement "Strict Combat Engine" supporting `DECLARE_ATTACKERS` and `DECLARE_BLOCKERS` phases and validation.
+- Implement "High Velocity UX" with Swipe-to-Tap and Swipe-to-Attack gestures.
+- Enhance `GameView` with Mana Pool display and visual feedback for combat declarations.
+- Contextualize `SmartButton` to handle complex actions like declaring specific attackers.
 
-## Key Changes
-1.  **Gesture Manager**: Implemented `GestureManager.tsx` and integrated it into the Battlefield.
-    - Provides Swipe-to-Tap functionality via pointer tracking and intersection checking.
-    - Draws a visual SVG path trail for user feedback.
-    - Integrated with `CardComponent` via `useGesture` hook to register card DOM elements.
-2.  **Stack Visualizer**: Implemented `StackVisualizer.tsx` to render the stack on the right side of the screen, showing strict object ordering.
-3.  **Backend Rules Engine**:
-    - Updated `RulesEngine.ts` to fully implement `resolveTopStack` and `drawCard`.
-    - Added `moveCardToZone` helper to manage state transitions (untapping, resetting position).
-    - Fixed typings and logic flow for resolving spells to graveyard vs battlefield.
+## Implementation Details
+
+### Backend (Rules Engine)
+- **Mana System**: Added `addMana` method to `RulesEngine` and `manaPool` to `PlayerState`. Implemented `emptyManaPools` logic on step transition.
+- **Combat Logic**: Implemented `declareAttackers` (checking summoning sickness, tapping, setting attacking target) and `declareBlockers` logic.
+- **Action Handling**: Updated `GameManager` to handle `ADD_MANA` and auto-generate mana when tapping Basic Lands via `TAP_CARD` action (legacy compatibility wrapper).
+
+### Frontend (GameView)
+- **Mana Pool UI**: Added a compact Mana Pool display in the player life area, showing WUBRGC counts.
+- **Gesture Manager Upgrade**: Enhanced `GestureManager` to detect swipe direction:
+  - **Slash (Horizontal)**: Tap Card.
+  - **Thrust (Vertical Up)**: Attack (if in combat step).
+  - **Thrust (Vertical Down)**: Cancel Attack.
+- **Combat Visuals**: Implemented `proposedAttackers` local state. Cards proposed to attack are visually lifted (`translateY(-40px)`) and glow red (`box-shadow`, `ring`).
+- **Smart Button**: Updated to accept `contextData`. In `declare_attackers` step, it displays "Attack with N" and sends the list of proposed attackers.
+
+### Type Synchronization
+- Synced `CardInstance` (Client) with `CardObject` (Server) to include `attacking` and `blocking` fields.
 
 ## Next Steps
-- Implement Radial Menu context for activating abilities.
-- Add sound effects for gestures.
-- Polish visual transitions for stack resolution.
+- Verify Multiplayer Sync (Socket events are already in place).
+- Implement "Blocking" UI (similar to Attacking but for defenders).
+- Implement "Order Blockers" / "Damage Assignment" if strict compliance is enforced (currently simplified to auto-damage).

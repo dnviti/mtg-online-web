@@ -1,14 +1,13 @@
 
 import React from 'react';
-import { StackObject, GameState } from '../../types/game';
+import { GameState } from '../../types/game';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 
 interface StackVisualizerProps {
   gameState: GameState;
-  onResolve?: () => void; // Optional fast-action helper
 }
 
-export const StackVisualizer: React.FC<StackVisualizerProps> = ({ gameState, onResolve }) => {
+export const StackVisualizer: React.FC<StackVisualizerProps> = ({ gameState }) => {
   const stack = gameState.stack || [];
 
   if (stack.length === 0) return null;

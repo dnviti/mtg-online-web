@@ -106,6 +106,8 @@ export class PackGeneratorService {
         finish: cardData.finish || 'normal',
         oracleText: cardData.oracle_text || cardData.card_faces?.[0]?.oracle_text || '',
         manaCost: cardData.mana_cost || cardData.card_faces?.[0]?.mana_cost || '',
+        damageMarked: 0,
+        controlledSinceTurn: 0
       };
 
       // Add to pools

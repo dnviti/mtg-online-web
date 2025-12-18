@@ -1,7 +1,8 @@
 
-export type Phase = 'beginning' | 'main1' | 'combat' | 'main2' | 'ending';
+export type Phase = 'setup' | 'beginning' | 'main1' | 'combat' | 'main2' | 'ending';
 
 export type Step =
+  | 'mulligan'
   | 'untap' | 'upkeep' | 'draw'
   | 'main'
   | 'beginning_combat' | 'declare_attackers' | 'declare_blockers' | 'combat_damage' | 'end_combat'
@@ -27,9 +28,16 @@ export interface CardInstance {
   zone: 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'command' | 'stack';
   tapped: boolean;
   faceDown: boolean;
-  position: { x: number; y: number; z: number }; // For freeform placement
+  attacking?: string; // Player/Planeswalker ID
+  blocking?: string[]; // List of attacker IDs blocked by this card
+  attachedTo?: string; // ID of card/player this aura/equipment is attached to
   counters: { type: string; count: number }[];
   ptModification: { power: number; toughness: number };
+  power?: number;       // Current Calculated Power
+  toughness?: number;   // Current Calculated Toughness
+  basePower?: number;   // Base Power
+  baseToughness?: number; // Base Toughness
+  position: { x: number; y: number; z: number }; // For freeform placement
   typeLine?: string;
   oracleText?: string;
   manaCost?: string;
@@ -43,6 +51,9 @@ export interface PlayerState {
   energy: number;
   isActive: boolean;
   hasPassed?: boolean;
+  manaPool?: Record<string, number>;
+  handKept?: boolean;
+  mulliganCount?: number;
 }
 
 export interface GameState {

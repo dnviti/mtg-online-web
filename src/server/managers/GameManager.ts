@@ -17,7 +17,8 @@ export class GameManager {
         poison: 0,
         energy: 0,
         isActive: false,
-        hasPassed: false
+        hasPassed: false,
+        manaPool: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
       };
     });
 
@@ -34,8 +35,8 @@ export class GameManager {
       activePlayerId: firstPlayerId,
       priorityPlayerId: firstPlayerId,
 
-      phase: 'beginning',
-      step: 'untap', // Will be skipped/advanced immediately on start usually
+      phase: 'setup',
+      step: 'mulligan',
 
       passedPriorityCount: 0,
       landsPlayedThisTurn: 0,
@@ -69,10 +70,25 @@ export class GameManager {
           engine.passPriority(actorId);
           break;
         case 'PLAY_LAND':
-          engine.playLand(actorId, action.cardId);
+          engine.playLand(actorId, action.cardId, action.position);
+          break;
+        case 'ADD_MANA':
+          engine.addMana(actorId, action.mana); // action.mana = { color: 'R', amount: 1 }
           break;
         case 'CAST_SPELL':
-          engine.castSpell(actorId, action.cardId, action.targets);
+          engine.castSpell(actorId, action.cardId, action.targets, action.position);
+          break;
+        case 'DECLARE_ATTACKERS':
+          engine.declareAttackers(actorId, action.attackers);
+          break;
+        case 'DECLARE_BLOCKERS':
+          engine.declareBlockers(actorId, action.blockers);
+          break;
+        case 'CREATE_TOKEN':
+          engine.createToken(actorId, action.definition);
+          break;
+        case 'MULLIGAN_DECISION':
+          engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);
           break;
         // TODO: Activate Ability
         default:
@@ -125,7 +141,21 @@ export class GameManager {
   private tapCard(game: StrictGameState, action: any, actorId: string) {
     const card = game.cards[action.cardId];
     if (card && card.controllerId === actorId) {
+      const wuzUntapped = !card.tapped;
       card.tapped = !card.tapped;
+
+      // Auto-Add Mana for Basic Lands if we just tapped it
+      if (wuzUntapped && card.tapped && card.typeLine?.includes('Land')) {
+        const engine = new RulesEngine(game); // Re-instantiate engine just for this helper
+        // Infer color from type or oracle text or name? 
+        // Simple: Basic Land Types
+        if (card.typeLine.includes('Plains')) engine.addMana(actorId, { color: 'W', amount: 1 });
+        else if (card.typeLine.includes('Island')) engine.addMana(actorId, { color: 'U', amount: 1 });
+        else if (card.typeLine.includes('Swamp')) engine.addMana(actorId, { color: 'B', amount: 1 });
+        else if (card.typeLine.includes('Mountain')) engine.addMana(actorId, { color: 'R', amount: 1 });
+        else if (card.typeLine.includes('Forest')) engine.addMana(actorId, { color: 'G', amount: 1 });
+        // TODO: Non-basic lands?
+      }
     }
   }
 
@@ -141,6 +171,8 @@ export class GameManager {
       tapped: false,
       faceDown: true,
       counters: [],
+      keywords: [], // Default empty
+      modifiers: [],
       colors: [],
       types: [],
       subtypes: [],
@@ -154,7 +186,9 @@ export class GameManager {
       ownerId: '',
       oracleId: '',
       name: '',
-      ...cardData
+      ...cardData,
+      damageMarked: 0,
+      controlledSinceTurn: 0 // Will be updated on draw/play
     };
     game.cards[card.instanceId] = card;
   }
