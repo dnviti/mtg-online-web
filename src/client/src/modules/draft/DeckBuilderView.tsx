@@ -24,40 +24,30 @@ const normalizeCard = (c: any): DraftCard => ({
   image: c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
 });
 
-// Draggable Wrapper for Cards
-const DraggableCardWrapper = ({ children, card, source, disabled }: any) => {
+const LAND_URL_MAP: Record<string, string> = {
+  Plains: "https://cards.scryfall.io/normal/front/d/1/d1ea1858-ad25-4d13-9860-25c898b02c42.jpg",
+  Island: "https://cards.scryfall.io/normal/front/2/f/2f3069b3-c15c-4399-ab99-c88c0379435b.jpg",
+  Swamp: "https://cards.scryfall.io/normal/front/1/7/17d0571f-df6c-4b53-912f-9cb4d5a9d224.jpg",
+  Mountain: "https://cards.scryfall.io/normal/front/f/5/f5383569-42b7-4c07-b67f-2736bc88bd37.jpg",
+  Forest: "https://cards.scryfall.io/normal/front/1/f/1fa688da-901d-4876-be11-884d6b677271.jpg"
+};
+
+// Universal Wrapper handling both Pool Cards (Move) and Land Sources (Copy/Ghost)
+const UniversalCardWrapper = ({ children, card, source, disabled }: any) => {
+  const isLand = card.isLandSource;
+  const dndId = isLand ? `land-source-${card.name}` : card.id;
+  const dndData = isLand ? { card, type: 'land' } : { card, source };
+
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: card.id,
-    data: { card, source },
+    id: dndId,
+    data: dndData,
     disabled
   });
 
   const style = transform ? {
     transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0 : 1,
+    opacity: isDragging ? (isLand ? 0.5 : 0) : 1,
     zIndex: isDragging ? 999 : undefined
-  } : undefined;
-
-  return (
-    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="relative z-0">
-      {children}
-    </div>
-  );
-};
-
-// Draggable Wrapper for Lands (Special case: ID is generic until dropped)
-const DraggableLandWrapper = ({ children, land }: any) => {
-  const id = `land-source-${land.name}`;
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: id,
-    data: { card: land, type: 'land' }
-  });
-
-  // For lands, we want to copy, so don't hide original
-  const style = transform ? {
-    transform: CSS.Translate.toString(transform),
-    zIndex: isDragging ? 999 : undefined,
-    opacity: isDragging ? 0.5 : 1 // Show ghost
   } : undefined;
 
   return (
@@ -147,13 +137,20 @@ const CardsDisplay: React.FC<{
 
   // Use CSS var for grid
   if (viewMode === 'list') {
-    const sorted = [...cards].sort((a, b) => (a.cmc || 0) - (b.cmc || 0));
+    const sorted = [...cards].sort((a, b) => {
+      // Lands always first
+      if (a.isLandSource && !b.isLandSource) return -1;
+      if (!a.isLandSource && b.isLandSource) return 1;
+      // Then CMC
+      return (a.cmc || 0) - (b.cmc || 0);
+    });
+
     return (
       <div className="flex flex-col gap-1 w-full">
         {sorted.map(c => (
-          <DraggableCardWrapper key={c.id} card={c} source={source}>
+          <UniversalCardWrapper key={c.id || c.name} card={c} source={source}>
             <ListItem card={normalizeCard(c)} onClick={() => onCardClick(c)} onHover={onHover} />
-          </DraggableCardWrapper>
+          </UniversalCardWrapper>
         ))}
       </div>
     );
@@ -161,9 +158,7 @@ const CardsDisplay: React.FC<{
 
   if (viewMode === 'stack') {
     return (
-      <div className="h-full min-w-full w-max"> {/* Allow native scrolling from parent */}
-        {/* StackView doesn't support DnD yet, so we disable it or handle it differently. 
-            For now, drag from StackView is not implemented, falling back to Click. */}
+      <div className="h-full min-w-full w-max">
         <StackView
           cards={cards.map(normalizeCard)}
           cardWidth={cardWidth}
@@ -178,9 +173,9 @@ const CardsDisplay: React.FC<{
           disableHoverPreview={true}
           groupBy={groupBy}
           renderWrapper={(card, children) => (
-            <DraggableCardWrapper key={card.id} card={card} source={source}>
+            <UniversalCardWrapper key={card.id || card.name} card={card} source={source}>
               {children}
-            </DraggableCardWrapper>
+            </UniversalCardWrapper>
           )}
         />
       </div>
@@ -202,7 +197,7 @@ const CardsDisplay: React.FC<{
         const isFoil = card.finish === 'foil';
 
         return (
-          <DraggableCardWrapper key={card.id} card={card} source={source}>
+          <UniversalCardWrapper key={card.id || card.name} card={card} source={source}>
             <DeckCardItem
               card={card}
               useArtCrop={useArtCrop}
@@ -210,7 +205,7 @@ const CardsDisplay: React.FC<{
               onCardClick={onCardClick}
               onHover={onHover}
             />
-          </DraggableCardWrapper>
+          </UniversalCardWrapper>
         );
       })}
     </div>
@@ -301,7 +296,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);
-  const [lands, setLands] = useState({ Plains: 0, Island: 0, Swamp: 0, Mountain: 0, Forest: 0 });
+  // const [lands, setLands] = useState(...); // REMOVED: Managed directly in deck now
   const [hoveredCard, setHoveredCard] = useState<any>(null);
   const [displayCard, setDisplayCard] = useState<any>(null);
 
@@ -362,26 +357,38 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
   const applySuggestion = () => {
     if (!landSuggestion) return;
-    if (availableBasicLands && availableBasicLands.length > 0) {
-      const newLands: any[] = [];
-      Object.entries(landSuggestion).forEach(([type, count]) => {
-        if (count <= 0) return;
-        const landCard = availableBasicLands.find(l => l.name === type) || availableBasicLands.find(l => l.name.includes(type));
-        if (landCard) {
-          for (let i = 0; i < count; i++) {
-            const newLand = {
-              ...landCard,
-              id: `land-${landCard.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`,
-              image_uris: landCard.image_uris || { normal: landCard.image }
-            };
-            newLands.push(newLand);
-          }
-        }
-      });
-      if (newLands.length > 0) setDeck(prev => [...prev, ...newLands]);
-    } else {
-      setLands(landSuggestion);
-    }
+
+    const newLands: any[] = [];
+    Object.entries(landSuggestion).forEach(([type, count]) => {
+      if ((count as number) <= 0) return;
+
+      // Find real land from cube or create generic
+      let landCard = availableBasicLands && availableBasicLands.length > 0
+        ? (availableBasicLands.find(l => l.name === type) || availableBasicLands.find(l => l.name.includes(type)))
+        : null;
+
+      if (!landCard) {
+        landCard = {
+          id: `basic-source-${type}`,
+          name: type,
+          image_uris: { normal: LAND_URL_MAP[type] },
+          typeLine: "Basic Land",
+          scryfallId: `generic-${type}`
+        };
+      }
+
+      for (let i = 0; i < (count as number); i++) {
+        const newLand = {
+          ...landCard,
+          id: `land-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`,
+          image_uris: landCard.image_uris || { normal: landCard.image || LAND_URL_MAP[type] },
+          typeLine: landCard.typeLine || "Basic Land"
+        };
+        newLands.push(newLand);
+      }
+    });
+
+    if (newLands.length > 0) setDeck(prev => [...prev, ...newLands]);
   };
 
   // --- Actions ---
@@ -408,34 +415,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     }
   };
 
-  const handleLandChange = (type: string, delta: number) => {
-    setLands(prev => ({ ...prev, [type]: Math.max(0, prev[type as keyof typeof lands] + delta) }));
-  };
-
   const submitDeck = () => {
-    const genericLandCards = Object.entries(lands).flatMap(([type, count]) => {
-      const landUrlMap: any = {
-        Plains: "https://cards.scryfall.io/normal/front/d/1/d1ea1858-ad25-4d13-9860-25c898b02c42.jpg",
-        Island: "https://cards.scryfall.io/normal/front/2/f/2f3069b3-c15c-4399-ab99-c88c0379435b.jpg",
-        Swamp: "https://cards.scryfall.io/normal/front/1/7/17d0571f-df6c-4b53-912f-9cb4d5a9d224.jpg",
-        Mountain: "https://cards.scryfall.io/normal/front/f/5/f5383569-42b7-4c07-b67f-2736bc88bd37.jpg",
-        Forest: "https://cards.scryfall.io/normal/front/1/f/1fa688da-901d-4876-be11-884d6b677271.jpg"
-      };
-      return Array(count).fill(null).map((_, i) => ({
-        id: `basic-${type}-${i}`,
-        name: type,
-        image_uris: { normal: landUrlMap[type] },
-        typeLine: "Basic Land"
-      }));
-    });
-
-    const fullDeck = [...deck, ...genericLandCards];
-    socketService.socket.emit('player_ready', { deck: fullDeck });
+    socketService.socket.emit('player_ready', { deck });
   };
-
-  const sortedLands = useMemo(() => {
-    return [...(availableBasicLands || [])].sort((a, b) => a.name.localeCompare(b.name));
-  }, [availableBasicLands]);
 
   // --- DnD Handlers ---
   const sensors = useSensors(
@@ -540,66 +522,94 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   }, []);
 
   // --- Render Functions ---
-  const renderLandStation = () => (
-    <div className="bg-slate-900/40 rounded border border-slate-700/50 p-2 mb-2 shrink-0 flex flex-col gap-2">
-      {/* Header & Advisor */}
-      <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded">
-        <h4 className="text-xs font-bold text-slate-400 uppercase">Land Station</h4>
-        {landSuggestion ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-slate-500">Advice:</span>
-            <div className="flex gap-1">
+  // --- Consolidated Pool Logic ---
+  const landSourceCards = useMemo(() => {
+    // If we have specific lands from cube, use them.
+    if (availableBasicLands && availableBasicLands.length > 0) {
+      return availableBasicLands.map(land => ({
+        ...land,
+        id: `land-source-${land.name}`, // stable ID for list
+        isLandSource: true,
+        // Ensure image is set for display
+        image: land.image || land.image_uris?.normal
+      }));
+    }
+
+    // Otherwise generate generic basics
+    const types = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'];
+    return types.map(type => ({
+      id: `basic-source-${type}`,
+      name: type,
+      isLandSource: true,
+      image: LAND_URL_MAP[type],
+      typeLine: `Basic Land — ${type}`,
+      rarity: 'common',
+      cmc: 0,
+      set: 'LEA', // Dummy set for visuals
+      colors: type === 'Plains' ? ['W'] : type === 'Island' ? ['U'] : type === 'Swamp' ? ['B'] : type === 'Mountain' ? ['R'] : ['G']
+    }));
+  }, [availableBasicLands]);
+
+  // Removed displayPool memo to keep them separate
+
+
+
+  const LandAdvice = () => {
+    if (!landSuggestion) return null;
+    return (
+      <div className="flex items-center justify-between bg-amber-900/40 p-2 rounded-lg border border-amber-700/50 mb-2 mx-1 animate-in fade-in slide-in-from-top-2">
+        <div className="flex items-center gap-3">
+          <div className="bg-amber-500/20 p-1.5 rounded-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">Recommended Lands</span>
+            <div className="flex gap-2 text-xs font-medium text-slate-300">
               {Object.entries(landSuggestion).map(([type, count]) => {
                 if ((count as number) <= 0) return null;
-                const color = type === 'Plains' ? 'text-amber-200' : type === 'Island' ? 'text-blue-200' : type === 'Swamp' ? 'text-purple-200' : type === 'Mountain' ? 'text-red-200' : 'text-emerald-200';
-                return <span key={type} className={`text-[10px] font-bold ${color}`}>{type[0]}:{count as number}</span>
+                const colorClass = type === 'Plains' ? 'text-yellow-200' : type === 'Island' ? 'text-blue-200' : type === 'Swamp' ? 'text-purple-200' : type === 'Mountain' ? 'text-red-200' : 'text-emerald-200';
+                return <span key={type} className={colorClass}>{count as number} {type}</span>
               })}
             </div>
-            <button onClick={applySuggestion} className="bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded shadow font-bold uppercase">Auto-Fill</button>
           </div>
-        ) : (
-          <span className="text-[10px] text-slate-600 italic">Add spells for advice</span>
-        )}
+        </div>
+        <button
+          onClick={applySuggestion}
+          className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-md shadow-lg font-bold uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1"
+        >
+          <Check className="w-3 h-3" /> Auto-Fill
+        </button>
       </div>
+    );
+  };
 
-      {/* Land Scroll */}
-      {availableBasicLands && availableBasicLands.length > 0 ? (
-        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1">
-          {sortedLands.map((land) => (
-            <DraggableLandWrapper key={land.scryfallId} land={land}>
-              <div
-                className="relative group cursor-pointer shrink-0"
-                onClick={() => addLandToDeck(land)}
-                onMouseEnter={() => setHoveredCard(land)}
-                onMouseLeave={() => setHoveredCard(null)}
-              >
-                <img
-                  src={land.image || land.image_uris?.normal}
-                  className="w-16 rounded shadow group-hover:scale-105 transition-transform"
-                  alt={land.name}
-                  draggable={false}
-                />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/40 rounded transition-opacity">
-                  <span className="text-white font-bold text-[10px] bg-black/50 px-1 rounded">+</span>
-                </div>
-              </div>
-            </DraggableLandWrapper>
-          ))}
-        </div>
-      ) : (
-        <div className="flex justify-between px-2">
-          {Object.keys(lands).map(type => (
-            <div key={type} className="flex flex-col items-center">
-              <div className="text-[10px] font-bold text-slate-500">{type[0]}</div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => handleLandChange(type, -1)} className="w-5 h-5 bg-slate-700 rounded text-slate-300 flex items-center justify-center font-bold text-xs">-</button>
-                <span className="w-4 text-center text-xs font-bold">{lands[type as keyof typeof lands]}</span>
-                <button onClick={() => handleLandChange(type, 1)} className="w-5 h-5 bg-slate-700 rounded text-slate-300 flex items-center justify-center font-bold text-xs">+</button>
-              </div>
+  const LandRow = () => (
+    <div className="flex flex-col gap-2 mb-4 shrink-0">
+      <LandAdvice />
+      <div className="flex flex-wrap gap-2 px-1 justify-center sm:justify-start">
+        {landSourceCards.map(land => (
+          <div
+            key={land.id}
+            onClick={() => addLandToDeck(land)}
+            onMouseEnter={() => setHoveredCard(land)}
+            onMouseLeave={() => setHoveredCard(null)}
+            className="relative group cursor-pointer hover:scale-105 transition-transform"
+            style={{ width: '85px' }}
+          >
+            <div className="aspect-[2.5/3.5] rounded-md overflow-hidden shadow-sm border border-slate-700 group-hover:border-purple-400 relative">
+              <img src={land.image || land.image_uris?.normal} className="w-full h-full object-cover" draggable={false} />
+              {/* Click Only Indicator */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
             </div>
-          ))}
-        </div>
-      )}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+              <span className="text-white text-xs font-bold bg-emerald-600/90 px-2 py-1 rounded shadow-lg backdrop-blur-sm border border-emerald-400/50 flex items-center gap-1">
+                <span className="text-[10px]">+</span> ADD
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent w-full mt-2" />
     </div>
   );
 
@@ -853,7 +863,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   <span>Card Pool ({pool.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                  {renderLandStation()}
+                  {/* Land Station Merged into Display */}
+                  <LandRow />
                   <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                 </div>
               </DroppableZone>
@@ -880,7 +891,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                     <span>Card Pool ({pool.length})</span>
                   </div>
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                    {renderLandStation()}
+                    <LandRow />
                     <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
                   </div>
                 </DroppableZone>

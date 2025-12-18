@@ -103,7 +103,14 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     }
   }, [cardScale]);
 
-  const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical'); // Default to vertical for consistency
+  const [layout, setLayout] = useState<'vertical' | 'horizontal'>(() => {
+    const saved = localStorage.getItem('draft_layout');
+    return (saved as 'vertical' | 'horizontal') || 'vertical';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('draft_layout', layout);
+  }, [layout]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     return localStorage.getItem('draft_sidebarCollapsed') === 'true';
   });
