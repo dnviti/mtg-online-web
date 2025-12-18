@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  maxHttpBufferSize: 300 * 1024 * 1024, // 300MB
+  maxHttpBufferSize: 1024 * 1024 * 1024, // 1GB (Unlimited for practical use)
   cors: {
     origin: "*", // Adjust for production,
     methods: ["GET", "POST"]
@@ -33,7 +33,7 @@ const packGeneratorService = new PackGeneratorService();
 const cardParserService = new CardParserService();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '50mb' })); // Increase limit for large card lists
+app.use(express.json({ limit: '1000mb' })); // Increase limit for large card lists
 
 // Serve static images (Nested)
 app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
