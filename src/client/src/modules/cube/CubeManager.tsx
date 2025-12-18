@@ -883,9 +883,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
             <div
               className="grid gap-6 pb-20"
               style={{
-                gridTemplateColumns: cardWidth <= 150
-                  ? `repeat(auto-fill, minmax(var(--card-width, ${viewMode === 'list' ? '320px' : '550px'}), 1fr))`
-                  : '1fr'
+                gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${localCardWidth > 165
+                  ? (viewMode === 'list' ? '500px' : '750px')
+                  : localCardWidth <= 95
+                    ? (viewMode === 'list' ? '300px' : '450px')
+                    : (viewMode === 'list' ? '400px' : '600px')
+                  }), 1fr))`
               }}
             >
               {packs.map((pack) => (

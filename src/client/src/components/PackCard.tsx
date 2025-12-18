@@ -136,7 +136,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
           </div>
         )}
 
-        {viewMode === 'stack' && <StackView cards={pack.cards} cardWidth={cardWidth} />}
+        {viewMode === 'stack' && <StackView cards={pack.cards} cardWidth={cardWidth} groupBy="type" />}
       </div>
     </div>
   );

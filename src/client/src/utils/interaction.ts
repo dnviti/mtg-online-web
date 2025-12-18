@@ -19,12 +19,12 @@ export function useCardTouch(
     touchStartCount.current = e.touches.length;
     isLongPress.current = false;
 
-    // Only Start "Preview" Timer if 2 fingers
-    if (e.touches.length === 2) {
+    // Start Preview Timer (1 finger is standard mobile long-press)
+    if (e.touches.length === 1) {
       timerRef.current = setTimeout(() => {
         isLongPress.current = true;
         onHover(cardPayload);
-      }, 400); // 400ms threshold
+      }, 500); // 500ms threshold (standard long press)
     }
   }, [onHover, cardPayload]);
 
