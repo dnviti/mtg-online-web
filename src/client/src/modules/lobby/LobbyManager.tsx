@@ -18,6 +18,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialDraftState, setInitialDraftState] = useState<any>(null);
+  const [initialGameState, setInitialGameState] = useState<any>(null);
 
   const [playerId] = useState(() => {
     const saved = localStorage.getItem('player_id');
@@ -195,6 +196,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
       if (response.success) {
         setInitialDraftState(response.draftState || null);
+        setInitialGameState(response.gameState || null);
         setActiveRoom(response.room);
       } else {
         setError(response.message || 'Failed to join room');
@@ -226,6 +228,9 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
             setActiveRoom(response.room);
             if (response.draftState) {
               setInitialDraftState(response.draftState);
+            }
+            if (response.gameState) {
+              setInitialGameState(response.gameState);
             }
           } else {
             console.warn("Rejoin failed by server: ", response.message);
@@ -261,11 +266,12 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     }
     setActiveRoom(null);
     setInitialDraftState(null);
+    setInitialGameState(null);
     localStorage.removeItem('active_room_id');
   };
 
   if (activeRoom) {
-    return <GameRoom room={activeRoom} currentPlayerId={playerId} onExit={handleExitRoom} initialDraftState={initialDraftState} />;
+    return <GameRoom room={activeRoom} currentPlayerId={playerId} onExit={handleExitRoom} initialDraftState={initialDraftState} initialGameState={initialGameState} />;
   }
 
   return (

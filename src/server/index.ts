@@ -10,6 +10,7 @@ import { CardService } from './services/CardService';
 import { ScryfallService } from './services/ScryfallService';
 import { PackGeneratorService } from './services/PackGeneratorService';
 import { CardParserService } from './services/CardParserService';
+import { PersistenceManager } from './managers/PersistenceManager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,16 @@ const io = new Server(httpServer, {
 const roomManager = new RoomManager();
 const gameManager = new GameManager();
 const draftManager = new DraftManager();
+const persistenceManager = new PersistenceManager(roomManager, draftManager, gameManager);
+
+// Load previous state
+persistenceManager.load();
+
+// Auto-Save Loop (Every 5 seconds)
+const persistenceInterval = setInterval(() => {
+  persistenceManager.save();
+}, 5000);
+
 const cardService = new CardService();
 const scryfallService = new ScryfallService();
 const packGeneratorService = new PackGeneratorService();
@@ -36,7 +47,32 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '1000mb' })); // Increase limit for large card lists
 
 // Serve static images (Nested)
-app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
+import { RedisClientManager } from './managers/RedisClientManager';
+import { fileStorageManager } from './managers/FileStorageManager';
+
+const redisForFiles = RedisClientManager.getInstance().db1;
+
+if (redisForFiles) {
+  console.log('[Server] Using Redis for file serving');
+  app.get('/cards/*', async (req: Request, res: Response) => {
+    const relativePath = req.path;
+    const filePath = path.join(__dirname, 'public', relativePath);
+
+    const buffer = await fileStorageManager.readFile(filePath);
+    if (buffer) {
+      if (filePath.endsWith('.jpg')) res.type('image/jpeg');
+      else if (filePath.endsWith('.png')) res.type('image/png');
+      else if (filePath.endsWith('.json')) res.type('application/json');
+      res.send(buffer);
+    } else {
+      res.status(404).send('Not Found');
+    }
+  });
+} else {
+  console.log('[Server] Using Local FS for file serving');
+  app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
+}
+
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 // API Routes
@@ -566,6 +602,8 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
 const gracefulShutdown = () => {
   console.log('Received kill signal, shutting down gracefully');
   clearInterval(draftInterval);
+  clearInterval(persistenceInterval);
+  persistenceManager.save(); // Save on exit
 
   io.close(() => {
     console.log('Socket.io closed');
