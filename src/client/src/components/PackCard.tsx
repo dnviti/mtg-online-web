@@ -104,11 +104,11 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
         {viewMode === 'grid' && (
           <div className="flex flex-wrap gap-3">
             {pack.cards.map((card) => {
-              const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
+              const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
               const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
               return (
-                <CardHoverWrapper key={card.id} card={card} preventPreview={cardWidth >= 200}>
+                <CardHoverWrapper key={card.id} card={card} preventPreview={cardWidth >= 130}>
                   <div style={{ width: cardWidth }} className="relative group bg-slate-900 rounded-lg shrink-0">
                     {/* Visual Card */}
                     <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>

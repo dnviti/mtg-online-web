@@ -125,7 +125,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                 // Margin calculation: Negative margin to pull up next cards. 
                 // To show a "strip" of say 35px at the top of each card.
                 const isLast = index === catCards.length - 1;
-                const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
+                const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
@@ -163,7 +163,7 @@ const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHo
       onTouchEnd={onTouchEnd}
       onTouchMove={onTouchMove}
     >
-      <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 200}>
+      <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 130}>
         <div
           className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
           style={{

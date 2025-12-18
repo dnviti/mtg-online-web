@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut } from 'lucide-react';
+import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut, Bell, BellOff, X } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { useToast } from '../../components/Toast';
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
@@ -45,18 +46,73 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   const [modalOpen, setModalOpen] = useState(false);
   const [modalConfig, setModalConfig] = useState({ title: '', message: '', type: 'info' as 'info' | 'error' | 'warning' | 'success' });
 
+  // Side Panel State
+  const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('notifications_enabled') !== 'false';
+  });
+
+  // Services
+  const { showToast } = useToast();
+
   // Restored States
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>(initialRoom.messages || []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<any>(initialGameState || null);
   const [draftState, setDraftState] = useState<any>(initialDraftState || null);
-  const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game');
+  const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game'); // Keep for mobile
 
   // Derived State
   const host = room.players.find(p => p.isHost);
   const isHostOffline = host?.isOffline;
   const isMeHost = currentPlayerId === host?.id;
+  const prevPlayersRef = useRef<Player[]>(initialRoom.players);
+
+  // Persistence
+  useEffect(() => {
+    localStorage.setItem('notifications_enabled', notificationsEnabled.toString());
+  }, [notificationsEnabled]);
+
+  // Player Notification Logic
+  useEffect(() => {
+    if (!notificationsEnabled) {
+      prevPlayersRef.current = room.players;
+      return;
+    }
+
+    const prev = prevPlayersRef.current;
+    const curr = room.players;
+
+    // 1. New Players
+    curr.forEach(p => {
+      if (!prev.find(old => old.id === p.id)) {
+        showToast(`${p.name} (${p.role}) joined the room.`, 'info');
+      }
+    });
+
+    // 2. Left Players
+    prev.forEach(p => {
+      if (!curr.find(newP => newP.id === p.id)) {
+        showToast(`${p.name} left the room.`, 'warning');
+      }
+    });
+
+    // 3. Status Changes (Disconnect/Reconnect)
+    curr.forEach(p => {
+      const old = prev.find(o => o.id === p.id);
+      if (old) {
+        if (!old.isOffline && p.isOffline) {
+          showToast(`${p.name} lost connection.`, 'error');
+        }
+        if (old.isOffline && !p.isOffline) {
+          showToast(`${p.name} reconnected!`, 'success');
+        }
+      }
+    });
+
+    prevPlayersRef.current = curr;
+  }, [room.players, notificationsEnabled, showToast]);
 
   // Effects
   useEffect(() => {
@@ -235,124 +291,224 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   };
 
   return (
-    <div className="flex h-full flex-col lg:flex-row gap-4 overflow-hidden">
-      {/* Mobile Tab Bar */}
-      <div className="lg:hidden shrink-0 flex items-center bg-slate-800 border-b border-slate-700">
-        <button
-          onClick={() => setMobileTab('game')}
-          className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'game' ? 'text-emerald-400 bg-slate-700/50 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <Layers className="w-4 h-4" /> Game
-        </button>
-        <button
-          onClick={() => setMobileTab('chat')}
-          className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'chat' ? 'text-purple-400 bg-slate-700/50 border-b-2 border-purple-500' : 'text-slate-400 hover:text-slate-200'}`}
-        >
-          <div className="flex items-center gap-1">
-            <Users className="w-4 h-4" />
-            <span className="text-slate-600">/</span>
-            <MessageSquare className="w-4 h-4" />
-          </div>
-          Lobby & Chat
-        </button>
+    <div className="flex h-full w-full overflow-hidden relative">
+      {/* --- MOBILE LAYOUT (Keep simplified tabs for small screens) --- */}
+      <div className="lg:hidden flex flex-col w-full h-full">
+        {/* Mobile Tab Bar */}
+        <div className="shrink-0 flex items-center bg-slate-800 border-b border-slate-700">
+          <button
+            onClick={() => setMobileTab('game')}
+            className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'game' ? 'text-emerald-400 bg-slate-700/50 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <Layers className="w-4 h-4" /> Game
+          </button>
+          <button
+            onClick={() => setMobileTab('chat')}
+            className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'chat' ? 'text-purple-400 bg-slate-700/50 border-b-2 border-purple-500' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            <div className="flex items-center gap-1">
+              <Users className="w-4 h-4" />
+              <span className="text-slate-600">/</span>
+              <MessageSquare className="w-4 h-4" />
+            </div>
+            Lobby & Chat
+          </button>
+        </div>
+
+        {/* Mobile Content */}
+        <div className="flex-1 min-h-0 relative">
+          {mobileTab === 'game' ? (
+            renderContent()
+          ) : (
+            <div className="absolute inset-0 overflow-y-auto p-4 bg-slate-900">
+              {/* Mobile Chat/Lobby merged view for simplicity, reusing logic if possible or duplicating strictly for mobile structure */}
+              {/* Re-implementing simplified mobile view directly here to avoid layout conflicts */}
+              <div className="space-y-4">
+                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2"><Users className="w-4 h-4" /> Lobby</h3>
+                  {room.players.map(p => (
+                    <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded mb-2 text-sm">
+                      <span className={p.id === currentPlayerId ? 'text-white font-bold' : 'text-slate-300'}>{p.name}</span>
+                      <span className="text-[10px] text-slate-500">{p.role}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 h-96 flex flex-col">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase mb-3"><MessageSquare className="w-4 h-4 inline mr-2" /> Chat</h3>
+                  <div className="flex-1 overflow-y-auto mb-2 space-y-2">
+                    {messages.map(msg => (
+                      <div key={msg.id} className="text-sm"><span className="font-bold text-purple-400">{msg.sender}:</span> <span className="text-slate-300">{msg.text}</span></div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                  <form onSubmit={sendMessage} className="flex gap-2">
+                    <input type="text" value={message} onChange={e => setMessage(e.target.value)} className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm text-white" placeholder="Type..." />
+                    <button type="submit" className="bg-purple-600 rounded px-3 py-1 text-white"><Send className="w-4 h-4" /></button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className={`flex-1 min-h-0 flex flex-col ${mobileTab === 'game' ? 'flex' : 'hidden lg:flex'}`}>
+      {/* --- DESKTOP LAYOUT --- */}
+      {/* Main Content Area - Full Width */}
+      <div className="hidden lg:flex flex-1 min-w-0 flex-col h-full relative z-0">
         {renderContent()}
       </div>
 
-      <div className={`w-full lg:w-80 shrink-0 flex flex-col gap-4 min-h-0 ${mobileTab === 'chat' ? 'flex' : 'hidden lg:flex'}`}>
-        <div className="flex-1 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl overflow-hidden flex flex-col">
-          <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
-            <Users className="w-4 h-4" /> Lobby
-          </h3>
+      {/* Right Collapsible Toolbar */}
+      <div className="hidden lg:flex w-14 shrink-0 flex-col items-center gap-4 py-4 bg-slate-900 border-l border-slate-800 z-30 relative">
+        <button
+          onClick={() => setActivePanel(activePanel === 'lobby' ? null : 'lobby')}
+          className={`p-3 rounded-xl transition-all duration-200 group relative ${activePanel === 'lobby' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'text-slate-500 hover:text-purple-400 hover:bg-slate-800'}`}
+          title="Lobby & Players"
+        >
+          <Users className="w-6 h-6" />
+          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none ring-1 ring-white/10">
+            Lobby
+          </span>
+        </button>
 
-
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {room.players.map(p => {
-              const isReady = (p as any).ready;
-              const isMe = p.id === currentPlayerId;
-              const isSolo = room.players.length === 1 && room.status === 'playing';
-
-              return (
-                <div key={p.id} className="flex items-center justify-between bg-slate-900/50 p-2 rounded-lg border border-slate-700/50 group">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${p.role === 'spectator' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-br from-purple-500 to-blue-500 text-white'}`}>
-                      {p.name.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className={`text-sm font-medium ${isMe ? 'text-white' : 'text-slate-300'}`}>
-                        {p.name} {isMe && '(You)'}
-                      </span>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                        {p.role} {p.isHost && <span className="text-amber-500 ml-1">• Host</span>}
-                        {isReady && room.status === 'deck_building' && <span className="text-emerald-500 ml-1">• Ready</span>}
-                        {p.isOffline && <span className="text-red-500 ml-1">• Offline</span>}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`flex gap-2 ${isSolo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
-                    {isMe && (
-                      <button
-                        onClick={onExit}
-                        className={`p-1 rounded flex items-center gap-2 transition-colors ${isSolo
-                          ? 'bg-red-900/40 text-red-200 hover:bg-red-900/60 px-3 py-1.5'
-                          : 'hover:bg-slate-700 text-slate-400 hover:text-red-400'
-                          }`}
-                        title={isSolo ? "End Solo Session" : "Leave Room"}
-                      >
-                        <LogOut className="w-4 h-4" />
-                        {isSolo && <span className="text-xs font-bold">End Test</span>}
-                      </button>
-                    )}
-                    {isMeHost && !isMe && (
-                      <button
-                        onClick={() => {
-                          if (confirm(`Kick ${p.name}?`)) {
-                            socketService.socket.emit('kick_player', { roomId: room.id, targetId: p.id });
-                          }
-                        }}
-                        className="p-1 hover:bg-red-900/50 rounded text-slate-500 hover:text-red-500"
-                        title="Kick Player"
-                      >
-                        <LogOut className="w-4 h-4 rotate-180" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+        <button
+          onClick={() => setActivePanel(activePanel === 'chat' ? null : 'chat')}
+          className={`p-3 rounded-xl transition-all duration-200 group relative ${activePanel === 'chat' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-500 hover:text-blue-400 hover:bg-slate-800'}`}
+          title="Chat"
+        >
+          <div className="relative">
+            <MessageSquare className="w-6 h-6" />
+            {/* Unread indicator could go here */}
           </div>
-        </div>
-
-        <div className="h-1/2 bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-xl flex flex-col">
-          <h3 className="text-sm font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" /> Chat
-          </h3>
-          <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1 custom-scrollbar">
-            {messages.map(msg => (
-              <div key={msg.id} className="text-sm">
-                <span className="font-bold text-purple-400 text-xs">{msg.sender}: </span>
-                <span className="text-slate-300">{msg.text}</span>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-          <form onSubmit={sendMessage} className="flex gap-2">
-            <input
-              type="text"
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Type..."
-            />
-            <button type="submit" className="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white transition-colors">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
+          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none ring-1 ring-white/10">
+            Chat
+          </span>
+        </button>
       </div>
+
+      {/* Floating Panel (Desktop) */}
+      {activePanel && (
+        <div className="hidden lg:flex absolute right-16 top-4 bottom-4 w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl z-40 flex-col animate-in slide-in-from-right-10 fade-in duration-200 overflow-hidden ring-1 ring-white/10">
+
+          {/* Header */}
+          <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              {activePanel === 'lobby' ? <><Users className="w-5 h-5 text-purple-400" /> Lobby</> : <><MessageSquare className="w-5 h-5 text-blue-400" /> Chat</>}
+            </h3>
+            <button onClick={() => setActivePanel(null)} className="p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Lobby Content */}
+          {activePanel === 'lobby' && (
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* Controls */}
+              <div className="p-3 bg-slate-900/30 flex items-center justify-between border-b border-slate-800">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{room.players.length} Connected</span>
+                <button
+                  onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                  className={`flex items-center gap-2 text-xs font-bold px-2 py-1 rounded-lg transition-colors border ${notificationsEnabled ? 'bg-slate-800 border-slate-600 text-slate-300 hover:text-white' : 'bg-red-900/20 border-red-900/50 text-red-400'}`}
+                  title={notificationsEnabled ? "Disable Notifications" : "Enable Notifications"}
+                >
+                  {notificationsEnabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
+                  {notificationsEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+
+              {/* Player List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                {room.players.map(p => {
+                  const isReady = (p as any).ready;
+                  const isMe = p.id === currentPlayerId;
+                  const isSolo = room.players.length === 1 && room.status === 'playing';
+
+                  return (
+                    <div key={p.id} className="flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-inner ${p.role === 'spectator' ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-purple-900/30'}`}>
+                          {p.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-bold ${isMe ? 'text-white' : 'text-slate-200'}`}>
+                            {p.name} {isMe && <span className="text-slate-500 font-normal">(You)</span>}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                            {p.role}
+                            {p.isHost && <span className="text-amber-500 flex items-center">• Host</span>}
+                            {isReady && room.status === 'deck_building' && <span className="text-emerald-500 flex items-center">• Ready</span>}
+                            {p.isOffline && <span className="text-red-500 flex items-center">• Offline</span>}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={`flex gap-1 ${isSolo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+                        {isMeHost && !isMe && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`Kick ${p.name}?`)) {
+                                socketService.socket.emit('kick_player', { roomId: room.id, targetId: p.id });
+                              }
+                            }}
+                            className="p-1.5 hover:bg-red-500/10 rounded-lg text-slate-500 hover:text-red-500 transition-colors"
+                            title="Kick Player"
+                          >
+                            <LogOut className="w-4 h-4 rotate-180" />
+                          </button>
+                        )}
+                        {isMe && (
+                          <button onClick={onExit} className="p-1.5 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-colors" title="Accions">
+                            <LogOut className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Chat Content */}
+          {activePanel === 'chat' && (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                {messages.length === 0 && (
+                  <div className="text-center text-slate-600 mt-10 text-sm italic">
+                    No messages yet. Say hello!
+                  </div>
+                )}
+                {messages.map(msg => (
+                  <div key={msg.id} className={`flex flex-col ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'items-end' : 'items-start'}`}>
+                    <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'bg-blue-600 text-white rounded-br-none shadow-blue-900/20' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
+                      {msg.text}
+                    </div>
+                    <span className="text-[10px] text-slate-500 mt-1 font-medium">{msg.sender}</span>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+              <div className="p-3 bg-slate-900/50 border-t border-slate-700">
+                <form onSubmit={sendMessage} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={message}
+                    onChange={e => setMessage(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    placeholder="Type a message..."
+                  />
+                  <button type="submit" className="p-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-white transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50" disabled={!message.trim()}>
+                    <Send className="w-4 h-4" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+
 
       {/* Host Disconnected Overlay */}
       {isHostOffline && !isMeHost && (

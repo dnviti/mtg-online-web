@@ -191,7 +191,7 @@ const CardsDisplay: React.FC<{
     >
       {cards.map(c => {
         const card = normalizeCard(c);
-        const useArtCrop = cardWidth < 200 && !!card.imageArtCrop;
+        const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
 
         const isFoil = card.finish === 'foil';
 

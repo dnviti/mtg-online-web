@@ -98,3 +98,5 @@
 - [Minimize Slider Defaults](./devlog/2025-12-18-013000_minimize_slider_defaults.md): Completed. Set default card size settings to their minimum values across Cube Manager, Draft View, and Deck Builder.
 - [Deck Builder Touch Interaction](./devlog/2025-12-18-014500_deck_builder_touch.md): Completed. Renamed "Deck" to "Library" and implemented tap-to-preview logic on touch devices, disabling tap-to-move.
 - [Stack View Sorting & Sliders](./devlog/2025-12-18-020000_stack_sorting_sliders.md): Completed. Refactored StackView to group by Color by default, added sorting controls to Deck Builder, and reduced slider scales globally to allow smaller sizes.
+- [Lobby UI & Notifications](./devlog/2025-12-18-023000_lobby_ui_update.md): Completed. Refactored Lobby/Chat into collapsible floating panels, implemented player event notifications (Join/Leave/Disconnect), and updated Deck Builder card size triggers.
+- [Card Preview Threshold](./devlog/2025-12-18-024000_preview_threshold.md): Completed. Updated card art crop threshold to 130px (new 50% mark) across the application components.
