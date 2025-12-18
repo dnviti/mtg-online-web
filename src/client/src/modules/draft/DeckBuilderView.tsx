@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, ChevronLeft, Eye } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { DraftCard } from '../../services/PackGeneratorService';
@@ -249,6 +249,13 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   }, [cardWidth]);
 
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    return localStorage.getItem('draft_sidebarCollapsed') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('draft_sidebarCollapsed', isSidebarCollapsed.toString());
+  }, [isSidebarCollapsed]);
 
   // --- Resize State ---
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -731,73 +738,100 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
         <div className="flex-1 flex overflow-hidden lg:flex-row flex-col">
           {/* Zoom Sidebar */}
-          <div
-            ref={sidebarRef}
-            className="hidden xl:flex shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4 relative"
-            style={{ perspective: '1000px' }}
-          >
-            {/* Front content ... */}
-            <div className="w-full relative sticky top-4">
-              <div
-                className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
-                style={{
-                  transformStyle: 'preserve-3d',
-                  transform: hoveredCard ? 'rotateY(0deg)' : 'rotateY(180deg)'
-                }}
+          {/* Collapsed State: Toolbar Column */}
+          {/* Collapsed State: Toolbar Column */}
+          {isSidebarCollapsed ? (
+            <div key="collapsed" className="hidden xl:flex shrink-0 w-12 flex-col items-center py-4 bg-slate-900 border-r border-slate-800 z-10 gap-4 transition-all duration-300">
+              <button
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="p-3 rounded-xl transition-all duration-200 group relative text-slate-500 hover:text-purple-400 hover:bg-slate-800"
+                title="Expand Preview"
               >
-                {/* Front Face (Hovered Card) */}
-                <div
-                  className="absolute inset-0 w-full h-full bg-slate-900 rounded-xl"
-                  style={{ backfaceVisibility: 'hidden' }}
-                >
-                  {(hoveredCard || displayCard) && (
-                    <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl">
-                      <img
-                        src={(hoveredCard || displayCard).image || (hoveredCard || displayCard).image_uris?.normal || (hoveredCard || displayCard).card_faces?.[0]?.image_uris?.normal}
-                        alt={(hoveredCard || displayCard).name}
-                        className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
-                        draggable={false}
-                      />
-                      <div className="mt-4 text-center">
-                        <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
-                        <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).typeLine || (hoveredCard || displayCard).type_line}</p>
-                        {(hoveredCard || displayCard).oracle_text && (
-                          <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
-                            {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <Eye className="w-6 h-6" />
+                <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none ring-1 ring-white/10 z-50">
+                  Card Preview
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div
+              key="expanded"
+              ref={sidebarRef}
+              className="hidden xl:flex shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-10 p-4 relative group/sidebar"
+              style={{ perspective: '1000px', width: sidebarWidth }}
+            >
+              {/* Collapse Button */}
+              <button
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="absolute top-2 right-2 p-1.5 bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors z-20 opacity-0 group-hover/sidebar:opacity-100"
+                title="Collapse Preview"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
 
-                {/* Back Face (Card Back) */}
+              {/* Front content ... */}
+              <div className="w-full relative sticky top-4">
                 <div
-                  className="absolute inset-0 w-full h-full rounded-xl shadow-2xl overflow-hidden bg-slate-900"
+                  className="relative w-full aspect-[2.5/3.5] transition-all duration-300 ease-in-out"
                   style={{
-                    backfaceVisibility: 'hidden',
-                    transform: 'rotateY(180deg)'
+                    transformStyle: 'preserve-3d',
+                    transform: hoveredCard ? 'rotateY(0deg)' : 'rotateY(180deg)'
                   }}
                 >
-                  <img
-                    src="/images/back.jpg"
-                    alt="Card Back"
-                    className="w-full h-full object-cover"
-                    draggable={false}
-                  />
+                  {/* Front Face (Hovered Card) */}
+                  <div
+                    className="absolute inset-0 w-full h-full bg-slate-900 rounded-xl"
+                    style={{ backfaceVisibility: 'hidden' }}
+                  >
+                    {(hoveredCard || displayCard) && (
+                      <div className="w-full h-full flex flex-col bg-slate-900 rounded-xl">
+                        <img
+                          src={(hoveredCard || displayCard).image || (hoveredCard || displayCard).image_uris?.normal || (hoveredCard || displayCard).card_faces?.[0]?.image_uris?.normal}
+                          alt={(hoveredCard || displayCard).name}
+                          className="w-full rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
+                          draggable={false}
+                        />
+                        <div className="mt-4 text-center">
+                          <h3 className="text-lg font-bold text-slate-200">{(hoveredCard || displayCard).name}</h3>
+                          <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{(hoveredCard || displayCard).typeLine || (hoveredCard || displayCard).type_line}</p>
+                          {(hoveredCard || displayCard).oracle_text && (
+                            <div className="mt-4 text-xs text-slate-400 text-left bg-slate-950 p-3 rounded-lg border border-slate-800 leading-relaxed max-h-60 overflow-y-auto custom-scrollbar">
+                              {(hoveredCard || displayCard).oracle_text.split('\n').map((line: string, i: number) => <p key={i} className="mb-1">{line}</p>)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Back Face (Card Back) */}
+                  <div
+                    className="absolute inset-0 w-full h-full rounded-xl shadow-2xl overflow-hidden bg-slate-900"
+                    style={{
+                      backfaceVisibility: 'hidden',
+                      transform: 'rotateY(180deg)'
+                    }}
+                  >
+                    <img
+                      src="/images/back.jpg"
+                      alt="Card Back"
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Resize Handle */}
-            <div
-              className="absolute right-0 top-0 bottom-0 w-1 bg-transparent hover:bg-purple-500/50 cursor-col-resize z-50 flex flex-col justify-center items-center group transition-colors touch-none"
-              onMouseDown={(e) => handleResizeStart('sidebar', e)}
-              onTouchStart={(e) => handleResizeStart('sidebar', e)}
-            >
-              <div className="h-8 w-1 bg-slate-700/50 rounded-full group-hover:bg-purple-400 transition-colors" />
+              {/* Resize Handle */}
+              <div
+                className="absolute right-0 top-0 bottom-0 w-1 bg-transparent hover:bg-purple-500/50 cursor-col-resize z-50 flex flex-col justify-center items-center group transition-colors touch-none"
+                onMouseDown={(e) => handleResizeStart('sidebar', e)}
+                onTouchStart={(e) => handleResizeStart('sidebar', e)}
+              >
+                <div className="h-8 w-1 bg-slate-700/50 rounded-full group-hover:bg-purple-400 transition-colors" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Content Area */}
           {layout === 'vertical' ? (

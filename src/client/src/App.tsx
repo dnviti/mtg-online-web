@@ -79,7 +79,10 @@ export const App: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="bg-purple-600 p-2 rounded-lg"><Layers className="w-6 h-6 text-white" /></div>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">MTG Peasant Drafter</h1>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent flex items-center gap-2">
+                  MTG Peasant Drafter
+                  <span className="px-1.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 tracking-wider shadow-[0_0_10px_rgba(168,85,247,0.1)]">ALPHA</span>
+                </h1>
                 <p className="text-slate-400 text-xs uppercase tracking-wider">Pack Generator & Tournament Manager</p>
               </div>
             </div>
