@@ -202,7 +202,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   const [timer] = useState<string>("Unlimited");
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('vertical');
   const [viewMode, setViewMode] = useState<'list' | 'grid' | 'stack'>('grid');
-  const [cardWidth, setCardWidth] = useState(150);
+  const [cardWidth, setCardWidth] = useState(100);
 
   const [pool, setPool] = useState<any[]>(initialPool);
   const [deck, setDeck] = useState<any[]>([]);

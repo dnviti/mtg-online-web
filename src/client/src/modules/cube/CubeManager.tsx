@@ -113,7 +113,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
   const [cardWidth, setCardWidth] = useState(() => {
     const saved = localStorage.getItem('cube_cardWidth');
-    return saved ? parseInt(saved) : 140;
+    return saved ? parseInt(saved) : 100;
   });
 
   // --- Persistence Effects ---

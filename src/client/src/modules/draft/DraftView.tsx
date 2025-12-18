@@ -66,7 +66,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
 
   const [cardScale, setCardScale] = useState<number>(() => {
     const saved = localStorage.getItem('draft_cardScale');
-    return saved ? parseFloat(saved) : 0.7;
+    return saved ? parseFloat(saved) : 0.5;
   });
 
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>('horizontal');
