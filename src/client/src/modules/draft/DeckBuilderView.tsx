@@ -438,15 +438,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
         }
       };
 
-      if (targetId && setCode) {
-        return {
-          ...cardWithDefinition,
-          image_uris: {
-            normal: `/cards/images/${setCode}/full/${targetId}.jpg`,
-            crop: `/cards/images/${setCode}/crop/${targetId}.jpg`
-          }
-        };
-      }
       return cardWithDefinition;
     });
 

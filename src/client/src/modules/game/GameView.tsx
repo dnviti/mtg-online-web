@@ -947,7 +947,11 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           {activeDragId ? (
             <div className="w-32 h-48 pointer-events-none opacity-80 z-[1000]">
               <img
-                src={gameState.cards[activeDragId]?.imageUrl}
+                src={(() => {
+                  const c = gameState.cards[activeDragId];
+                  return c?.image_uris?.normal ||
+                    (c?.definition?.set && c?.definition?.id ? `/cards/images/${c.definition.set}/full/${c.definition.id}.jpg` : c?.imageUrl);
+                })()}
                 alt="Drag Preview"
                 className="w-full h-full object-cover rounded-xl shadow-2xl"
               />

@@ -30,8 +30,6 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
   }, [card.instanceId]);
 
   // Robustly resolve Art Crop
-  // Robustly resolve Art Crop
-  // Robustly resolve Art Crop
   let imageSrc = card.imageUrl;
 
   if (card.image_uris) {
