@@ -1,6 +1,0 @@
-Implemented CSV export for generated packs and cards.
-Implemented CSV copy to clipboard functionality.
-Implemented CSV import template download.
-Removed demo button and functionality from CubeManager.
-Updated CSV import template content.
-Refactored parsing logic to support complex CSV imports.
