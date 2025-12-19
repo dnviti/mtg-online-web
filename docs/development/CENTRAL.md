@@ -140,3 +140,4 @@
 - [Strict Cache Structure](./devlog/2025-12-18-213300_strict_cache_structure.md): Completed. Enforced cache structure `/cards/[code]/full` and `/cards/[code]/crop`, removing the `images` subdirectory and ensuring strict local file usage.
 - [Implicit Image Caching](./devlog/2025-12-18-213900_implicit_image_caching.md): Completed. Updated API routes `/api/sets/:code/cards` and `/api/cards/parse` to implicitly trigger and await image caching, ensuring assets are available immediately for generators.
 - [Restore Images Subdirectory](./devlog/2025-12-18-214300_restore_images_subdir.md): Completed. Corrected cache folder structure to `/cards/images/[set]/full` and `/cards/images/[set]/crop` as per user request.
+- [Fix Build Unused Variables](./devlog/2025-12-19-011500_fix_build_unused_vars.md): Completed. Resolved TS6133 errors in RulesEngine, PersistenceManager, and CardService to fix Docker build failure.

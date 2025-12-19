@@ -1,5 +1,5 @@
 
-import { StrictGameState, PlayerState, Phase, Step, StackObject } from './types';
+import { StrictGameState, Phase, Step } from './types';
 
 export class RulesEngine {
   public state: StrictGameState;
@@ -561,7 +561,7 @@ export class RulesEngine {
     }
   }
 
-  private cleanupStep(playerId: string) {
+  private cleanupStep(_playerId: string) {
     // Remove damage, discard down to 7
     console.log(`Cleanup execution.`);
     Object.values(this.state.cards).forEach(c => {

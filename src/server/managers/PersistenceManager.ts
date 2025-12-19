@@ -4,12 +4,10 @@ import path from 'path';
 import { RoomManager } from './RoomManager';
 import { DraftManager } from './DraftManager';
 import { GameManager } from './GameManager';
-import { fileURLToPath } from 'url';
+
 import { RedisClientManager } from './RedisClientManager';
 
-// Handling __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
 
 // Store data in src/server/data so it persists (assuming not inside a dist that gets wiped, but user root)
 const DATA_DIR = path.resolve(process.cwd(), 'server-data');
