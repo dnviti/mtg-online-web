@@ -502,6 +502,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                       {hoveredCard && (
                         <img
                           src={(() => {
+                            if (hoveredCard.image_uris?.normal) {
+                              return hoveredCard.image_uris.normal;
+                            }
                             if (hoveredCard.definition?.set && hoveredCard.definition?.id) {
                               return `/cards/images/${hoveredCard.definition.set}/full/${hoveredCard.definition.id}.jpg`;
                             }
@@ -859,9 +862,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                       <DraggableCardWrapper card={card}>
                         <CardComponent
                           card={card}
+                          viewMode="normal"
                           onDragStart={() => { }}
                           onDragEnd={() => { }}
-                          onClick={toggleTap}
+                          onClick={() => setInspectedCard(card)}
                           onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
                           style={{ transformOrigin: 'bottom center' }}
                           onMouseEnter={() => setHoveredCard(card)}

@@ -31,9 +31,16 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
 
   // Robustly resolve Art Crop
   // Robustly resolve Art Crop
+  // Robustly resolve Art Crop
   let imageSrc = card.imageUrl;
 
-  if (card.definition && card.definition.set && card.definition.id) {
+  if (card.image_uris) {
+    if (viewMode === 'cutout' && card.image_uris.crop) {
+      imageSrc = card.image_uris.crop;
+    } else if (card.image_uris.normal) {
+      imageSrc = card.image_uris.normal;
+    }
+  } else if (card.definition && card.definition.set && card.definition.id) {
     if (viewMode === 'cutout') {
       imageSrc = `/cards/images/${card.definition.set}/crop/${card.definition.id}.jpg`;
     } else {

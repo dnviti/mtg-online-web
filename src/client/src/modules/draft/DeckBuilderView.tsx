@@ -429,13 +429,25 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
       const targetId = c.scryfallId; // DraftCard uses scryfallId for the real ID
       const setCode = c.setCode || c.set;
 
+      const cardWithDefinition = {
+        ...c,
+        definition: {
+          set: setCode,
+          id: targetId,
+          ...(c.definition || {})
+        }
+      };
+
       if (targetId && setCode) {
         return {
-          ...c,
-          image: `/cards/images/${setCode}/full/${targetId}.jpg`
+          ...cardWithDefinition,
+          image_uris: {
+            normal: `/cards/images/${setCode}/full/${targetId}.jpg`,
+            crop: `/cards/images/${setCode}/crop/${targetId}.jpg`
+          }
         };
       }
-      return c;
+      return cardWithDefinition;
     });
 
     socketService.socket.emit('player_ready', { deck: preparedDeck });

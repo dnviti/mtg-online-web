@@ -45,6 +45,15 @@ export interface CardInstance {
   oracleText?: string;
   manaCost?: string;
   definition?: any;
+  image_uris?: {
+    normal?: string;
+    crop?: string;
+    art_crop?: string;
+    small?: string;
+    large?: string;
+    png?: string;
+    border_crop?: string;
+  };
 }
 
 export interface PlayerState {
