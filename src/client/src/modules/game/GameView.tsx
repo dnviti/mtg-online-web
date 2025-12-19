@@ -501,7 +501,12 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     >
                       {hoveredCard && (
                         <img
-                          src={hoveredCard.imageUrl}
+                          src={(() => {
+                            if (hoveredCard.definition?.set && hoveredCard.definition?.id) {
+                              return `/cards/images/${hoveredCard.definition.set}/full/${hoveredCard.definition.id}.jpg`;
+                            }
+                            return hoveredCard.imageUrl;
+                          })()}
                           alt={hoveredCard.name}
                           className="w-full h-full object-cover rounded-xl shadow-2xl shadow-black ring-1 ring-white/10"
                         />

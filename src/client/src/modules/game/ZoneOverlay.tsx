@@ -52,7 +52,12 @@ export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClo
                     }}
                   >
                     <img
-                      src={card.imageUrl || 'https://via.placeholder.com/250x350'}
+                      src={(() => {
+                        if (card.definition?.set && card.definition?.id) {
+                          return `/cards/images/${card.definition.set}/full/${card.definition.id}.jpg`;
+                        }
+                        return card.imageUrl || 'https://via.placeholder.com/250x350';
+                      })()}
                       alt={card.name}
                       className="w-full h-full object-cover"
                     />

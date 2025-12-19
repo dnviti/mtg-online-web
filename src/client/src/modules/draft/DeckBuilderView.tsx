@@ -16,13 +16,21 @@ interface DeckBuilderViewProps {
 }
 
 // Internal Helper to normalize card data for visuals
-const normalizeCard = (c: any): DraftCard => ({
-  ...c,
-  finish: c.finish || 'nonfoil',
-  typeLine: c.typeLine || c.type_line,
-  // Ensure image is top-level for components that expect it
-  image: c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
-});
+const normalizeCard = (c: any): DraftCard => {
+  const targetId = c.scryfallId || c.id;
+  const setCode = c.setCode || c.set;
+  const localImage = (targetId && setCode)
+    ? `/cards/images/${setCode}/full/${targetId}.jpg`
+    : null;
+
+  return {
+    ...c,
+    finish: c.finish || 'nonfoil',
+    typeLine: c.typeLine || c.type_line,
+    // Ensure image is top-level for components that expect it
+    image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
+  };
+};
 
 const LAND_URL_MAP: Record<string, string> = {
   Plains: "https://cards.scryfall.io/normal/front/d/1/d1ea1858-ad25-4d13-9860-25c898b02c42.jpg",
@@ -416,7 +424,21 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   };
 
   const submitDeck = () => {
-    socketService.socket.emit('player_ready', { deck });
+    // Normalize deck images to use local cache before submitting
+    const preparedDeck = deck.map(c => {
+      const targetId = c.scryfallId; // DraftCard uses scryfallId for the real ID
+      const setCode = c.setCode || c.set;
+
+      if (targetId && setCode) {
+        return {
+          ...c,
+          image: `/cards/images/${setCode}/full/${targetId}.jpg`
+        };
+      }
+      return c;
+    });
+
+    socketService.socket.emit('player_ready', { deck: preparedDeck });
   };
 
   // --- DnD Handlers ---
@@ -526,13 +548,22 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   const landSourceCards = useMemo(() => {
     // If we have specific lands from cube, use them.
     if (availableBasicLands && availableBasicLands.length > 0) {
-      return availableBasicLands.map(land => ({
-        ...land,
-        id: `land-source-${land.name}`, // stable ID for list
-        isLandSource: true,
-        // Ensure image is set for display
-        image: land.image || land.image_uris?.normal
-      }));
+      return availableBasicLands.map(land => {
+        const targetId = land.scryfallId || land.id;
+        const setCode = land.setCode || land.set;
+
+        const localImage = (targetId && setCode)
+          ? `/cards/images/${setCode}/full/${targetId}.jpg`
+          : null;
+
+        return {
+          ...land,
+          id: `land-source-${land.name}`, // stable ID for list
+          isLandSource: true,
+          // Ensure image is set for display
+          image: localImage || land.image || land.image_uris?.normal
+        };
+      });
     }
 
     // Otherwise generate generic basics

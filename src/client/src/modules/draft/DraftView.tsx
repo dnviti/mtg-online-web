@@ -9,11 +9,21 @@ import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSenso
 import { CSS } from '@dnd-kit/utilities';
 
 // Helper to normalize card data for visuals
-const normalizeCard = (c: any) => ({
-  ...c,
-  finish: c.finish || 'nonfoil',
-  image: c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
-});
+// Helper to normalize card data for visuals
+const normalizeCard = (c: any) => {
+  const targetId = c.scryfallId || c.id;
+  const setCode = c.setCode || c.set;
+
+  const localImage = (targetId && setCode)
+    ? `/cards/images/${setCode}/full/${targetId}.jpg`
+    : null;
+
+  return {
+    ...c,
+    finish: c.finish || 'nonfoil',
+    image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
+  };
+};
 
 // Droppable Wrapper for Pool
 const PoolDroppable = ({ children, className, style }: any) => {
@@ -633,7 +643,8 @@ const DraftCardItem = ({ rawCard, handlePick, setHoveredCard }: any) => {
   );
 };
 
-const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
+const PoolCardItem = ({ card: rawCard, setHoveredCard, vertical = false }: any) => {
+  const card = normalizeCard(rawCard);
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(setHoveredCard, () => {
     if (window.matchMedia('(pointer: coarse)').matches) return;
   }, card);
@@ -649,7 +660,7 @@ const PoolCardItem = ({ card, setHoveredCard, vertical = false }: any) => {
       onClick={onClick}
     >
       <img
-        src={card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal}
+        src={card.image}
         alt={card.name}
         className={`${vertical ? 'w-full h-full object-cover' : 'h-full w-auto object-contain'} rounded-lg shadow-lg border border-slate-700/50 group-hover:border-emerald-500/50 group-hover:shadow-emerald-500/20 transition-all`}
         draggable={false}
