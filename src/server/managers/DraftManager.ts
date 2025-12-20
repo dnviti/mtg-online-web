@@ -112,6 +112,7 @@ export class DraftManager extends EventEmitter {
 
     // 1. Add to pool
     playerState.pool.push(card);
+    console.log(`[DraftManager] ✅ Pick processed for Player ${playerId}: ${card.name} (${card.id})`);
 
     // 2. Remove from pack
     playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);

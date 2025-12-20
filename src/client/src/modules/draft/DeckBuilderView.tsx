@@ -7,6 +7,8 @@ import { DraftCard } from '../../services/PackGeneratorService';
 import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { AutoDeckBuilder } from '../../utils/AutoDeckBuilder';
+import { Wand2 } from 'lucide-react'; // Import Wand icon
 
 interface DeckBuilderViewProps {
   roomId: string;
@@ -492,6 +494,37 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
     socketService.socket.emit('player_ready', { deck: preparedDeck });
   };
 
+  const handleAutoBuild = async () => {
+    if (confirm("This will replace your current deck with an auto-generated one. Continue?")) {
+      console.log("Auto-Build: Started");
+      // 1. Merge current deck back into pool (excluding basic lands generated)
+      const currentDeckSpells = deck.filter(c => !c.isLandSource && !(c.typeLine || c.type_line || '').includes('Basic'));
+      const fullPool = [...pool, ...currentDeckSpells];
+      console.log("Auto-Build: Full Pool Size:", fullPool.length);
+
+      // 2. Run Auto Builder
+      // We need real basic land objects if available, or generic ones
+      const landSource = availableBasicLands && availableBasicLands.length > 0 ? availableBasicLands : landSourceCards;
+      console.log("Auto-Build: Land Source Size:", landSource?.length);
+
+      try {
+        const newDeck = await AutoDeckBuilder.buildDeckAsync(fullPool, landSource);
+        console.log("Auto-Build: New Deck Generated:", newDeck.length);
+
+        // 3. Update State
+        // Remove deck cards from pool
+        const newDeckIds = new Set(newDeck.map((c: any) => c.id));
+        const remainingPool = fullPool.filter(c => !newDeckIds.has(c.id));
+        console.log("Auto-Build: Remaining Pool Size:", remainingPool.length);
+
+        setDeck(newDeck);
+        setPool(remainingPool);
+      } catch (e) {
+        console.error("Auto-Build Error:", e);
+      }
+    }
+  };
+
   // --- DnD Handlers ---
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -816,6 +849,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
           </div>
 
           <div className="flex items-center gap-4">
+            <button
+              onClick={handleAutoBuild}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg border border-indigo-400/50 shadow-lg font-bold text-xs transition-transform hover:scale-105"
+              title="Auto-Build Deck"
+            >
+              <Wand2 className="w-4 h-4" /> <span className="hidden sm:inline">Auto-Build</span>
+            </button>
+
             <div className="hidden sm:flex items-center gap-2 text-amber-400 font-mono text-sm font-bold bg-slate-900 px-3 py-1.5 rounded border border-amber-500/30">
               <Clock className="w-4 h-4" /> {formatTime(timer)}
             </div>

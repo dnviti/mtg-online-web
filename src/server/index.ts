@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -12,6 +13,7 @@ import { PackGeneratorService } from './services/PackGeneratorService';
 import { CardParserService } from './services/CardParserService';
 import { PersistenceManager } from './managers/PersistenceManager';
 import { RulesEngine } from './game/RulesEngine';
+import { GeminiService } from './services/GeminiService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,6 +81,19 @@ app.use('/images', express.static(path.join(__dirname, 'public/images')));
 // API Routes
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', message: 'Server is running' });
+});
+
+// AI Routes
+app.post('/api/ai/pick', async (req: Request, res: Response) => {
+  const { pack, pool, suggestion } = req.body;
+  const result = await GeminiService.getInstance().generatePick(pack, pool, suggestion);
+  res.json({ pick: result });
+});
+
+app.post('/api/ai/deck', async (req: Request, res: Response) => {
+  const { pool, suggestion } = req.body;
+  const result = await GeminiService.getInstance().generateDeck(pool, suggestion);
+  res.json({ deck: result });
 });
 
 // Serve Frontend in Production
@@ -230,6 +245,67 @@ const draftInterval = setInterval(() => {
   const updates = draftManager.checkTimers();
   updates.forEach(({ roomId, draft }) => {
     io.to(roomId).emit('draft_update', draft);
+
+    // Check for Bot Readiness Sync (Deck Building Phase)
+    if (draft.status === 'deck_building') {
+      const room = roomManager.getRoom(roomId);
+      if (room) {
+        let roomUpdated = false;
+
+        Object.values(draft.players).forEach(dp => {
+          if (dp.isBot && dp.deck && dp.deck.length > 0) {
+            const roomPlayer = room.players.find(rp => rp.id === dp.id);
+            // Sync if not ready
+            if (roomPlayer && !roomPlayer.ready) {
+              const updated = roomManager.setPlayerReady(roomId, dp.id, dp.deck);
+              if (updated) roomUpdated = true;
+            }
+          }
+        });
+
+        if (roomUpdated) {
+          io.to(roomId).emit('room_update', room);
+
+          // Check if EVERYONE is ready to start game automatically
+          const activePlayers = room.players.filter(p => p.role === 'player');
+          if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
+            console.log(`All players ready (including bots) in room ${roomId}. Starting game.`);
+            room.status = 'playing';
+            io.to(roomId).emit('room_update', room);
+
+            const game = gameManager.createGame(roomId, room.players);
+
+            // Populate Decks
+            activePlayers.forEach(p => {
+              if (p.deck) {
+                p.deck.forEach((card: any) => {
+                  gameManager.addCardToGame(roomId, {
+                    ownerId: p.id,
+                    controllerId: p.id,
+                    oracleId: card.oracle_id || card.id,
+                    name: card.name,
+                    imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                    zone: 'library',
+                    typeLine: card.typeLine || card.type_line || '',
+                    oracleText: card.oracleText || card.oracle_text || '',
+                    manaCost: card.manaCost || card.mana_cost || '',
+                    keywords: card.keywords || [],
+                    power: card.power,
+                    toughness: card.toughness,
+                    damageMarked: 0,
+                    controlledSinceTurn: 0
+                  });
+                });
+              }
+            });
+
+            const engine = new RulesEngine(game);
+            engine.startGame();
+            io.to(roomId).emit('game_update', game);
+          }
+        }
+      }
+    }
 
     // Check for forced game start (Deck Building Timeout)
     if (draft.status === 'complete') {
@@ -477,6 +553,8 @@ io.on('connection', (socket) => {
     const context = getContext();
     if (!context) return;
     const { room, player } = context;
+
+    console.log(`[Socket] 📩 Recv pick_card: Player ${player.name} (ID: ${player.id}) picked ${cardId}`);
 
     const draft = draftManager.pickCard(room.id, player.id, cardId);
     if (draft) {

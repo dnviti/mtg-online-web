@@ -218,13 +218,18 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
   // Reconnection logic (Initial Mount)
   React.useEffect(() => {
     const savedRoomId = localStorage.getItem('active_room_id');
+
     if (savedRoomId && !activeRoom && playerId) {
+      console.log(`[LobbyManager] Found saved session ${savedRoomId}. Attempting to reconnect...`);
       setLoading(true);
-      connect();
-      socketService.emitPromise('rejoin_room', { roomId: savedRoomId, playerId })
-        .then((response: any) => {
+
+      const handleRejoin = async () => {
+        try {
+          console.log(`[LobbyManager] Emitting rejoin_room...`);
+          const response = await socketService.emitPromise('rejoin_room', { roomId: savedRoomId, playerId });
+
           if (response.success) {
-            console.log("Rejoined session successfully");
+            console.log("[LobbyManager] Rejoined session successfully");
             setActiveRoom(response.room);
             if (response.draftState) {
               setInitialDraftState(response.draftState);
@@ -233,18 +238,33 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               setInitialGameState(response.gameState);
             }
           } else {
-            console.warn("Rejoin failed by server: ", response.message);
-            localStorage.removeItem('active_room_id');
+            console.warn("[LobbyManager] Rejoin failed by server: ", response.message);
+            // Only clear if explicitly rejected (e.g. Room closed), not connection error
+            if (response.message !== 'Connection error') {
+              localStorage.removeItem('active_room_id');
+            }
             setLoading(false);
           }
-        })
-        .catch(err => {
-          console.warn("Reconnection failed", err);
-          localStorage.removeItem('active_room_id'); // Clear invalid session
+        } catch (err: any) {
+          console.warn("[LobbyManager] Reconnection failed", err);
+          // Do not clear ID immediately on network error, allow retry
           setLoading(false);
-        });
+        }
+      };
+
+      if (!socketService.socket.connected) {
+        console.log(`[LobbyManager] Socket not connected. Connecting...`);
+        connect();
+        socketService.socket.once('connect', handleRejoin);
+      } else {
+        handleRejoin();
+      }
+
+      return () => {
+        socketService.socket.off('connect', handleRejoin);
+      };
     }
-  }, []);
+  }, []); // Run once on mount
 
   // Auto-Rejoin on Socket Reconnect (e.g. Server Restart)
   React.useEffect(() => {

@@ -7,6 +7,8 @@ import { FoilOverlay, FloatingPreview } from '../../components/CardPreview';
 import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { AutoPicker } from '../../utils/AutoPicker';
+import { Wand2 } from 'lucide-react';
 
 // Helper to normalize card data for visuals
 // Helper to normalize card data for visuals
@@ -141,6 +143,9 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
     localStorage.setItem('draft_cardScale', cardScale.toString());
   }, [cardScale]);
 
+
+
+
   const handleResizeStart = (type: 'sidebar' | 'pool', e: React.MouseEvent | React.TouchEvent) => {
     // Prevent default to avoid scrolling/selection
     if (e.cancelable) e.preventDefault();
@@ -217,8 +222,41 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
   const pickedCards = draftState.players[currentPlayerId]?.pool || [];
 
   const handlePick = (cardId: string) => {
+    const card = activePack?.cards.find((c: any) => c.id === cardId);
+    console.log(`[DraftView] 👆 Manual/Submit Pick: ${card?.name || 'Unknown'} (${cardId})`);
     socketService.socket.emit('pick_card', { cardId });
   };
+
+  const handleAutoPick = async () => {
+    if (activePack && activePack.cards.length > 0) {
+      console.log('[DraftView] Starting Auto-Pick Process...');
+      const bestCard = await AutoPicker.pickBestCardAsync(activePack.cards, pickedCards);
+      if (bestCard) {
+        console.log(`[DraftView] Auto-Pick submitting: ${bestCard.name}`);
+        handlePick(bestCard.id);
+      }
+    }
+  };
+
+  const toggleAutoPick = () => {
+    setIsAutoPickEnabled(!isAutoPickEnabled);
+  };
+
+  // --- Auto-Pick / AFK Mode ---
+  const [isAutoPickEnabled, setIsAutoPickEnabled] = useState(false);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (isAutoPickEnabled && activePack && activePack.cards.length > 0) {
+      // Small delay for visual feedback and to avoid race conditions
+      timeout = setTimeout(() => {
+        handleAutoPick();
+      }, 1500);
+    }
+    return () => clearTimeout(timeout);
+  }, [isAutoPickEnabled, activePack, draftState.packNumber, pickedCards.length]);
+
+
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -445,7 +483,20 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center min-h-full pb-10">
-                    <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
+                    <div className="flex items-center gap-4 mb-4">
+                      <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold">Select a Card</h3>
+                      <button
+                        onClick={toggleAutoPick}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-lg font-bold text-xs transition-all hover:scale-105 ${isAutoPickEnabled
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/50 animate-pulse'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400/50'
+                          }`}
+                        title={isAutoPickEnabled ? "Disable Auto-Pick" : "Enable Auto-Pick (AFK Mode)"}
+                      >
+                        <Wand2 className={`w-3 h-3 ${isAutoPickEnabled ? 'animate-spin' : ''}`} />
+                        {isAutoPickEnabled ? 'Auto-Pick ON' : 'Auto-Pick'}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap justify-center gap-6">
                       {activePack.cards.map((rawCard: any) => (
                         <DraftCardItem
@@ -496,7 +547,20 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center min-h-full pb-10">
-                    <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold mb-8">Select a Card</h3>
+                    <div className="flex items-center gap-4 mb-4">
+                      <h3 className="text-center text-slate-500 uppercase tracking-[0.2em] text-xs font-bold">Select a Card</h3>
+                      <button
+                        onClick={toggleAutoPick}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border shadow-lg font-bold text-xs transition-all hover:scale-105 ${isAutoPickEnabled
+                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/50 animate-pulse'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-400/50'
+                          }`}
+                        title={isAutoPickEnabled ? "Disable Auto-Pick" : "Enable Auto-Pick (AFK Mode)"}
+                      >
+                        <Wand2 className={`w-3 h-3 ${isAutoPickEnabled ? 'animate-spin' : ''}`} />
+                        {isAutoPickEnabled ? 'Auto-Pick ON' : 'Auto-Pick'}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap justify-center gap-6">
                       {activePack.cards.map((rawCard: any) => (
                         <DraftCardItem

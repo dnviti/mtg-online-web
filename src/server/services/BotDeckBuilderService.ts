@@ -13,6 +13,7 @@ interface Card {
 export class BotDeckBuilderService {
 
   buildDeck(pool: Card[], basicLands: Card[]): Card[] {
+    console.log(`[BotDeckBuilder] 🤖 Building deck for bot (Pool: ${pool.length} cards)...`);
     // 1. Analyze Colors to find top 2 archetypes
     const colorCounts = { W: 0, U: 0, B: 0, R: 0, G: 0 };
 
