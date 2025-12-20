@@ -130,7 +130,8 @@ app.get('/api/sets', async (_req: Request, res: Response) => {
 
 app.get('/api/sets/:code/cards', async (req: Request, res: Response) => {
   try {
-    const cards = await scryfallService.fetchSetCards(req.params.code);
+    const related = req.query.related ? (req.query.related as string).split(',') : [];
+    const cards = await scryfallService.fetchSetCards(req.params.code, related);
 
     // Implicitly cache images for these cards so local URLs work
     if (cards.length > 0) {
@@ -218,7 +219,18 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
       ignoreTokens: false
     };
 
-    const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters);
+    // Fetch metadata for merging subsets
+    const allSets = await scryfallService.fetchSets();
+    const setsMetadata: { [code: string]: { parent_set_code?: string } } = {};
+    if (allSets && Array.isArray(allSets)) {
+      allSets.forEach((s: any) => {
+        if (selectedSets && selectedSets.includes(s.code)) {
+          setsMetadata[s.code] = { parent_set_code: s.parent_set_code };
+        }
+      });
+    }
+
+    const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters, setsMetadata);
 
     // Extract available basic lands for deck building
     const basicLands = pools.lands.filter(c => c.typeLine?.includes('Basic'));

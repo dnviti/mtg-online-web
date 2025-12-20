@@ -162,14 +162,16 @@ export class ScryfallService {
       const data = await response.json();
       if (data.data) {
         return data.data.filter((s: any) =>
-          ['core', 'expansion', 'masters', 'draft_innovation'].includes(s.set_type)
+          ['core', 'expansion', 'masters', 'draft_innovation', 'commander', 'funny', 'masterpiece', 'eternal'].includes(s.set_type)
         ).map((s: any) => ({
           code: s.code,
           name: s.name,
           set_type: s.set_type,
           released_at: s.released_at,
           icon_svg_uri: s.icon_svg_uri,
-          digital: s.digital
+          digital: s.digital,
+          parent_set_code: s.parent_set_code,
+          card_count: s.card_count
         }));
       }
     } catch (e) {
@@ -178,7 +180,7 @@ export class ScryfallService {
     return [];
   }
 
-  async fetchSetCards(setCode: string, onProgress?: (current: number) => void): Promise<ScryfallCard[]> {
+  async fetchSetCards(setCode: string, relatedSets: string[] = [], onProgress?: (current: number) => void): Promise<ScryfallCard[]> {
     if (this.initPromise) await this.initPromise;
 
     // Check if we already have a significant number of cards from this set in cache?
@@ -186,7 +188,9 @@ export class ScryfallService {
     // But for now, we just fetch and merge.
 
     let cards: ScryfallCard[] = [];
-    let url = `https://api.scryfall.com/cards/search?q=set:${setCode}&unique=cards`;
+    const setClause = `e:${setCode}` + relatedSets.map(s => ` OR e:${s}`).join('');
+    // User requested pattern: (e:main or e:sub) and is:booster unique=prints
+    let url = `https://api.scryfall.com/cards/search?q=(${setClause}) unique=prints is:booster`;
 
     while (url) {
       try {
@@ -228,4 +232,6 @@ export interface ScryfallSet {
   released_at: string;
   icon_svg_uri: string;
   digital: boolean;
+  parent_set_code?: string;
+  card_count: number;
 }

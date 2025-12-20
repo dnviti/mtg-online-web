@@ -193,13 +193,15 @@ export class ScryfallService {
       const data = await resp.json();
 
       const sets = data.data
-        .filter((s: any) => ['core', 'expansion', 'masters', 'draft_innovation', 'commander', 'funny'].includes(s.set_type))
+        .filter((s: any) => ['core', 'expansion', 'masters', 'draft_innovation', 'commander', 'funny', 'masterpiece', 'eternal'].includes(s.set_type))
         .map((s: any) => ({
           code: s.code,
           name: s.name,
           set_type: s.set_type,
           released_at: s.released_at,
-          digital: s.digital
+          digital: s.digital,
+          parent_set_code: s.parent_set_code,
+          card_count: s.card_count
         }));
 
       return sets;
@@ -209,7 +211,7 @@ export class ScryfallService {
     }
   }
 
-  async fetchSetCards(setCode: string): Promise<ScryfallCard[]> {
+  async fetchSetCards(setCode: string, relatedSets: string[] = []): Promise<ScryfallCard[]> {
     const setHash = setCode.toLowerCase();
     const setCachePath = path.join(SETS_DIR, `${setHash}.json`);
 
@@ -226,26 +228,30 @@ export class ScryfallService {
       }
     }
 
-    console.log(`[ScryfallService] Fetching cards for set ${setCode} from API...`);
+    console.log(`[ScryfallService] Fetching cards for set ${setCode} (related: ${relatedSets.join(',')}) from API...`);
     let allCards: ScryfallCard[] = [];
-    let url = `https://api.scryfall.com/cards/search?q=set:${setCode}&unique=cards`;
+
+    // Construct Composite Query: (e:main OR e:sub1 OR e:sub2) is:booster unique=prints
+    const setClause = `e:${setCode}` + relatedSets.map(s => ` OR e:${s}`).join('');
+    let url = `https://api.scryfall.com/cards/search?q=(${setClause}) unique=prints is:booster`;
 
     try {
       while (url) {
-        console.log(`[ScryfallService] Requesting: ${url}`);
-        const r = await fetch(url);
-        if (!r.ok) {
-          if (r.status === 404) {
+        console.log(`[ScryfallService] [API CALL] Requesting: ${url}`);
+        const resp = await fetch(url);
+        console.log(`[ScryfallService] [API RESPONSE] Status: ${resp.status}`);
+
+        if (!resp.ok) {
+          if (resp.status === 404) {
             console.warn(`[ScryfallService] 404 Not Found for URL: ${url}. Assuming set has no cards.`);
             break;
           }
-
-          const errBody = await r.text();
-          console.error(`[ScryfallService] Error fetching ${url}: ${r.status} ${r.statusText}`, errBody);
-          throw new Error(`Failed to fetch set: ${r.statusText} (${r.status}) - ${errBody}`);
+          const errBody = await resp.text();
+          console.error(`[ScryfallService] Error fetching ${url}: ${resp.status} ${resp.statusText}`, errBody);
+          throw new Error(`Failed to fetch set: ${resp.statusText} (${resp.status}) - ${errBody}`);
         }
 
-        const d = await r.json();
+        const d = await resp.json();
 
         if (d.data) {
           allCards.push(...d.data);

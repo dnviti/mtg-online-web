@@ -144,7 +144,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   useEffect(() => {
     if (rawScryfallData) {
       // Use local images: true
-      const result = generatorService.processCards(rawScryfallData, filters, true);
+      const setsMetadata = availableSets.reduce((acc, set) => {
+        acc[set.code] = { parent_set_code: set.parent_set_code };
+        return acc;
+      }, {} as { [code: string]: { parent_set_code?: string } });
+
+      const result = generatorService.processCards(rawScryfallData, filters, true, setsMetadata);
       setProcessedData(result);
     }
   }, [filters, rawScryfallData]);
@@ -217,12 +222,70 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
       if (sourceMode === 'set') {
         // Fetch set by set
-        for (const [index, setCode] of selectedSets.entries()) {
-          setProgress(`Fetching set ${setCode.toUpperCase()} (${index + 1}/${selectedSets.length})...`);
-          const response = await fetch(`/api/sets/${setCode}/cards`);
-          if (!response.ok) throw new Error(`Failed to fetch set ${setCode}`);
+        // Fetch sets (Grouping Main + Subsets)
+        // We iterate through selectedSets. If a set has children also in selectedSets (or auto-detected), we fetch them together.
+        // We need to avoid fetching the child set again if it was covered by the parent.
+
+        const processedSets = new Set<string>();
+
+        // We already have `effectiveSelectedSets` which includes auto-added ones.
+        // Let's re-derive effective logic locally for fetching.
+        const allSetsToProcess = [...selectedSets];
+        const linkedSubsets = availableSets.filter(s =>
+          s.parent_set_code &&
+          selectedSets.includes(s.parent_set_code) &&
+          s.code.length === 3 && // 3-letter code filter
+          !selectedSets.includes(s.code)
+        ).map(s => s.code);
+        allSetsToProcess.push(...linkedSubsets);
+
+        let totalCards = 0;
+        let setIndex = 0;
+
+        for (const setCode of allSetsToProcess) {
+          if (processedSets.has(setCode)) continue;
+
+          // Check if this is a Main Set that has children in our list
+          // OR if it's a child that should be fetched with its parent?
+          // Actually, we should look for Main Sets first.
+
+          let currentMain = setCode;
+          let currentRelated: string[] = [];
+
+          // Find children of this set in our list
+          const children = allSetsToProcess.filter(s => {
+            const meta = availableSets.find(as => as.code === s);
+            return meta && meta.parent_set_code === currentMain;
+          });
+
+          // Also check if this set IS a child, and its parent is NOT in the list?
+          // If parent IS in the list, we skip this iteration and let the parent handle it?
+          const meta = availableSets.find(as => as.code === currentMain);
+          if (meta && meta.parent_set_code && allSetsToProcess.includes(meta.parent_set_code)) {
+            // This is a child, and we are processing the parent elsewhere. Skip.
+            // But wait, the loop order is undefined.
+            // Safest: always fetch by Main Set if possible.
+            // If we encounter a Child whose parent is in the list, we skip.
+            continue;
+          }
+
+          if (children.length > 0) {
+            currentRelated = children;
+            currentRelated.forEach(c => processedSets.add(c));
+          }
+
+          processedSets.add(currentMain);
+          setIndex++;
+
+          setProgress(`Fetching set ${currentMain.toUpperCase()} ${currentRelated.length > 0 ? `(+ ${currentRelated.join(', ').toUpperCase()})` : ''}...`);
+
+          const queryParams = currentRelated.length > 0 ? `?related=${currentRelated.join(',')}` : '';
+          const response = await fetch(`/api/sets/${currentMain}/cards${queryParams}`);
+
+          if (!response.ok) throw new Error(`Failed to fetch set ${currentMain}`);
           const cards: ScryfallCard[] = await response.json();
-          currentCards.push(...cards);
+          setRawScryfallData(prev => [...(prev || []), ...cards]);
+          totalCards += cards.length;
         }
 
       } else {
@@ -249,10 +312,20 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       // --- Step 2: Generate ---
       setProgress('Generating packs on server...');
 
+      // Re-calculation of effective sets for Payload is safe to match.
+      const payloadSetCodes = [...selectedSets];
+      const linkedPayload = availableSets.filter(s =>
+        s.parent_set_code &&
+        selectedSets.includes(s.parent_set_code) &&
+        s.code.length === 3 && // 3-letter code filter
+        !selectedSets.includes(s.code)
+      ).map(s => s.code);
+      payloadSetCodes.push(...linkedPayload);
+
       const payload = {
         cards: sourceMode === 'upload' ? currentCards : [], // For set mode, we let server refetch or handle it
         sourceMode,
-        selectedSets,
+        selectedSets: payloadSetCodes,
         settings: {
           ...genSettings,
           withReplacement: sourceMode === 'set'

@@ -34,6 +34,7 @@ export interface ProcessedPools {
   mythics: DraftCard[];
   lands: DraftCard[];
   tokens: DraftCard[];
+  specialGuests: DraftCard[];
 }
 
 export interface SetsMap {
@@ -46,6 +47,7 @@ export interface SetsMap {
     mythics: DraftCard[];
     lands: DraftCard[];
     tokens: DraftCard[];
+    specialGuests: DraftCard[];
   }
 }
 
@@ -57,9 +59,9 @@ export interface PackGenerationSettings {
 
 export class PackGeneratorService {
 
-  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }): { pools: ProcessedPools, sets: SetsMap } {
+  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }, setsMetadata: { [code: string]: { parent_set_code?: string } } = {}): { pools: ProcessedPools, sets: SetsMap } {
     console.time('processCards');
-    const pools: ProcessedPools = { commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [] };
+    const pools: ProcessedPools = { commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [], specialGuests: [] };
     const setsMap: SetsMap = {};
 
     let processedCount = 0;
@@ -118,10 +120,11 @@ export class PackGeneratorService {
       else if (rarity === 'uncommon') pools.uncommons.push(cardObj);
       else if (rarity === 'rare') pools.rares.push(cardObj);
       else if (rarity === 'mythic') pools.mythics.push(cardObj);
+      else pools.specialGuests.push(cardObj);
 
       // Add to Sets Map
       if (!setsMap[cardData.set]) {
-        setsMap[cardData.set] = { name: cardData.set_name, code: cardData.set, commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [] };
+        setsMap[cardData.set] = { name: cardData.set_name, code: cardData.set, commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [], specialGuests: [] };
       }
       const setEntry = setsMap[cardData.set];
 
@@ -147,9 +150,36 @@ export class PackGeneratorService {
         else if (rarity === 'uncommon') { pools.uncommons.push(cardObj); setEntry.uncommons.push(cardObj); }
         else if (rarity === 'rare') { pools.rares.push(cardObj); setEntry.rares.push(cardObj); }
         else if (rarity === 'mythic') { pools.mythics.push(cardObj); setEntry.mythics.push(cardObj); }
+        else { pools.specialGuests.push(cardObj); setEntry.specialGuests.push(cardObj); }
       }
 
       processedCount++;
+    });
+
+    // 2. Second Pass: Merge Subsets (Masterpieces) into Parents
+    Object.keys(setsMap).forEach(setCode => {
+      const meta = setsMetadata[setCode];
+      if (meta && meta.parent_set_code) {
+        const parentCode = meta.parent_set_code;
+        if (setsMap[parentCode]) {
+          const parentSet = setsMap[parentCode];
+          const childSet = setsMap[setCode];
+
+          const allChildCards = [
+            ...childSet.commons,
+            ...childSet.uncommons,
+            ...childSet.rares,
+            ...childSet.mythics,
+            ...childSet.specialGuests
+          ];
+
+          parentSet.specialGuests.push(...allChildCards);
+          pools.specialGuests.push(...allChildCards);
+
+          // Remove child set from map so we don't generate separate packs for it
+          delete setsMap[setCode];
+        }
+      }
     });
 
     console.log(`[PackGenerator] Processed ${processedCount} cards.`);
@@ -176,7 +206,8 @@ export class PackGeneratorService {
         rares: this.shuffle([...pools.rares]),
         mythics: this.shuffle([...pools.mythics]),
         lands: this.shuffle([...pools.lands]),
-        tokens: this.shuffle([...pools.tokens])
+        tokens: this.shuffle([...pools.tokens]),
+        specialGuests: this.shuffle([...pools.specialGuests])
       };
 
       // Log pool sizes
@@ -197,7 +228,8 @@ export class PackGeneratorService {
             rares: this.shuffle([...pools.rares]),
             mythics: this.shuffle([...pools.mythics]),
             lands: this.shuffle([...pools.lands]),
-            tokens: this.shuffle([...pools.tokens])
+            tokens: this.shuffle([...pools.tokens]),
+            specialGuests: this.shuffle([...pools.specialGuests])
           };
         }
 
@@ -256,7 +288,8 @@ export class PackGeneratorService {
           rares: this.shuffle([...data.rares]),
           mythics: this.shuffle([...data.mythics]),
           lands: this.shuffle([...data.lands]),
-          tokens: this.shuffle([...data.tokens])
+          tokens: this.shuffle([...data.tokens]),
+          specialGuests: this.shuffle([...data.specialGuests])
         };
 
         let packsGeneratedForSet = 0;
@@ -276,7 +309,8 @@ export class PackGeneratorService {
               rares: this.shuffle([...data.rares]),
               mythics: this.shuffle([...data.mythics]),
               lands: this.shuffle([...data.lands]),
-              tokens: this.shuffle([...data.tokens])
+              tokens: this.shuffle([...data.tokens]),
+              specialGuests: this.shuffle([...data.specialGuests])
             };
           }
 
@@ -331,9 +365,29 @@ export class PackGeneratorService {
       // Common
       draw(pools.commons, 1, 'commons');
     } else {
-      // Uncommon/List
       // If pool empty, try fallback if standard? No, strict as per previous instruction.
-      draw(pools.uncommons, 1, 'uncommons');
+      // draw(pools.uncommons, 1, 'uncommons');
+
+      // Slot 7: Common/List Slot (Strict adherence to standard-pack-generation-algorithm.md)
+      // 1-87: Common from Main Set
+      // 88-97: Card from The List (Common/Uncommon) -> Mapped to specialGuests
+      // 98-99: Rare/Mythic from The List -> Mapped to specialGuests
+      // 100: Special Guest -> Mapped to specialGuests
+
+      // We simplify by drawing from specialGuests for 88-100 (13% chance)
+      // if specialGuests is empty, fallback to Common or Uncommon? 
+      // Rulebook says "1-87 Common".
+
+      const hasGuests = pools.specialGuests.length > 0;
+
+      if (roll7 > 87 && hasGuests) {
+        draw(pools.specialGuests, 1, 'specialGuests');
+      } else {
+        // 1-87 or no guests available
+        draw(pools.commons, 1, 'commons');
+        // Note: If original rule for 88-97 was "Common from List", 
+        // and we fall back to "Common from Set", it's acceptable if List/Guests missing.
+      }
     }
 
     // 3. Uncommons (3 or 4 dependent on PEASANT vs STANDARD)

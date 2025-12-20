@@ -59,6 +59,7 @@ export interface ProcessedPools {
   mythics: DraftCard[];
   lands: DraftCard[];
   tokens: DraftCard[];
+  specialGuests: DraftCard[];
 }
 
 export interface SetsMap {
@@ -71,6 +72,7 @@ export interface SetsMap {
     mythics: DraftCard[];
     lands: DraftCard[];
     tokens: DraftCard[];
+    specialGuests: DraftCard[];
   }
 }
 
@@ -82,10 +84,11 @@ export interface PackGenerationSettings {
 
 export class PackGeneratorService {
 
-  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }, useLocalImages: boolean = false): { pools: ProcessedPools, sets: SetsMap } {
-    const pools: ProcessedPools = { commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [] };
+  processCards(cards: ScryfallCard[], filters: { ignoreBasicLands: boolean, ignoreCommander: boolean, ignoreTokens: boolean }, useLocalImages: boolean = false, setsMetadata: { [code: string]: { parent_set_code?: string } } = {}): { pools: ProcessedPools, sets: SetsMap } {
+    const pools: ProcessedPools = { commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [], specialGuests: [] };
     const setsMap: SetsMap = {};
 
+    // 1. First Pass: Organize into SetsMap
     cards.forEach(cardData => {
       const rarity = cardData.rarity;
       const typeLine = cardData.type_line || '';
@@ -159,10 +162,11 @@ export class PackGeneratorService {
       else if (rarity === 'uncommon') pools.uncommons.push(cardObj);
       else if (rarity === 'rare') pools.rares.push(cardObj);
       else if (rarity === 'mythic') pools.mythics.push(cardObj);
+      else pools.specialGuests.push(cardObj); // Catch-all for special/bonus
 
       // Add to Sets Map
       if (!setsMap[cardData.set]) {
-        setsMap[cardData.set] = { name: cardData.set_name, code: cardData.set, commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [] };
+        setsMap[cardData.set] = { name: cardData.set_name, code: cardData.set, commons: [], uncommons: [], rares: [], mythics: [], lands: [], tokens: [], specialGuests: [] };
       }
       const setEntry = setsMap[cardData.set];
 
@@ -182,6 +186,43 @@ export class PackGeneratorService {
         else if (rarity === 'uncommon') { pools.uncommons.push(cardObj); setEntry.uncommons.push(cardObj); }
         else if (rarity === 'rare') { pools.rares.push(cardObj); setEntry.rares.push(cardObj); }
         else if (rarity === 'mythic') { pools.mythics.push(cardObj); setEntry.mythics.push(cardObj); }
+        else { pools.specialGuests.push(cardObj); setEntry.specialGuests.push(cardObj); } // Catch-all for special/bonus
+      }
+    });
+
+    // 2. Second Pass: Merge Subsets (Masterpieces) into Parents
+    Object.keys(setsMap).forEach(setCode => {
+      const meta = setsMetadata[setCode];
+      if (meta && meta.parent_set_code) {
+        const parentCode = meta.parent_set_code;
+        if (setsMap[parentCode]) {
+          const parentSet = setsMap[parentCode];
+          const childSet = setsMap[setCode];
+
+          // Move ALL cards from child set to parent's 'specialGuests' pool
+          // We iterate all pools of the child set
+          const allChildCards = [
+            ...childSet.commons,
+            ...childSet.uncommons,
+            ...childSet.rares,
+            ...childSet.mythics,
+            ...childSet.specialGuests, // Include explicit specials
+            // ...childSet.lands, // usually keeps land separate? or special lands?
+            // Let's treat everything non-token as special guest candidate
+          ];
+
+          parentSet.specialGuests.push(...allChildCards);
+          pools.specialGuests.push(...allChildCards);
+
+          // IMPORTANT: If we are in 'by_set' mode, we might NOT want to generate packs for the child set anymore?
+          // Or we leave them there but they are ALSO in the parent's special pool?
+          // The request implies "merged".
+          // If we leave them in setsMap under their own code, they will generate their own packs in 'by_set' mode.
+          // If the user selected BOTH, they probably want the "Special Guest" experience AND maybe separate packs?
+          // Usually "Drafting WOT" separately is possible.
+          // But "Drafting WOE" should include "WOT".
+          // So copying is correct.
+        }
       }
     });
 
@@ -198,7 +239,8 @@ export class PackGeneratorService {
         rares: this.shuffle(pools.rares),
         mythics: this.shuffle(pools.mythics),
         lands: this.shuffle(pools.lands),
-        tokens: this.shuffle(pools.tokens)
+        tokens: this.shuffle(pools.tokens),
+        specialGuests: this.shuffle(pools.specialGuests)
       };
 
       let packId = 1;
@@ -224,7 +266,8 @@ export class PackGeneratorService {
           rares: this.shuffle(setData.rares),
           mythics: this.shuffle(setData.mythics),
           lands: this.shuffle(setData.lands),
-          tokens: this.shuffle(setData.tokens)
+          tokens: this.shuffle(setData.tokens),
+          specialGuests: this.shuffle(setData.specialGuests)
         };
 
         while (true) {
@@ -453,17 +496,22 @@ export class PackGeneratorService {
         }
       } else {
         // 98-100: Rare/Mythic/Special Guest
-        // Pick Rare or Mythic
-        // 98-99 (2%) vs 100 (1%) -> 2:1 ratio
+        // 1/100 (1%) chance for Special Guest if available
         const isGuest = roll7 === 100;
-        const useMythic = isGuest || Math.random() < 0.2;
 
-        if (useMythic && currentPools.mythics.length > 0) {
-          const res = this.drawUniqueCards(currentPools.mythics, 1, namesInThisPack);
-          if (res.success) { slot7Card = res.selected[0]; currentPools.mythics = res.remainingPool; }
+        if (isGuest && currentPools.specialGuests.length > 0) {
+          const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
         } else {
-          const res = this.drawUniqueCards(currentPools.rares, 1, namesInThisPack);
-          if (res.success) { slot7Card = res.selected[0]; currentPools.rares = res.remainingPool; }
+          // Fallback to Rare/Mythic
+          const useMythic = Math.random() < 0.125; // 1/8
+          if (useMythic && currentPools.mythics.length > 0) {
+            const res = this.drawUniqueCards(currentPools.mythics, 1, namesInThisPack);
+            if (res.success) { slot7Card = res.selected[0]; currentPools.mythics = res.remainingPool; }
+          } else {
+            const res = this.drawUniqueCards(currentPools.rares, 1, namesInThisPack);
+            if (res.success) { slot7Card = res.selected[0]; currentPools.rares = res.remainingPool; }
+          }
         }
       }
 
