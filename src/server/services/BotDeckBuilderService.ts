@@ -8,6 +8,7 @@ interface Card {
   colorIdentity?: string[];
   rarity?: string;
   cmc?: number;
+  edhrecRank?: number; // Added EDHREC
 }
 
 export class BotDeckBuilderService {
@@ -49,11 +50,16 @@ export class BotDeckBuilderService {
     const lands = candidates.filter(c => c.typeLine?.includes('Land')); // Non-basic lands in pool
     const spells = candidates.filter(c => !c.typeLine?.includes('Land'));
 
-    // 4. Select Spells (Curve + Power)
+    // 4. Select Spells (Curve + Power + EDHREC)
     // Sort by Weight + slight curve preference (lower cmc preferred for consistency)
     spells.sort((a, b) => {
-      const weightA = this.getRarityWeight(a.rarity);
-      const weightB = this.getRarityWeight(b.rarity);
+      let weightA = this.getRarityWeight(a.rarity);
+      let weightB = this.getRarityWeight(b.rarity);
+
+      // Add EDHREC influence
+      if (a.edhrecRank !== undefined && a.edhrecRank < 10000) weightA += (3 * (1 - (a.edhrecRank / 10000)));
+      if (b.edhrecRank !== undefined && b.edhrecRank < 10000) weightB += (3 * (1 - (b.edhrecRank / 10000)));
+
       return weightB - weightA;
     });
 

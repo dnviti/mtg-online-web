@@ -14,6 +14,7 @@ export interface DraftCard {
   setCode: string;
   setType: string;
   finish?: 'foil' | 'normal';
+  edhrecRank?: number; // Added EDHREC Rank
   // Extended Metadata
   cmc?: number;
   manaCost?: string;
@@ -116,6 +117,7 @@ export class PackGeneratorService {
         setCode: cardData.set,
         setType: setType,
         finish: cardData.finish,
+        edhrecRank: cardData.edhrec_rank, // Map EDHREC Rank
         // Extended Metadata mapping
         cmc: cardData.cmc,
         manaCost: cardData.mana_cost,

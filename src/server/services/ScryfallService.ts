@@ -28,6 +28,7 @@ export interface ScryfallCard {
   layout: string;
   type_line: string;
   colors?: string[];
+  edhrec_rank?: number; // Add EDHREC rank
   image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
   card_faces?: {
     name: string;

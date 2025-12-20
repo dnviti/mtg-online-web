@@ -6,6 +6,9 @@ interface Card {
   name: string;
   image_uris?: { normal: string };
   card_faces?: { image_uris: { normal: string } }[];
+  colors?: string[];
+  rarity?: string;
+  edhrecRank?: number;
   // ... other props
 }
 
@@ -238,9 +241,41 @@ export class DraftManager extends EventEmitter {
     const playerState = draft.players[playerId];
     if (!playerState || !playerState.activePack || playerState.activePack.cards.length === 0) return null;
 
-    // Pick Random Card
-    const randomCardIndex = Math.floor(Math.random() * playerState.activePack.cards.length);
-    const card = playerState.activePack.cards[randomCardIndex];
+    // Score cards
+    const scoredCards = playerState.activePack.cards.map(c => {
+      let score = 0;
+
+      // 1. Rarity Base Score
+      if (c.rarity === 'mythic') score += 5;
+      else if (c.rarity === 'rare') score += 4;
+      else if (c.rarity === 'uncommon') score += 2;
+      else score += 1;
+
+      // 2. Color Synergy (Simple)
+      const poolColors = playerState.pool.flatMap(p => p.colors || []);
+      if (poolColors.length > 0 && c.colors) {
+        c.colors.forEach(col => {
+          const count = poolColors.filter(pc => pc === col).length;
+          score += (count * 0.1);
+        });
+      }
+
+      // 3. EDHREC Score (Lower rank = better)
+      if (c.edhrecRank !== undefined && c.edhrecRank !== null) {
+        const rank = c.edhrecRank;
+        if (rank < 10000) {
+          score += (5 * (1 - (rank / 10000)));
+        }
+      }
+
+      return { card: c, score };
+    });
+
+    // Sort by score desc
+    scoredCards.sort((a, b) => b.score - a.score);
+
+    // Pick top card
+    const card = scoredCards[0].card;
 
     // Reuse existing logic
     return this.pickCard(roomId, playerId, card.id);

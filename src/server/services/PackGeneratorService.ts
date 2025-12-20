@@ -15,6 +15,7 @@ export interface DraftCard {
   setCode: string;
   setType: string;
   finish?: 'foil' | 'normal';
+  edhrecRank?: number; // Added EDHREC Rank
   oracleText?: string;
   manaCost?: string;
   [key: string]: any; // Allow extended props
@@ -103,7 +104,9 @@ export class PackGeneratorService {
         set: cardData.set_name,
         setCode: cardData.set,
         setType: setType,
-        finish: cardData.finish || 'normal',
+        finish: cardData.finish,
+        edhrecRank: cardData.edhrec_rank, // Map EDHREC Rank
+        // Extended Metadata mappingl',
         oracleText: cardData.oracle_text || cardData.card_faces?.[0]?.oracle_text || '',
         manaCost: cardData.mana_cost || cardData.card_faces?.[0]?.mana_cost || '',
         damageMarked: 0,
