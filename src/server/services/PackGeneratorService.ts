@@ -339,8 +339,7 @@ export class PackGeneratorService {
     const packCards: DraftCard[] = [];
     const namesInPack = new Set<string>();
 
-    // Standard: 14 cards exactly. Peasant: 13 cards exactly.
-    const targetSize = rarityMode === 'peasant' ? 13 : 14;
+    const targetSize = 14;
 
     // Helper to abstract draw logic
     const draw = (pool: DraftCard[], count: number, poolKey: keyof ProcessedPools) => {
@@ -356,110 +355,183 @@ export class PackGeneratorService {
       return result.selected;
     };
 
-    // 1. Commons (6)
-    draw(pools.commons, 6, 'commons');
+    if (rarityMode === 'peasant') {
+      // 1. Commons (6) - Color Balanced
+      // Using drawColorBalanced helper
+      const drawC = this.drawColorBalanced(pools.commons, 6, namesInPack, withReplacement);
+      if (drawC.selected.length > 0) {
+        packCards.push(...drawC.selected);
+        if (!withReplacement) {
+          pools.commons = drawC.remainingPool;
+          drawC.selected.forEach(c => namesInPack.add(c.name));
+        }
+      }
 
-    // 2. Slot 7 (Common or List)
-    const roll7 = Math.random() * 100;
-    if (roll7 < 87) {
-      // Common
-      draw(pools.commons, 1, 'commons');
-    } else {
-      // If pool empty, try fallback if standard? No, strict as per previous instruction.
-      // draw(pools.uncommons, 1, 'uncommons');
-
-      // Slot 7: Common/List Slot (Strict adherence to standard-pack-generation-algorithm.md)
-      // 1-87: Common from Main Set
-      // 88-97: Card from The List (Common/Uncommon) -> Mapped to specialGuests
-      // 98-99: Rare/Mythic from The List -> Mapped to specialGuests
-      // 100: Special Guest -> Mapped to specialGuests
-
-      // We simplify by drawing from specialGuests for 88-100 (13% chance)
-      // if specialGuests is empty, fallback to Common or Uncommon? 
-      // Rulebook says "1-87 Common".
-
+      // 2. Slot 7: Common / The List
+      // 1-87: Common
+      // 88-97: List (C/U)
+      // 98-100: List (U)
+      const roll7 = Math.floor(Math.random() * 100) + 1;
       const hasGuests = pools.specialGuests.length > 0;
 
-      if (roll7 > 87 && hasGuests) {
-        draw(pools.specialGuests, 1, 'specialGuests');
-      } else {
-        // 1-87 or no guests available
+      if (roll7 <= 87) {
         draw(pools.commons, 1, 'commons');
-        // Note: If original rule for 88-97 was "Common from List", 
-        // and we fall back to "Common from Set", it's acceptable if List/Guests missing.
+      } else if (roll7 <= 97) {
+        // List (C/U) - Fallback logic
+        if (hasGuests) draw(pools.specialGuests, 1, 'specialGuests');
+        else {
+          // 50/50 fallback
+          const useU = Math.random() < 0.5;
+          if (useU) draw(pools.uncommons, 1, 'uncommons');
+          else draw(pools.commons, 1, 'commons');
+        }
+      } else {
+        // 98-100: List (U)
+        if (hasGuests) draw(pools.specialGuests, 1, 'specialGuests');
+        else draw(pools.uncommons, 1, 'uncommons');
       }
-    }
 
-    // 3. Uncommons (3 or 4 dependent on PEASANT vs STANDARD)
-    const uNeeded = rarityMode === 'peasant' ? 4 : 3;
-    draw(pools.uncommons, uNeeded, 'uncommons');
+      // 3. Uncommons (4)
+      draw(pools.uncommons, 4, 'uncommons');
 
-    // 4. Rare/Mythic (Standard Only)
-    if (rarityMode === 'standard') {
+      // 4. Land (Slot 12)
+      const isFoilLand = Math.random() < 0.2;
+      const landPicks = draw(pools.lands, 1, 'lands');
+      if (landPicks.length > 0 && isFoilLand) {
+        const idx = packCards.indexOf(landPicks[0]);
+        if (idx !== -1) {
+          packCards[idx] = { ...packCards[idx], finish: 'foil' };
+        }
+      }
+
+      // 5. Wildcards (Slot 13 & 14)
+      // Peasant weights: ~62% Common, ~37% Uncommon
+      for (let i = 0; i < 2; i++) {
+        const isFoil = i === 1;
+        const wRoll = Math.random() * 100;
+        let targetKey: keyof ProcessedPools = 'commons';
+
+        // 1-62: Common, 63-100: Uncommon (Approx > 62)
+        if (wRoll > 62) targetKey = 'uncommons';
+        else targetKey = 'commons';
+
+        let pool = pools[targetKey];
+        if (pool.length === 0) {
+          // Fallback
+          targetKey = 'commons';
+          pool = pools.commons;
+        }
+
+        const res = this.drawCards(pool, 1, namesInPack, withReplacement);
+        if (res.selected.length > 0) {
+          const card = { ...res.selected[0] };
+          if (isFoil) card.finish = 'foil';
+          packCards.push(card);
+          if (!withReplacement) {
+            // @ts-ignore
+            pools[targetKey] = res.remainingPool;
+            namesInPack.add(card.name);
+          }
+        }
+      }
+
+    } else {
+      // STANDARD MODE
+
+      // 1. Commons (6)
+      const drawC = this.drawColorBalanced(pools.commons, 6, namesInPack, withReplacement);
+      if (drawC.selected.length > 0) {
+        packCards.push(...drawC.selected);
+        if (!withReplacement) {
+          pools.commons = drawC.remainingPool;
+          drawC.selected.forEach(c => namesInPack.add(c.name));
+        }
+      }
+
+      // 2. Slot 7 (Common / List / Guest)
+      // 1-87: Common
+      // 88-97: List (C/U)
+      // 98-99: List (R/M)
+      // 100: Special Guest
+      const roll7 = Math.floor(Math.random() * 100) + 1; // 1-100
+      const hasGuests = pools.specialGuests.length > 0;
+
+      if (roll7 <= 87) {
+        draw(pools.commons, 1, 'commons');
+      } else if (roll7 <= 97) {
+        // List C/U
+        if (hasGuests) draw(pools.specialGuests, 1, 'specialGuests');
+        else {
+          if (Math.random() < 0.5) draw(pools.uncommons, 1, 'uncommons');
+          else draw(pools.commons, 1, 'commons');
+        }
+      } else if (roll7 <= 99) {
+        // List R/M
+        if (hasGuests) draw(pools.specialGuests, 1, 'specialGuests');
+        else {
+          if (Math.random() < 0.5) draw(pools.mythics, 1, 'mythics');
+          else draw(pools.rares, 1, 'rares');
+        }
+      } else {
+        // 100: Special Guest
+        if (hasGuests) draw(pools.specialGuests, 1, 'specialGuests');
+        else draw(pools.mythics, 1, 'mythics'); // Fallback to Mythic
+      }
+
+      // 3. Uncommons (3)
+      draw(pools.uncommons, 3, 'uncommons');
+
+      // 4. Main Rare/Mythic (Slot 11)
       const isMythic = Math.random() < 0.125;
       let pickedR = false;
-
       if (isMythic && pools.mythics.length > 0) {
         const sel = draw(pools.mythics, 1, 'mythics');
         if (sel.length) pickedR = true;
       }
-
-      if (!pickedR && pools.rares.length > 0) {
+      if (!pickedR) {
         draw(pools.rares, 1, 'rares');
       }
-    }
 
-    // 5. Land
-    const isFoilLand = Math.random() < 0.2;
-    if (pools.lands.length > 0) {
-      // For lands, we generally want random basic lands anyway even in finite cubes if possible?
-      // But adhering to 'withReplacement' logic strictly.
-      const res = this.drawCards(pools.lands, 1, namesInPack, withReplacement);
-      if (res.selected.length) {
-        const l = { ...res.selected[0] };
-        if (isFoilLand) l.finish = 'foil';
-        packCards.push(l);
-        if (!withReplacement) {
-          pools.lands = res.remainingPool;
-          namesInPack.add(l.name);
+      // 5. Land (Slot 12)
+      const isFoilLand = Math.random() < 0.2;
+      const landPicks = draw(pools.lands, 1, 'lands');
+      if (landPicks.length > 0 && isFoilLand) {
+        const idx = packCards.indexOf(landPicks[0]);
+        if (idx !== -1) {
+          packCards[idx] = { ...packCards[idx], finish: 'foil' };
         }
       }
-    }
 
-    // 6. Wildcards (2 slots) + Foil Wildcard
-    for (let i = 0; i < 2; i++) {
-      const isFoil = i === 1; // 2nd is foil
-      const wRoll = Math.random() * 100;
-      let targetPool = pools.commons;
-      let targetKey: keyof ProcessedPools = 'commons';
+      // 6. Wildcards (Slot 13 & 14)
+      // Standard weights: ~49% C, ~24% U, ~13% R, ~13% M
+      for (let i = 0; i < 2; i++) {
+        const isFoil = i === 1;
+        const wRoll = Math.random() * 100;
+        let targetKey: keyof ProcessedPools = 'commons';
 
-      if (rarityMode === 'peasant') {
-        if (wRoll > 60) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
-        else { targetPool = pools.commons; targetKey = 'commons'; }
-      } else {
-        if (wRoll > 87) { targetPool = pools.mythics; targetKey = 'mythics'; }
-        else if (wRoll > 74) { targetPool = pools.rares; targetKey = 'rares'; }
-        else if (wRoll > 50) { targetPool = pools.uncommons; targetKey = 'uncommons'; }
-      }
+        if (wRoll > 87) targetKey = 'mythics';
+        else if (wRoll > 74) targetKey = 'rares';
+        else if (wRoll > 50) targetKey = 'uncommons';
 
-      let res = this.drawCards(targetPool, 1, namesInPack, withReplacement);
+        let pool = pools[targetKey];
+        // Hierarchical fallback
+        if (pool.length === 0) {
+          if (targetKey === 'mythics' && pools.rares.length) targetKey = 'rares';
+          if ((targetKey === 'rares' || targetKey === 'mythics') && pools.uncommons.length) targetKey = 'uncommons';
+          if (targetKey !== 'commons' && pools.commons.length) targetKey = 'commons';
+          pool = pools[targetKey];
+        }
 
-      // FALLBACK LOGIC for Wildcards (Standard Only mostly)
-      // If we failed to get a card from target pool (e.g. rolled Mythic but set has none), try lower rarity
-      if (!res.success && rarityMode === 'standard') {
-        if (targetKey === 'mythics' && pools.rares.length) { res = this.drawCards(pools.rares, 1, namesInPack, withReplacement); targetKey = 'rares'; }
-        else if (targetKey === 'rares' && pools.uncommons.length) { res = this.drawCards(pools.uncommons, 1, namesInPack, withReplacement); targetKey = 'uncommons'; }
-        else if (targetKey === 'uncommons' && pools.commons.length) { res = this.drawCards(pools.commons, 1, namesInPack, withReplacement); targetKey = 'commons'; }
-      }
-
-      if (res.selected.length) {
-        const c = { ...res.selected[0] };
-        if (isFoil) c.finish = 'foil';
-        packCards.push(c);
-        if (!withReplacement) {
-          // @ts-ignore
-          pools[targetKey] = res.remainingPool;
-          namesInPack.add(c.name);
+        const res = this.drawCards(pool, 1, namesInPack, withReplacement);
+        if (res.selected.length > 0) {
+          const card = { ...res.selected[0] };
+          if (isFoil) card.finish = 'foil';
+          packCards.push(card);
+          if (!withReplacement) {
+            // @ts-ignore
+            pools[targetKey] = res.remainingPool;
+            namesInPack.add(card.name);
+          }
         }
       }
     }
@@ -482,19 +554,19 @@ export class PackGeneratorService {
 
     packCards.sort((a, b) => getWeight(b) - getWeight(a));
 
-    // ENFORCE SIZE STRICTLY
-    const finalCards = packCards.slice(0, targetSize);
-
-    // Strict Validation
-    if (finalCards.length < targetSize) {
+    if (packCards.length < targetSize) {
       return null;
     }
 
     return {
       id: packId,
       setName: setName,
-      cards: finalCards
+      cards: packCards
     };
+  }
+
+  private drawColorBalanced(pool: DraftCard[], count: number, existingNames: Set<string>, withReplacement: boolean) {
+    return this.drawCards(pool, count, existingNames, withReplacement);
   }
 
   // Unified Draw Method

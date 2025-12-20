@@ -294,10 +294,6 @@ export class PackGeneratorService {
       const drawC = this.drawColorBalanced(currentPools.commons, commonsNeeded, namesInThisPack);
 
       if (!drawC.success && currentPools.commons.length >= commonsNeeded) {
-        // If we have enough cards but failed strict color balancing, we might accept it or fail.
-        // Standard algo returns null on failure. Let's do same to be safe, or just accept partial.
-        // Given "Naive approach" in drawColorBalanced, if it returns success=false but has cards, it meant it couldn't find unique ones?
-        // drawUniqueCards (called by drawColorBalanced) checks if we have enough cards.
         return null;
       } else if (currentPools.commons.length < commonsNeeded) {
         return null;
@@ -308,9 +304,9 @@ export class PackGeneratorService {
       drawC.selected.forEach(c => namesInThisPack.add(c.name));
 
       // 2. Slot 7: Common / The List
-      // 1-87: Common from Main Set
-      // 88-97: Card from "The List" (Common/Uncommon)
-      // 98-100: Uncommon from "The List"
+      // 1-87: 1 Common from Main Set.
+      // 88-97: 1 Card from "The List" (Common/Uncommon reprint).
+      // 98-100: 1 Uncommon from "The List".
       const roll7 = Math.floor(Math.random() * 100) + 1;
       let slot7Card: DraftCard | undefined;
 
@@ -319,25 +315,30 @@ export class PackGeneratorService {
         const res = this.drawUniqueCards(currentPools.commons, 1, namesInThisPack);
         if (res.success) { slot7Card = res.selected[0]; currentPools.commons = res.remainingPool; }
       } else if (roll7 <= 97) {
-        // List (Common/Uncommon). Simulating by picking 50/50 C/U if actual List not available
-        const useUncommon = Math.random() < 0.5;
-        const pool = useUncommon ? currentPools.uncommons : currentPools.commons;
-        // Fallback if one pool is empty
-        const effectivePool = pool.length > 0 ? pool : (useUncommon ? currentPools.commons : currentPools.uncommons);
-
-        if (effectivePool.length > 0) {
-          const res = this.drawUniqueCards(effectivePool, 1, namesInThisPack);
+        // List (Common/Uncommon). Use SpecialGuests or 50/50 fallback
+        if (currentPools.specialGuests.length > 0) {
+          const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
+        } else {
+          // Fallback
+          const pool = Math.random() < 0.5 ? currentPools.commons : currentPools.uncommons;
+          const res = this.drawUniqueCards(pool, 1, namesInThisPack);
           if (res.success) {
             slot7Card = res.selected[0];
-            // Identify which pool to update
-            if (effectivePool === currentPools.uncommons) currentPools.uncommons = res.remainingPool;
-            else currentPools.commons = res.remainingPool;
+            if (pool === currentPools.commons) currentPools.commons = res.remainingPool;
+            else currentPools.uncommons = res.remainingPool;
           }
         }
       } else {
-        // 98-100: Uncommon (from List or pool)
-        const res = this.drawUniqueCards(currentPools.uncommons, 1, namesInThisPack);
-        if (res.success) { slot7Card = res.selected[0]; currentPools.uncommons = res.remainingPool; }
+        // 98-100: Uncommon from "The List"
+        if (currentPools.specialGuests.length > 0) {
+          const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
+        } else {
+          // Fallback
+          const res = this.drawUniqueCards(currentPools.uncommons, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.uncommons = res.remainingPool; }
+        }
       }
 
       if (slot7Card) {
@@ -348,7 +349,6 @@ export class PackGeneratorService {
       // 3. Slots 8-11: Uncommons (4 cards)
       const uncommonsNeeded = 4;
       const drawU = this.drawUniqueCards(currentPools.uncommons, uncommonsNeeded, namesInThisPack);
-      // We accept partial if pool depleted to avoid crashing, but standard behavior is usually strict.
       packCards.push(...drawU.selected);
       currentPools.uncommons = drawU.remainingPool;
       drawU.selected.forEach(c => namesInThisPack.add(c.name));
@@ -372,25 +372,19 @@ export class PackGeneratorService {
         namesInThisPack.add(landCard.name);
       }
 
-      // Helper for Wildcards
+      // Helper for Wildcards (Peasant)
       const drawWildcard = (foil: boolean) => {
+        // ~62% Common, ~37% Uncommon
         const wRoll = Math.random() * 100;
         let wRarity = 'common';
-        // ~49% Common, ~24% Uncommon, ~13% Rare, ~13% Mythic
-        if (wRoll > 87) wRarity = 'mythic';
-        else if (wRoll > 74) wRarity = 'rare';
-        else if (wRoll > 50) wRarity = 'uncommon';
-        else wRarity = 'common';
+        if (wRoll > 62) wRarity = 'uncommon';
 
         let poolToUse: DraftCard[] = [];
         let updatePool = (_newPool: DraftCard[]) => { };
 
-        if (wRarity === 'mythic') { poolToUse = currentPools.mythics; updatePool = (p) => currentPools.mythics = p; }
-        else if (wRarity === 'rare') { poolToUse = currentPools.rares; updatePool = (p) => currentPools.rares = p; }
-        else if (wRarity === 'uncommon') { poolToUse = currentPools.uncommons; updatePool = (p) => currentPools.uncommons = p; }
+        if (wRarity === 'uncommon') { poolToUse = currentPools.uncommons; updatePool = (p) => currentPools.uncommons = p; }
         else { poolToUse = currentPools.commons; updatePool = (p) => currentPools.commons = p; }
 
-        // Fallback
         if (poolToUse.length === 0) {
           if (currentPools.commons.length > 0) { poolToUse = currentPools.commons; updatePool = (p) => currentPools.commons = p; }
         }
@@ -423,14 +417,14 @@ export class PackGeneratorService {
       }
 
     } else {
-      // --- NEW ALGORITHM (Play Booster) ---
+      // --- NEW ALGORITHM (Standard / Play Booster) ---
 
       // 1. Slots 1-6: Commons (Color Balanced)
       const commonsNeeded = 6;
       const drawC = this.drawColorBalanced(currentPools.commons, commonsNeeded, namesInThisPack);
       if (!drawC.success) return null;
       packCards.push(...drawC.selected);
-      currentPools.commons = drawC.remainingPool; // Update pool
+      currentPools.commons = drawC.remainingPool;
       drawC.selected.forEach(c => namesInThisPack.add(c.name));
 
       // 2. Slots 8-10: Uncommons (3 cards)
@@ -442,7 +436,7 @@ export class PackGeneratorService {
       drawU.selected.forEach(c => namesInThisPack.add(c.name));
 
       // 3. Slot 11: Main Rare/Mythic (1/8 Mythic, 7/8 Rare)
-      const isMythic = Math.random() < (1 / 8);
+      const isMythic = Math.random() < 0.125;
       let rarePicked = false;
 
       if (isMythic && currentPools.mythics.length > 0) {
@@ -465,10 +459,11 @@ export class PackGeneratorService {
         }
       }
 
-      // Fallback if Rare pool empty but Mythic not (or vice versa) handled by just skipping
-
-      // 4. Slot 7: Wildcard / The List
-      // 1-87: Common, 88-97: List (C/U), 98-99: List (R/M), 100: Special Guest
+      // 4. Slot 7: Common / The List / Special Guest
+      // 1-87: 1 Common from Main Set.
+      // 88-97: 1 Card from "The List" (Common/Uncommon reprint).
+      // 98-99: 1 Rare/Mythic from "The List".
+      // 100: 1 Special Guest (High Value).
       const roll7 = Math.floor(Math.random() * 100) + 1;
       let slot7Card: DraftCard | undefined;
 
@@ -477,41 +472,42 @@ export class PackGeneratorService {
         const res = this.drawUniqueCards(currentPools.commons, 1, namesInThisPack);
         if (res.success) { slot7Card = res.selected[0]; currentPools.commons = res.remainingPool; }
       } else if (roll7 <= 97) {
-        // "The List" (Common/Uncommon). Simulating by picking from C/U pools if "The List" is not explicit
-        // For now, we mix C and U pools and pick one.
-        const listPool = [...currentPools.commons, ...currentPools.uncommons]; // Simplification
-        if (listPool.length > 0) {
-          const rnd = Math.floor(Math.random() * listPool.length);
-          slot7Card = listPool[rnd];
-          // Remove from original pool not trivial here due to merge, let's use helpers
-          // Better: Pick random type
-          const pickUncommon = Math.random() < 0.3; // Arbitrary weight
-          if (pickUncommon) {
-            const res = this.drawUniqueCards(currentPools.uncommons, 1, namesInThisPack);
-            if (res.success) { slot7Card = res.selected[0]; currentPools.uncommons = res.remainingPool; }
-          } else {
-            const res = this.drawUniqueCards(currentPools.commons, 1, namesInThisPack);
-            if (res.success) { slot7Card = res.selected[0]; currentPools.commons = res.remainingPool; }
-          }
-        }
-      } else {
-        // 98-100: Rare/Mythic/Special Guest
-        // 1/100 (1%) chance for Special Guest if available
-        const isGuest = roll7 === 100;
-
-        if (isGuest && currentPools.specialGuests.length > 0) {
+        // List (Common/Uncommon)
+        if (currentPools.specialGuests.length > 0) {
           const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
           if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
         } else {
-          // Fallback to Rare/Mythic
-          const useMythic = Math.random() < 0.125; // 1/8
-          if (useMythic && currentPools.mythics.length > 0) {
-            const res = this.drawUniqueCards(currentPools.mythics, 1, namesInThisPack);
-            if (res.success) { slot7Card = res.selected[0]; currentPools.mythics = res.remainingPool; }
-          } else {
-            const res = this.drawUniqueCards(currentPools.rares, 1, namesInThisPack);
-            if (res.success) { slot7Card = res.selected[0]; currentPools.rares = res.remainingPool; }
+          const pool = Math.random() < 0.5 ? currentPools.commons : currentPools.uncommons;
+          const res = this.drawUniqueCards(pool, 1, namesInThisPack);
+          if (res.success) {
+            slot7Card = res.selected[0];
+            if (pool === currentPools.commons) currentPools.commons = res.remainingPool;
+            else currentPools.uncommons = res.remainingPool;
           }
+        }
+      } else if (roll7 <= 99) {
+        // List (Rare/Mythic)
+        if (currentPools.specialGuests.length > 0) {
+          const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
+        } else {
+          const pool = Math.random() < 0.125 ? currentPools.mythics : currentPools.rares;
+          const res = this.drawUniqueCards(pool, 1, namesInThisPack);
+          if (res.success) {
+            slot7Card = res.selected[0];
+            if (pool === currentPools.mythics) currentPools.mythics = res.remainingPool;
+            else currentPools.rares = res.remainingPool;
+          }
+        }
+      } else {
+        // 100: Special Guest
+        if (currentPools.specialGuests.length > 0) {
+          const res = this.drawUniqueCards(currentPools.specialGuests, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.specialGuests = res.remainingPool; }
+        } else {
+          // Fallback Mythic
+          const res = this.drawUniqueCards(currentPools.mythics, 1, namesInThisPack);
+          if (res.success) { slot7Card = res.selected[0]; currentPools.mythics = res.remainingPool; }
         }
       }
 
@@ -536,7 +532,6 @@ export class PackGeneratorService {
         // Fallback: Pick a Common if no lands
         // const res = this.drawUniqueCards(currentPools.commons, 1, namesInThisPack);
         // if (res.success) { landCard = { ...res.selected[0] }; ... }
-        // Better to just have no land than a non-land
       }
 
       if (landCard) {
@@ -546,8 +541,7 @@ export class PackGeneratorService {
       }
 
       // 6. Slot 13: Wildcard (Non-Foil)
-      // Weights: ~49% C, ~24% U, ~13% R, ~13% M => Sum=99. 
-      // Normalized: C:50, U:24, R:13, M:13
+      // Weights: ~49% C, ~24% U, ~13% R, ~13% M
       const drawWildcard = (foil: boolean) => {
         const wRoll = Math.random() * 100;
         let wRarity = 'common';
@@ -556,7 +550,6 @@ export class PackGeneratorService {
         else if (wRoll > 50) wRarity = 'uncommon';
         else wRarity = 'common';
 
-        // Adjust buckets
         let poolToUse: DraftCard[] = [];
         let updatePool = (_newPool: DraftCard[]) => { };
 
@@ -566,7 +559,6 @@ export class PackGeneratorService {
         else { poolToUse = currentPools.commons; updatePool = (p) => currentPools.commons = p; }
 
         if (poolToUse.length === 0) {
-          // Fallback cascade
           if (currentPools.commons.length > 0) { poolToUse = currentPools.commons; updatePool = (p) => currentPools.commons = p; }
         }
 
@@ -589,26 +581,15 @@ export class PackGeneratorService {
 
       // 8. Slot 15: Marketing / Token
       if (currentPools.tokens.length > 0) {
-        // Just pick one, duplicates allowed for tokens? user said unique cards... but for tokens?
-        // "drawUniqueCards" handles uniqueness check.
         const res = this.drawUniqueCards(currentPools.tokens, 1, namesInThisPack);
         if (res.success) {
           packCards.push(res.selected[0]);
           currentPools.tokens = res.remainingPool;
-          // Don't care about uniqueness for tokens as much, but let's stick to it
         }
       }
     }
 
     // Sort: Mythic -> Rare -> Uncommon -> Common -> Land -> Token
-    // We already have rarityWeight.
-    // Assign weight to 'land' or 'token'?
-    // DraftCard has 'rarity' string.
-    // Standard rarities: common, uncommon, rare, mythic.
-    // Basic Land has rarity 'common' usually? or 'basic'.
-    // Token has rarity 'common' or 'token' (if we set it?). Scryfall tokens often have no rarity or 'common'.
-
-    // Custom sort
     const getWeight = (c: DraftCard) => {
       if (c.layout === 'token' || c.typeLine?.includes('Token')) return 0;
       if (c.typeLine?.includes('Land') && (c.rarity === 'common' || c.rarity === 'basic')) return 1;
