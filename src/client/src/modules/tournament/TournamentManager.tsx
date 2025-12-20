@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Users } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 interface Match {
   id: number;
@@ -15,6 +16,7 @@ interface Bracket {
 export const TournamentManager: React.FC = () => {
   const [playerInput, setPlayerInput] = useState('');
   const [bracket, setBracket] = useState<Bracket | null>(null);
+  const { showToast } = useToast();
 
   const shuffleArray = (array: any[]) => {
     let currentIndex = array.length, randomIndex;
@@ -30,7 +32,10 @@ export const TournamentManager: React.FC = () => {
   const generateBracket = () => {
     if (!playerInput.trim()) return;
     const names = playerInput.split('\n').filter(n => n.trim() !== '').map(n => n.trim());
-    if (names.length < 2) { alert("Enter at least 2 players."); return; }
+    if (names.length < 2) {
+      showToast("Enter at least 2 players.", 'error');
+      return;
+    }
 
     const shuffled = shuffleArray(names);
     const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));

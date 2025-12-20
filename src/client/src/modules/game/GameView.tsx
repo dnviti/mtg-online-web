@@ -1,4 +1,5 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useConfirm } from '../../components/ConfirmDialog';
 import { ChevronLeft, Eye, RotateCcw } from 'lucide-react';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -160,7 +161,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     document.body.style.cursor = 'col-resize';
   };
 
-  const onResizeMove = useCallback((e: MouseEvent | TouchEvent) => {
+  const onResizeMove = (e: MouseEvent | TouchEvent) => {
     if (!resizingState.current.active || !sidebarRef.current) return;
     if (e.cancelable) e.preventDefault();
 
@@ -168,9 +169,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     const delta = clientX - resizingState.current.startX;
     const newWidth = Math.max(200, Math.min(600, resizingState.current.startWidth + delta));
     sidebarRef.current.style.width = `${newWidth}px`;
-  }, []);
+  };
 
-  const onResizeEnd = useCallback(() => {
+  const onResizeEnd = () => {
     if (resizingState.current.active && sidebarRef.current) {
       setSidebarWidth(parseInt(sidebarRef.current.style.width));
     }
@@ -180,7 +181,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     document.removeEventListener('mouseup', onResizeEnd);
     document.removeEventListener('touchend', onResizeEnd);
     document.body.style.cursor = 'default';
-  }, []);
+  };
 
   useEffect(() => {
     // Disable default context menu
@@ -299,7 +300,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     }
   };
 
-  // --- DnD Sensors & Logic ---
+  // --- Hooks & Services ---
+  // const { showToast } = useToast(); // Assuming useToast is defined elsewhere if needed
+  const { confirm } = useConfirm();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
@@ -884,8 +887,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 <button
                   className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
                   title="Restart Game (Dev)"
-                  onClick={() => {
-                    if (window.confirm('Restart game? Deck will remain, state will reset.')) {
+                  onClick={async () => {
+                    if (await confirm({
+                      title: 'Restart Game?',
+                      message: 'Are you sure you want to restart the game? The deck will remain, but the game state will reset.',
+                      confirmLabel: 'Restart',
+                      type: 'warning'
+                    })) {
                       socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
                     }
                   }}

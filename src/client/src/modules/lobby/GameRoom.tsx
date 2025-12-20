@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut, Bell, BellOff, X, Bot } from 'lucide-react';
+import { Share2, Users, Play, LogOut, Copy, Check, Hash, Crown, XCircle, MessageSquare, Send, Bell, BellOff, X, Bot, Layers } from 'lucide-react';
+import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameView } from '../game/GameView';
@@ -45,7 +45,15 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   // State
   const [room, setRoom] = useState<Room>(initialRoom);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalConfig, setModalConfig] = useState({ title: '', message: '', type: 'info' as 'info' | 'error' | 'warning' | 'success' });
+  const [modalConfig, setModalConfig] = useState<{
+    title: string;
+    message: string;
+    type: 'info' | 'error' | 'warning' | 'success';
+    confirmLabel?: string;
+    onConfirm?: () => void;
+    cancelLabel?: string;
+    onClose?: () => void;
+  }>({ title: '', message: '', type: 'info' });
 
   // Side Panel State
   const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | null>(null);
@@ -55,6 +63,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
   // Services
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
+  const [copied, setCopied] = useState(false);
 
   // Restored States
   const [message, setMessage] = useState('');
@@ -132,8 +142,16 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   useEffect(() => {
     const socket = socketService.socket;
     const onKicked = () => {
-      alert("You have been kicked from the room.");
-      onExit();
+      // alert("You have been kicked from the room.");
+      // onExit();
+      setModalConfig({
+        title: 'Kicked',
+        message: 'You have been kicked from the room.',
+        type: 'error',
+        confirmLabel: 'Back to Lobby',
+        onConfirm: () => onExit()
+      });
+      setModalOpen(true);
     };
     socket.on('kicked', onKicked);
     return () => { socket.off('kicked', onKicked); };
@@ -238,8 +256,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                 {room.players.filter(p => p.role === 'player').map(p => {
                   const isReady = (p as any).ready;
                   return (
-                    <div key={p.id} className={`flex items-center gap-2 px-4 py-2 rounded-lg border ${isReady ? 'bg-emerald-900/30 border-emerald-500/50' : 'bg-slate-700/30 border-slate-700'}`}>
-                      <div className={`w-2 h-2 rounded-full ${isReady ? 'bg-emerald-500' : 'bg-slate-600'}`}></div>
+                    <div key={p.id} className={`flex items - center gap - 2 px - 4 py - 2 rounded - lg border ${isReady ? 'bg-emerald-900/30 border-emerald-500/50' : 'bg-slate-700/30 border-slate-700'} `}>
+                      <div className={`w - 2 h - 2 rounded - full ${isReady ? 'bg-emerald-500' : 'bg-slate-600'} `}></div>
                       <span className={isReady ? 'text-emerald-200' : 'text-slate-500'}>{p.name}</span>
                     </div>
                   );
@@ -305,13 +323,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
         <div className="shrink-0 flex items-center bg-slate-800 border-b border-slate-700">
           <button
             onClick={() => setMobileTab('game')}
-            className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'game' ? 'text-emerald-400 bg-slate-700/50 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex - 1 p - 3 flex items - center justify - center gap - 2 text - sm font - bold transition - colors ${mobileTab === 'game' ? 'text-emerald-400 bg-slate-700/50 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-200'} `}
           >
             <Layers className="w-4 h-4" /> Game
           </button>
           <button
             onClick={() => setMobileTab('chat')}
-            className={`flex-1 p-3 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${mobileTab === 'chat' ? 'text-purple-400 bg-slate-700/50 border-b-2 border-purple-500' : 'text-slate-400 hover:text-slate-200'}`}
+            className={`flex - 1 p - 3 flex items - center justify - center gap - 2 text - sm font - bold transition - colors ${mobileTab === 'chat' ? 'text-purple-400 bg-slate-700/50 border-b-2 border-purple-500' : 'text-slate-400 hover:text-slate-200'} `}
           >
             <div className="flex items-center gap-1">
               <Users className="w-4 h-4" />
@@ -369,7 +387,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       <div className="hidden lg:flex w-14 shrink-0 flex-col items-center gap-4 py-4 bg-slate-900 border-l border-slate-800 z-30 relative">
         <button
           onClick={() => setActivePanel(activePanel === 'lobby' ? null : 'lobby')}
-          className={`p-3 rounded-xl transition-all duration-200 group relative ${activePanel === 'lobby' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'text-slate-500 hover:text-purple-400 hover:bg-slate-800'}`}
+          className={`p - 3 rounded - xl transition - all duration - 200 group relative ${activePanel === 'lobby' ? 'bg-purple-600 text-white shadow-lg shadow-purple-900/50' : 'text-slate-500 hover:text-purple-400 hover:bg-slate-800'} `}
           title="Lobby & Players"
         >
           <Users className="w-6 h-6" />
@@ -380,7 +398,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
         <button
           onClick={() => setActivePanel(activePanel === 'chat' ? null : 'chat')}
-          className={`p-3 rounded-xl transition-all duration-200 group relative ${activePanel === 'chat' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-500 hover:text-blue-400 hover:bg-slate-800'}`}
+          className={`p - 3 rounded - xl transition - all duration - 200 group relative ${activePanel === 'chat' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-500 hover:text-blue-400 hover:bg-slate-800'} `}
           title="Chat"
         >
           <div className="relative">
@@ -415,7 +433,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{room.players.length} Connected</span>
                 <button
                   onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                  className={`flex items-center gap-2 text-xs font-bold px-2 py-1 rounded-lg transition-colors border ${notificationsEnabled ? 'bg-slate-800 border-slate-600 text-slate-300 hover:text-white' : 'bg-red-900/20 border-red-900/50 text-red-400'}`}
+                  className={`flex items - center gap - 2 text - xs font - bold px - 2 py - 1 rounded - lg transition - colors border ${notificationsEnabled ? 'bg-slate-800 border-slate-600 text-slate-300 hover:text-white' : 'bg-red-900/20 border-red-900/50 text-red-400'} `}
                   title={notificationsEnabled ? "Disable Notifications" : "Enable Notifications"}
                 >
                   {notificationsEnabled ? <Bell className="w-3 h-3" /> : <BellOff className="w-3 h-3" />}
@@ -433,11 +451,11 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                   return (
                     <div key={p.id} className="flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-inner ${p.isBot ? 'bg-indigo-900 text-indigo-200 border border-indigo-500' : p.role === 'spectator' ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-purple-900/30'}`}>
+                        <div className={`w - 10 h - 10 rounded - full flex items - center justify - center font - bold text - sm shadow - inner ${p.isBot ? 'bg-indigo-900 text-indigo-200 border border-indigo-500' : p.role === 'spectator' ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-purple-900/30'} `}>
                           {p.isBot ? <Bot className="w-5 h-5" /> : p.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex flex-col">
-                          <span className={`text-sm font-bold ${isMe ? 'text-white' : 'text-slate-200'}`}>
+                          <span className={`text - sm font - bold ${isMe ? 'text-white' : 'text-slate-200'} `}>
                             {p.name} {isMe && <span className="text-slate-500 font-normal">(You)</span>}
                           </span>
                           <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
@@ -450,11 +468,16 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                         </div>
                       </div>
 
-                      <div className={`flex gap-1 ${isSolo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+                      <div className={`flex gap - 1 ${isSolo ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition - opacity`}>
                         {isMeHost && !isMe && (
                           <button
-                            onClick={() => {
-                              if (confirm(`Kick ${p.name}?`)) {
+                            onClick={async () => {
+                              if (await confirm({
+                                title: 'Kick Player?',
+                                message: `Are you sure you want to kick ${p.name}?`,
+                                confirmLabel: 'Kick',
+                                type: 'error'
+                              })) {
                                 socketService.socket.emit('kick_player', { roomId: room.id, targetId: p.id });
                               }
                             }}
@@ -498,8 +521,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                   </div>
                 )}
                 {messages.map(msg => (
-                  <div key={msg.id} className={`flex flex-col ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'items-end' : 'items-start'}`}>
-                    <div className={`max-w-[85%] px-3 py-2 rounded-xl text-sm ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'bg-blue-600 text-white rounded-br-none shadow-blue-900/20' : 'bg-slate-700 text-slate-200 rounded-bl-none'}`}>
+                  <div key={msg.id} className={`flex flex - col ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'items-end' : 'items-start'} `}>
+                    <div className={`max - w - [85 %] px - 3 py - 2 rounded - xl text - sm ${msg.sender === (room.players.find(p => p.id === currentPlayerId)?.name) ? 'bg-blue-600 text-white rounded-br-none shadow-blue-900/20' : 'bg-slate-700 text-slate-200 rounded-bl-none'} `}>
                       {msg.text}
                     </div>
                     <span className="text-[10px] text-slate-500 mt-1 font-medium">{msg.sender}</span>
@@ -548,8 +571,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
               </div>
 
               <button
-                onClick={() => {
-                  if (window.confirm("Are you sure you want to leave the game?")) {
+                onClick={async () => {
+                  if (await confirm({
+                    title: 'Leave Game?',
+                    message: "Are you sure you want to leave the game? You can rejoin later.",
+                    confirmLabel: 'Leave',
+                    type: 'warning'
+                  })) {
                     onExit();
                   }
                 }}

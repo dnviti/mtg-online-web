@@ -7,6 +7,7 @@ import { DeckTester } from './modules/tester/DeckTester';
 import { Pack } from './services/PackGeneratorService';
 import { ToastProvider } from './components/Toast';
 import { GlobalContextMenu } from './components/GlobalContextMenu';
+import { ConfirmDialogProvider } from './components/ConfirmDialog';
 
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 
@@ -71,72 +72,74 @@ export const App: React.FC = () => {
 
   return (
     <ToastProvider>
-      <GlobalContextMenu />
-      <PWAInstallPrompt />
-      <div className="h-screen flex flex-col bg-slate-900 text-slate-100 font-sans overflow-hidden">
-        <header className="bg-slate-800 border-b border-slate-700 p-4 shrink-0 z-50 shadow-lg">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-purple-600 p-2 rounded-lg"><Layers className="w-6 h-6 text-white" /></div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent flex items-center gap-2">
-                  MTG Peasant Drafter
-                  <span className="px-1.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 tracking-wider shadow-[0_0_10px_rgba(168,85,247,0.1)]">ALPHA</span>
-                </h1>
-                <p className="text-slate-400 text-xs uppercase tracking-wider">Pack Generator & Tournament Manager</p>
+      <ConfirmDialogProvider>
+        <GlobalContextMenu />
+        <PWAInstallPrompt />
+        <div className="h-screen flex flex-col bg-slate-900 text-slate-100 font-sans overflow-hidden">
+          <header className="bg-slate-800 border-b border-slate-700 p-4 shrink-0 z-50 shadow-lg">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-purple-600 p-2 rounded-lg"><Layers className="w-6 h-6 text-white" /></div>
+                <div>
+                  <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent flex items-center gap-2">
+                    MTG Peasant Drafter
+                    <span className="px-1.5 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 tracking-wider shadow-[0_0_10px_rgba(168,85,247,0.1)]">ALPHA</span>
+                  </h1>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider">Pack Generator & Tournament Manager</p>
+                </div>
+              </div>
+
+              <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                <button
+                  onClick={() => setActiveTab('draft')}
+                  className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'draft' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Box className="w-4 h-4" /> <span className="hidden md:inline">Draft Management</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('lobby')}
+                  className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'lobby' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Users className="w-4 h-4" /> <span className="hidden md:inline">Online Lobby</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('tester')}
+                  className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'tester' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Play className="w-4 h-4" /> <span className="hidden md:inline">Deck Tester</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('bracket')}
+                  className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'bracket' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  <Trophy className="w-4 h-4" /> <span className="hidden md:inline">Tournament</span>
+                </button>
               </div>
             </div>
+          </header>
 
-            <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-              <button
-                onClick={() => setActiveTab('draft')}
-                className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'draft' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Box className="w-4 h-4" /> <span className="hidden md:inline">Draft Management</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('lobby')}
-                className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'lobby' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Users className="w-4 h-4" /> <span className="hidden md:inline">Online Lobby</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('tester')}
-                className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'tester' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Play className="w-4 h-4" /> <span className="hidden md:inline">Deck Tester</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('bracket')}
-                className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'bracket' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                <Trophy className="w-4 h-4" /> <span className="hidden md:inline">Tournament</span>
-              </button>
-            </div>
-          </div>
-        </header>
+          <main className="flex-1 overflow-hidden relative">
+            {activeTab === 'draft' && (
+              <CubeManager
+                packs={generatedPacks}
+                setPacks={setGeneratedPacks}
+                availableLands={availableLands}
+                setAvailableLands={setAvailableLands}
+                onGoToLobby={() => setActiveTab('lobby')}
+              />
+            )}
+            {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
+            {activeTab === 'tester' && <DeckTester />}
+            {activeTab === 'bracket' && <TournamentManager />}
+          </main>
 
-        <main className="flex-1 overflow-hidden relative">
-          {activeTab === 'draft' && (
-            <CubeManager
-              packs={generatedPacks}
-              setPacks={setGeneratedPacks}
-              availableLands={availableLands}
-              setAvailableLands={setAvailableLands}
-              onGoToLobby={() => setActiveTab('lobby')}
-            />
-          )}
-          {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
-          {activeTab === 'tester' && <DeckTester />}
-          {activeTab === 'bracket' && <TournamentManager />}
-        </main>
-
-        <footer className="bg-slate-900 border-t border-slate-800 p-2 text-center text-xs text-slate-500 shrink-0">
-          <p>
-            Entire code generated by <span className="text-purple-400 font-medium">Antigravity</span> and <span className="text-sky-400 font-medium">Gemini Pro</span>
-          </p>
-        </footer>
-      </div>
+          <footer className="bg-slate-900 border-t border-slate-800 p-2 text-center text-xs text-slate-500 shrink-0">
+            <p>
+              Entire code generated by <span className="text-purple-400 font-medium">Antigravity</span> and <span className="text-sky-400 font-medium">Gemini Pro</span>
+            </p>
+          </footer>
+        </div>
+      </ConfirmDialogProvider>
     </ToastProvider>
   );
 };

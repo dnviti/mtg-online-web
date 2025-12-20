@@ -5,6 +5,7 @@ import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSett
 import { PackCard } from '../../components/PackCard';
 import { socketService } from '../../services/SocketService';
 import { useToast } from '../../components/Toast';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 interface CubeManagerProps {
   packs: Pack[];
@@ -16,6 +17,7 @@ interface CubeManagerProps {
 
 export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, availableLands, setAvailableLands, onGoToLobby }) => {
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
 
   // --- Services ---
   // Memoize services to persist cache across renders
@@ -288,14 +290,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       }
 
       if (newPacks.length === 0) {
-        alert(`No packs generated. Check your card pool settings.`);
+        showToast(`No packs generated. Check your card pool settings.`, 'warning');
       } else {
         setPacks(newPacks);
         setAvailableLands(newLands);
       }
     } catch (err: any) {
       console.error("Process failed", err);
-      alert(err.message || "Error during process.");
+      showToast(err.message || "Error during process.", 'error');
     } finally {
       setLoading(false);
       setProgress('');
@@ -306,8 +308,13 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     if (packs.length === 0) return;
 
     // Validate Lands - Warn but allow proceed (server will handle it or deck builder will be landless)
-    if (!availableLands || availableLands.length === 0) {
-      if (!confirm("No basic lands detected in the current pool. Decks might be invalid. Continue?")) {
+    if (availableLands.length === 0) {
+      if (!await confirm({
+        title: "No Basic Lands",
+        message: "No basic lands detected in the current pool. Decks might be invalid. Continue?",
+        confirmLabel: "Continue",
+        type: "warning"
+      })) {
         return;
       }
     }
@@ -338,12 +345,12 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           onGoToLobby();
         }, 100);
       } else {
-        alert("Failed to start solo draft: " + response.message);
+        showToast("Failed to start solo draft: " + response.message, 'error');
       }
 
     } catch (e: any) {
       console.error(e);
-      alert("Error: " + e.message);
+      showToast("Error: " + e.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -376,7 +383,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 3,Banishing Light,Normal,Bloomburrow,25a06f82-ebdb-4dd6-bfe8-958018ce557c
 4,Barkform Harvester,Normal,Bloomburrow,f77049a6-0f22-415b-bc89-20bcb32accf6
 1,Bark-Knuckle Boxer,Normal,Bloomburrow,582637a9-6aa0-4824-bed7-d5fc91bda35e
-1,"Baylen, the Haymaker",Normal,Bloomburrow,00e93be2-e06b-4774-8ba5-ccf82a6da1d8
+,"Baylen, the Haymaker",Normal,Bloomburrow,00e93be2-e06b-4774-8ba5-ccf82a6da1d8
 3,Bellowing Crier,Normal,Bloomburrow,ca2215dd-6300-49cf-b9b2-3a840b786c31
 1,Blacksmith's Talent,Normal,Bloomburrow,4bb318fa-481d-40a7-978e-f01b49101ae0
 1,Blooming Blast,Normal,Bloomburrow,0cd92a83-cec3-4085-a929-3f204e3e0140
@@ -403,7 +410,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (err) {
       console.error('Failed to copy: ', err);
-      alert('Failed to copy CSV to clipboard');
+      showToast('Failed to copy CSV to clipboard', 'error');
     }
   };
 

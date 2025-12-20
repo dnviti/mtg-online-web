@@ -9,6 +9,9 @@ import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSenso
 import { CSS } from '@dnd-kit/utilities';
 import { AutoDeckBuilder } from '../../utils/AutoDeckBuilder';
 import { Wand2 } from 'lucide-react'; // Import Wand icon
+import { useToast } from '../../components/Toast';
+import { useConfirm } from '../../components/ConfirmDialog';
+import { CardComponent } from '../game/CardComponent';
 
 interface DeckBuilderViewProps {
   roomId: string;
@@ -273,6 +276,10 @@ const CardsDisplay: React.FC<{
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, availableBasicLands = [] }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
+  /* --- Hooks --- */
+  const { showToast } = useToast();
+  const { confirm } = useConfirm();
+  const [deckName, setDeckName] = useState('New Deck');
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_layout') : null;
     return (saved as 'vertical' | 'horizontal') || 'vertical';
@@ -495,7 +502,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   };
 
   const handleAutoBuild = async () => {
-    if (confirm("This will replace your current deck with an auto-generated one. Continue?")) {
+    if (await confirm({
+      title: "Auto-Build Deck",
+      message: "This will replace your current deck with an auto-generated one. Continue?",
+      confirmLabel: "Auto-Build",
+      type: "warning"
+    })) {
       console.log("Auto-Build: Started");
       // 1. Merge current deck back into pool (excluding basic lands generated)
       const currentDeckSpells = deck.filter(c => !c.isLandSource && !(c.typeLine || c.type_line || '').includes('Basic'));
