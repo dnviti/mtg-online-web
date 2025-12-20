@@ -15,6 +15,54 @@ interface DeckBuilderViewProps {
   availableBasicLands?: any[];
 }
 
+const ManaCurve = ({ deck }: { deck: any[] }) => {
+  const counts = new Array(8).fill(0);
+  let max = 0;
+
+  deck.forEach(c => {
+    // @ts-ignore
+    const tLine = c.typeLine || c.type_line || '';
+    if (tLine.includes('Land')) return;
+
+    // @ts-ignore
+    let cmc = Math.floor(c.cmc || 0);
+    if (cmc >= 7) cmc = 7;
+    counts[cmc]++;
+    if (counts[cmc] > max) max = counts[cmc];
+  });
+
+  const displayMax = Math.max(max, 4); // Scale based on max, min height 4 for relative scale
+
+  return (
+    <div className="flex items-end gap-1 px-2 h-16 w-full select-none" title="Mana Curve">
+      {counts.map((count, i) => {
+        const hPct = (count / displayMax) * 100;
+        return (
+          <div key={i} className="flex flex-1 flex-col justify-end items-center group relative h-full">
+            {/* Tooltip */}
+            {count > 0 && <div className="absolute bottom-full mb-1 bg-slate-900/90 backdrop-blur text-white text-[9px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none border border-slate-600 whitespace-nowrap z-50">
+              {count} cards
+            </div>}
+
+            {/* Bar Track & Bar */}
+            <div className="w-full flex-1 flex items-end bg-slate-800/50 rounded-sm mb-1 px-[1px]">
+              <div
+                className={`w-full rounded-sm transition-all duration-300 ${count > 0 ? 'bg-indigo-500 group-hover:bg-indigo-400' : 'h-px bg-slate-700'}`}
+                style={{ height: count > 0 ? `${hPct}%` : '1px' }}
+              />
+            </div>
+
+            {/* Axis Label */}
+            <span className="text-[10px] font-bold text-slate-500 leading-none group-hover:text-slate-300">
+              {i === 7 ? '7+' : i}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // Internal Helper to normalize card data for visuals
 const normalizeCard = (c: any): DraftCard => {
   const targetId = c.scryfallId || c.id;
@@ -866,6 +914,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                 </div>
               </div>
 
+              {/* Mana Curve at Bottom */}
+              <div className="mt-auto w-full pt-4 border-t border-slate-800">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 text-center">Mana Curve</div>
+                <ManaCurve deck={deck} />
+              </div>
+
               {/* Resize Handle */}
               <div
                 className="absolute right-0 top-0 bottom-0 w-1 bg-transparent hover:bg-purple-500/50 cursor-col-resize z-50 flex flex-col justify-center items-center group transition-colors touch-none"
@@ -905,7 +959,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
 
               {/* Deck Column */}
               <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0 bg-slate-900/50">
-                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
+                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center">
                   <span>Library ({deck.length})</span>
                 </div>
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar">
@@ -950,7 +1004,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
                   id="deck-zone"
                   className="flex-1 flex flex-col min-h-0 overflow-hidden"
                 >
-                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
+                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0 items-center">
                     <span>Library ({deck.length})</span>
                   </div>
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar">
