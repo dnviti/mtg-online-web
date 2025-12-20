@@ -26,6 +26,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const [rawScryfallData, setRawScryfallData] = useState<ScryfallCard[] | null>(() => {
     try {
@@ -442,46 +443,54 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   };
 
   const handleReset = () => {
-    if (window.confirm("Are you sure you want to clear this session? All parsed cards and generated packs will be lost.")) {
-      try {
-        console.log("Clearing session...");
+    if (!confirmClear) {
+      setConfirmClear(true);
+      // Auto-reset confirmation state after 3 seconds
+      setTimeout(() => setConfirmClear(false), 3000);
+      return;
+    }
 
-        // 1. Reset Parent State (App.tsx)
-        setPacks([]);
-        setAvailableLands([]);
+    // Confirmed
+    setConfirmClear(false);
 
-        // 2. Explicitly clear parent persistence keys to ensure they are gone immediately
-        localStorage.removeItem('generatedPacks');
-        localStorage.removeItem('availableLands');
+    try {
+      console.log("Clearing session...");
 
-        // 3. Reset Local State to Defaults
-        // This will trigger the useEffect hooks to update localStorage accordingly
-        setInputText('');
-        setRawScryfallData(null);
-        setProcessedData(null);
-        setSelectedSets([]);
-        setSearchTerm(''); // Clear search
+      // 1. Reset Parent State (App.tsx)
+      setPacks([]);
+      setAvailableLands([]);
 
-        setFilters({
-          ignoreBasicLands: false,
-          ignoreCommander: false,
-          ignoreTokens: false
-        });
+      // 2. Explicitly clear parent persistence keys to ensure they are gone immediately
+      localStorage.removeItem('generatedPacks');
+      localStorage.removeItem('availableLands');
 
-        setGenSettings({
-          mode: 'mixed',
-          rarityMode: 'peasant'
-        });
+      // 3. Reset Local State to Defaults
+      // This will trigger the useEffect hooks to update localStorage accordingly
+      setInputText('');
+      setRawScryfallData(null);
+      setProcessedData(null);
+      setSelectedSets([]);
+      setSearchTerm(''); // Clear search
 
-        setSourceMode('upload');
-        setNumBoxes(1);
-        setGameTypeFilter('all');
+      setFilters({
+        ignoreBasicLands: false,
+        ignoreCommander: false,
+        ignoreTokens: false
+      });
 
-        showToast("Session cleared successfully.", "success");
-      } catch (error) {
-        console.error("Error clearing session:", error);
-        showToast("Failed to clear session fully.", "error");
-      }
+      setGenSettings({
+        mode: 'mixed',
+        rarityMode: 'peasant'
+      });
+
+      setSourceMode('upload');
+      setNumBoxes(1);
+      setGameTypeFilter('all');
+
+      showToast("Session cleared successfully.", "success");
+    } catch (error) {
+      console.error("Error clearing session:", error);
+      showToast("Failed to clear session fully.", "error");
     }
   };
 
@@ -782,10 +791,17 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           {/* Reset Button */}
           <button
             onClick={handleReset}
-            className="w-full mt-4 py-2 text-xs font-semibold text-slate-500 hover:text-red-400 hover:bg-red-900/10 rounded-lg transition-colors flex items-center justify-center gap-2"
+            disabled={loading}
+            className={`w-full mt-4 py-2.5 px-4 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${loading
+                ? 'opacity-50 cursor-not-allowed text-slate-600 border border-transparent'
+                : confirmClear
+                  ? 'bg-red-600 text-white border border-red-500 shadow-md animate-pulse'
+                  : 'text-red-400 border border-red-900/30 hover:bg-red-950/30 hover:border-red-500/50 hover:text-red-300 shadow-sm'
+              }`}
             title="Clear all data and start over"
           >
-            <Trash2 className="w-3 h-3" /> Clear Session
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+            {confirmClear ? "Click again to confirm!" : "Clear Session"}
           </button>
         </div>
       </div>
