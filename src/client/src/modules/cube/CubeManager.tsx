@@ -305,9 +305,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   const handleStartSoloTest = async () => {
     if (packs.length === 0) return;
 
-    // Validate Lands
+    // Validate Lands - Warn but allow proceed (server will handle it or deck builder will be landless)
     if (!availableLands || availableLands.length === 0) {
-      if (!confirm("No basic lands detected in the current pool. The generated deck will have 0 lands. Continue?")) {
+      if (!confirm("No basic lands detected in the current pool. Decks might be invalid. Continue?")) {
         return;
       }
     }
@@ -315,49 +315,18 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
     setLoading(true);
 
     try {
-      // Collect all cards
-      const allCards = packs.flatMap(p => p.cards);
-
-      // Random Deck Construction Logic
-      // 1. Separate lands and non-lands (Exclude existing Basic Lands from spells to be safe)
-      const spells = allCards.filter(c => !c.typeLine?.includes('Basic Land') && !c.typeLine?.includes('Land'));
-
-      // 2. Select 23 Spells randomly
-      const deckSpells: any[] = [];
-      const spellPool = [...spells];
-
-      // Fisher-Yates Shuffle
-      for (let i = spellPool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [spellPool[i], spellPool[j]] = [spellPool[j], spellPool[i]];
-      }
-
-      // Take up to 23 spells, or all if fewer
-      deckSpells.push(...spellPool.slice(0, Math.min(23, spellPool.length)));
-
-      // 3. Select 17 Lands (or fill to 40)
-      const deckLands: any[] = [];
-      const landCount = 40 - deckSpells.length; // Aim for 40 cards total
-
-      if (availableLands.length > 0) {
-        for (let i = 0; i < landCount; i++) {
-          const land = availableLands[Math.floor(Math.random() * availableLands.length)];
-          deckLands.push(land);
-        }
-      }
-
-      const fullDeck = [...deckSpells, ...deckLands];
-
-      // Emit socket event
       const playerId = localStorage.getItem('player_id') || 'tester-' + Date.now();
       const playerName = localStorage.getItem('player_name') || 'Tester';
 
       if (!socketService.socket.connected) socketService.connect();
 
+      // Emit new start_solo_test event
+      // Now sends PACKS and LANDS instead of a constructed DECK
       const response = await socketService.emitPromise('start_solo_test', {
         playerId,
         playerName,
-        deck: fullDeck
+        packs,
+        basicLands: availableLands
       });
 
       if (response.success) {
@@ -369,7 +338,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           onGoToLobby();
         }, 100);
       } else {
-        alert("Failed to start test game: " + response.message);
+        alert("Failed to start solo draft: " + response.message);
       }
 
     } catch (e: any) {
@@ -793,10 +762,10 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
             onClick={handleReset}
             disabled={loading}
             className={`w-full mt-4 py-2.5 px-4 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${loading
-                ? 'opacity-50 cursor-not-allowed text-slate-600 border border-transparent'
-                : confirmClear
-                  ? 'bg-red-600 text-white border border-red-500 shadow-md animate-pulse'
-                  : 'text-red-400 border border-red-900/30 hover:bg-red-950/30 hover:border-red-500/50 hover:text-red-300 shadow-sm'
+              ? 'opacity-50 cursor-not-allowed text-slate-600 border border-transparent'
+              : confirmClear
+                ? 'bg-red-600 text-white border border-red-500 shadow-md animate-pulse'
+                : 'text-red-400 border border-red-900/30 hover:bg-red-950/30 hover:border-red-500/50 hover:text-red-300 shadow-sm'
               }`}
             title="Clear all data and start over"
           >

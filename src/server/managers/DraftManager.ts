@@ -9,6 +9,8 @@ interface Card {
   // ... other props
 }
 
+import { BotDeckBuilderService } from '../services/BotDeckBuilderService'; // Import service
+
 interface Pack {
   id: string;
   cards: Card[];
@@ -29,7 +31,11 @@ interface DraftState {
     isWaiting: boolean; // True if finished current pack round
     pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
     pickExpiresAt: number; // Timestamp when auto-pick occurs
+    isBot: boolean;
+    deck?: Card[]; // Store constructed deck here
   }>;
+
+  basicLands?: Card[]; // Store reference to available basic lands
 
   status: 'drafting' | 'deck_building' | 'complete';
   isPaused: boolean;
@@ -39,7 +45,9 @@ interface DraftState {
 export class DraftManager extends EventEmitter {
   private drafts: Map<string, DraftState> = new Map();
 
-  createDraft(roomId: string, players: string[], allPacks: Pack[]): DraftState {
+  private botBuilder = new BotDeckBuilderService();
+
+  createDraft(roomId: string, players: { id: string, isBot: boolean }[], allPacks: Pack[], basicLands: Card[] = []): DraftState {
     // Distribute 3 packs to each player
     // Assume allPacks contains (3 * numPlayers) packs
 
@@ -56,15 +64,17 @@ export class DraftManager extends EventEmitter {
 
     const draftState: DraftState = {
       roomId,
-      seats: players, // Assume order is randomized or fixed
+      seats: players.map(p => p.id), // Assume order is randomized or fixed
       packNumber: 1,
       players: {},
       status: 'drafting',
       isPaused: false,
-      startTime: Date.now()
+      startTime: Date.now(),
+      basicLands: basicLands
     };
 
-    players.forEach((pid, index) => {
+    players.forEach((p, index) => {
+      const pid = p.id;
       const playerPacks = shuffledPacks.slice(index * 3, (index + 1) * 3);
       const firstPack = playerPacks.shift(); // Open Pack 1 immediately
 
@@ -76,7 +86,8 @@ export class DraftManager extends EventEmitter {
         unopenedPacks: playerPacks,
         isWaiting: false,
         pickedInCurrentStep: 0,
-        pickExpiresAt: Date.now() + 60000 // 60 seconds for first pack
+        pickExpiresAt: Date.now() + 60000, // 60 seconds for first pack
+        isBot: p.isBot
       };
     });
 
@@ -178,10 +189,13 @@ export class DraftManager extends EventEmitter {
         for (const playerId of Object.keys(draft.players)) {
           const playerState = draft.players[playerId];
           // Check if player is thinking (has active pack) and time expired
-          if (playerState.activePack && now > playerState.pickExpiresAt) {
-            const result = this.autoPick(roomId, playerId);
-            if (result) {
-              draftUpdated = true;
+          // OR if player is a BOT (Auto-Pick immediately)
+          if (playerState.activePack) {
+            if (playerState.isBot || now > playerState.pickExpiresAt) {
+              const result = this.autoPick(roomId, playerId);
+              if (result) {
+                draftUpdated = true;
+              }
             }
           }
         }
@@ -251,6 +265,16 @@ export class DraftManager extends EventEmitter {
         // Draft Complete
         draft.status = 'deck_building';
         draft.startTime = Date.now(); // Start deck building timer
+
+        // AUTO-BUILD BOT DECKS
+        Object.values(draft.players).forEach(p => {
+          if (p.isBot) {
+            // Build deck
+            const lands = draft.basicLands || [];
+            const deck = this.botBuilder.buildDeck(p.pool, lands);
+            p.deck = deck;
+          }
+        });
       }
     }
   }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut, Bell, BellOff, X } from 'lucide-react';
+import { Users, MessageSquare, Send, Copy, Check, Layers, LogOut, Bell, BellOff, X, Bot } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameView } from '../game/GameView';
@@ -14,6 +14,7 @@ interface Player {
   isHost: boolean;
   role: 'player' | 'spectator';
   isOffline?: boolean;
+  isBot?: boolean;
 }
 
 interface ChatMessage {
@@ -283,7 +284,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
             >
               <Layers className="w-5 h-5" /> Start Draft
             </button>
-
+            <button
+              onClick={() => socketService.socket.emit('add_bot', { roomId: room.id })}
+              disabled={room.status !== 'waiting' || room.players.length >= 8}
+              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Bot className="w-5 h-5" /> Add Bot
+            </button>
           </div>
         )}
       </div>
@@ -426,8 +433,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                   return (
                     <div key={p.id} className="flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-colors group">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-inner ${p.role === 'spectator' ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-purple-900/30'}`}>
-                          {p.name.substring(0, 2).toUpperCase()}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-inner ${p.isBot ? 'bg-indigo-900 text-indigo-200 border border-indigo-500' : p.role === 'spectator' ? 'bg-slate-800 text-slate-500' : 'bg-gradient-to-br from-purple-600 to-blue-600 text-white shadow-purple-900/30'}`}>
+                          {p.isBot ? <Bot className="w-5 h-5" /> : p.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="flex flex-col">
                           <span className={`text-sm font-bold ${isMe ? 'text-white' : 'text-slate-200'}`}>
@@ -436,6 +443,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                           <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
                             {p.role}
                             {p.isHost && <span className="text-amber-500 flex items-center">• Host</span>}
+                            {p.isBot && <span className="text-indigo-400 flex items-center">• Bot</span>}
                             {isReady && room.status === 'deck_building' && <span className="text-emerald-500 flex items-center">• Ready</span>}
                             {p.isOffline && <span className="text-red-500 flex items-center">• Offline</span>}
                           </span>
@@ -454,6 +462,17 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                             title="Kick Player"
                           >
                             <LogOut className="w-4 h-4 rotate-180" />
+                          </button>
+                        )}
+                        {isMeHost && p.isBot && (
+                          <button
+                            onClick={() => {
+                              socketService.socket.emit('remove_bot', { roomId: room.id, botId: p.id });
+                            }}
+                            className="p-1.5 hover:bg-red-500/10 rounded-lg text-slate-500 hover:text-red-500 transition-colors"
+                            title="Remove Bot"
+                          >
+                            <X className="w-4 h-4" />
                           </button>
                         )}
                         {isMe && (

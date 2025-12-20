@@ -7,6 +7,7 @@ interface Player {
   deck?: any[];
   socketId?: string; // Current or last known socket
   isOffline?: boolean;
+  isBot?: boolean;
 }
 
 interface ChatMessage {
@@ -194,6 +195,45 @@ export class RoomManager {
     };
     room.messages.push(message);
     return message;
+  }
+
+  addBot(roomId: string): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    room.lastActive = Date.now();
+
+    // Check limits
+    if (room.players.length >= room.maxPlayers) return null;
+
+    const botNumber = room.players.filter(p => p.isBot).length + 1;
+    const botId = `bot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+    const botPlayer: Player = {
+      id: botId,
+      name: `Bot ${botNumber}`,
+      isHost: false,
+      role: 'player',
+      ready: true, // Bots are always ready? Or host readies them? Let's say ready for now.
+      isOffline: false,
+      isBot: true
+    };
+
+    room.players.push(botPlayer);
+    return room;
+  }
+
+  removeBot(roomId: string, botId: string): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    room.lastActive = Date.now();
+    const botIndex = room.players.findIndex(p => p.id === botId && p.isBot);
+    if (botIndex !== -1) {
+      room.players.splice(botIndex, 1);
+      return room;
+    }
+    return null;
   }
 
   getPlayerBySocket(socketId: string): { player: Player, room: Room } | null {

@@ -423,6 +423,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('add_bot', ({ roomId }) => {
+    const context = getContext();
+    if (!context || !context.player.isHost) return; // Verify host
+
+    const updatedRoom = roomManager.addBot(roomId);
+    if (updatedRoom) {
+      io.to(roomId).emit('room_update', updatedRoom);
+      console.log(`Bot added to room ${roomId}`);
+    } else {
+      socket.emit('error', { message: 'Failed to add bot (Room full?)' });
+    }
+  });
+
+  socket.on('remove_bot', ({ roomId, botId }) => {
+    const context = getContext();
+    if (!context || !context.player.isHost) return; // Verify host
+
+    const updatedRoom = roomManager.removeBot(roomId, botId);
+    if (updatedRoom) {
+      io.to(roomId).emit('room_update', updatedRoom);
+      console.log(`Bot ${botId} removed from room ${roomId}`);
+    }
+  });
+
   // Secure helper to get player context
   const getContext = () => roomManager.getPlayerBySocket(socket.id);
 
@@ -441,7 +465,7 @@ io.on('connection', (socket) => {
         // return; 
       }
 
-      const draft = draftManager.createDraft(room.id, room.players.map(p => p.id), room.packs);
+      const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
       room.status = 'drafting';
 
       io.to(room.id).emit('room_update', room);
@@ -461,6 +485,24 @@ io.on('connection', (socket) => {
       if (draft.status === 'deck_building') {
         room.status = 'deck_building';
         io.to(room.id).emit('room_update', room);
+
+        // Logic to Sync Bot Readiness (Decks built by DraftManager)
+        const currentRoom = roomManager.getRoom(room.id); // Get latest room state
+        if (currentRoom) {
+          Object.values(draft.players).forEach(draftPlayer => {
+            if (draftPlayer.isBot && draftPlayer.deck) {
+              const roomPlayer = currentRoom.players.find(rp => rp.id === draftPlayer.id);
+              if (roomPlayer && !roomPlayer.ready) {
+                // Mark Bot Ready!
+                const updatedRoom = roomManager.setPlayerReady(room.id, draftPlayer.id, draftPlayer.deck);
+                if (updatedRoom) {
+                  io.to(room.id).emit('room_update', updatedRoom);
+                  console.log(`Bot ${draftPlayer.id} marked ready with deck (${draftPlayer.deck.length} cards).`);
+                }
+              }
+            }
+          });
+        }
       }
     }
   });
@@ -511,40 +553,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('start_solo_test', ({ playerId, playerName, deck }, callback) => {
-    // Solo test is a separate creation flow, doesn't require existing context
-    const room = roomManager.createRoom(playerId, playerName, []);
-    room.status = 'playing';
+  socket.on('start_solo_test', ({ playerId, playerName, packs, basicLands }, callback) => { // Updated signature
+    // Solo test -> 1 Human + 7 Bots + Start Draft
+    console.log(`Starting Solo Draft for ${playerName}`);
+
+    const room = roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id);
     socket.join(room.id);
-    const game = gameManager.createGame(room.id, room.players);
-    if (Array.isArray(deck)) {
-      deck.forEach((card: any) => {
-        gameManager.addCardToGame(room.id, {
-          ownerId: playerId,
-          controllerId: playerId,
-          oracleId: card.id,
-          name: card.name,
-          imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-          zone: 'library',
-          typeLine: card.typeLine || card.type_line || '',
-          oracleText: card.oracleText || card.oracle_text || '',
-          manaCost: card.manaCost || card.mana_cost || '',
-          keywords: card.keywords || [],
-          power: card.power,
-          toughness: card.toughness,
-          damageMarked: 0,
-          controlledSinceTurn: 0
-        });
-      });
+
+    // Add 7 Bots
+    for (let i = 0; i < 7; i++) {
+      roomManager.addBot(room.id);
     }
 
-    // Initialize Game State (Draw Hands)
-    const engine = new RulesEngine(game);
-    engine.startGame();
+    // Start Draft
+    const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
+    room.status = 'drafting';
 
-    callback({ success: true, room, game });
+    callback({ success: true, room, draftState: draft });
     io.to(room.id).emit('room_update', room);
-    io.to(room.id).emit('game_update', game);
+    io.to(room.id).emit('draft_update', draft);
   });
 
   socket.on('start_game', ({ decks }) => {
