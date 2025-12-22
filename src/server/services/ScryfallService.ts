@@ -267,6 +267,9 @@ export class ScryfallService {
 
       // Save Set Cache
       if (allCards.length > 0) {
+        if (!fs.existsSync(path.dirname(setCachePath))) {
+          fs.mkdirSync(path.dirname(setCachePath), { recursive: true });
+        }
         fs.writeFileSync(setCachePath, JSON.stringify(allCards, null, 2));
 
         // Smartly save individuals: only if missing from cache
