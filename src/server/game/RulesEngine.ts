@@ -13,17 +13,24 @@ export class RulesEngine {
   public passPriority(playerId: string): boolean {
     if (this.state.priorityPlayerId !== playerId) return false; // Not your turn
 
-    this.state.players[playerId].hasPassed = true;
+    const player = this.state.players[playerId];
+    player.hasPassed = true;
     this.state.passedPriorityCount++;
 
-    // Check if all players passed
-    if (this.state.passedPriorityCount >= this.state.turnOrder.length) {
+    const totalPlayers = this.state.turnOrder.length;
+
+    // Check if all players passed in a row
+    if (this.state.passedPriorityCount >= totalPlayers) {
+      // 1. If Stack is NOT empty, Resolve Top
       if (this.state.stack.length > 0) {
         this.resolveTopStack();
-      } else {
+      }
+      // 2. If Stack IS empty, Advance Step
+      else {
         this.advanceStep();
       }
     } else {
+      // Pass Priority to Next Player
       this.passPriorityToNext();
     }
     return true;

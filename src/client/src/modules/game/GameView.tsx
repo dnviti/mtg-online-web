@@ -9,8 +9,8 @@ import { CardComponent } from './CardComponent';
 import { GameContextMenu, ContextMenuRequest } from './GameContextMenu';
 import { ZoneOverlay } from './ZoneOverlay';
 import { PhaseStrip } from './PhaseStrip';
-import { SmartButton } from './SmartButton';
 import { StackVisualizer } from './StackVisualizer';
+
 import { GestureManager } from './GestureManager';
 import { MulliganView } from './MulliganView';
 import { RadialMenu, RadialOption } from './RadialMenu';
@@ -801,10 +801,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
             {/* Left Controls: Library/Grave/Exile */}
             <div className="w-40 p-2 flex flex-col gap-2 items-center justify-start pt-6 border-r border-white/10">
-              {/* Phase Strip Integration */}
-              <div className="mb-2 scale-75 origin-center">
-                <PhaseStrip gameState={gameState} />
-              </div>
+              {/* Phase Strip Moved to Bottom Center */}
+
 
               <div className="flex gap-2">
                 <DroppableZone
@@ -852,11 +850,12 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             <div className="flex-1 relative flex flex-col items-center justify-end px-4 pb-2">
               <DroppableZone id="hand" data={{ type: 'zone' }} className="flex-1 w-full h-full flex flex-col justify-end">
 
-                {/* Smart Button Floating above Hand */}
-                <div className="mb-4 z-40 self-center">
-                  <SmartButton
+                {/* Smart Button / Action Strip Floating above Hand */}
+                <div className="mb-4 z-40 self-center flex flex-col items-center gap-4 w-full">
+                  {/* Phase Strip Central Integration (Now acts as Smart Button) */}
+                  <PhaseStrip
                     gameState={gameState}
-                    playerId={currentPlayerId}
+                    currentPlayerId={currentPlayerId}
                     onAction={(type, payload) => socketService.socket.emit(type, { action: payload })}
                     contextData={{
                       attackers: Array.from(proposedAttackers).map(id => ({ attackerId: id, targetId: opponentId })),
@@ -866,6 +865,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     onYieldToggle={() => setIsYielding(!isYielding)}
                   />
                 </div>
+
 
                 <div className="flex justify-center -space-x-12 w-full h-full items-end pb-4 perspective-500">
                   {myHand.map((card, index) => (
