@@ -5,7 +5,7 @@ import { RulesEngine } from '../game/RulesEngine';
 export class GameManager {
   public games: Map<string, StrictGameState> = new Map();
 
-  createGame(roomId: string, players: { id: string; name: string }[]): StrictGameState {
+  createGame(roomId: string, players: { id: string; name: string; isBot?: boolean }[]): StrictGameState {
 
     // Convert array to map
     const playerRecord: Record<string, PlayerState> = {};
@@ -13,6 +13,7 @@ export class GameManager {
       playerRecord[p.id] = {
         id: p.id,
         name: p.name,
+        isBot: p.isBot,
         life: 20,
         poison: 0,
         energy: 0,
@@ -51,6 +52,36 @@ export class GameManager {
 
     this.games.set(roomId, gameState);
     return gameState;
+  }
+
+  // Helper to trigger bot actions if game is stuck or just started
+  public triggerBotCheck(roomId: string): StrictGameState | null {
+    const game = this.games.get(roomId);
+    if (!game) return null;
+
+    const MAX_LOOPS = 50;
+    let loops = 0;
+    // Iterate if current priority player is bot, OR if we are in Mulligan and ANY bot needs to act?
+    // My processBotActions handles priorityPlayerId.
+    // In Mulligan, does priorityPlayerId matter?
+    // RulesEngine: resolveMulligan checks playerId.
+    // We should iterate ALL bots in mulligan phase.
+
+    if (game.step === 'mulligan') {
+      Object.values(game.players).forEach(p => {
+        if (p.isBot && !p.handKept) {
+          const engine = new RulesEngine(game);
+          try { engine.resolveMulligan(p.id, true, []); } catch (e) { }
+        }
+      });
+      // After mulligan, game might auto-advance.
+    }
+
+    while (game.players[game.priorityPlayerId]?.isBot && loops < MAX_LOOPS) {
+      loops++;
+      this.processBotActions(game);
+    }
+    return game;
   }
 
   getGame(roomId: string): StrictGameState | undefined {
@@ -102,8 +133,94 @@ export class GameManager {
       return null;
     }
 
+    // Bot Cycle: If priority passed to a bot, or it's a bot's turn to act
+    const MAX_LOOPS = 50;
+    let loops = 0;
+    while (game.players[game.priorityPlayerId]?.isBot && loops < MAX_LOOPS) {
+      loops++;
+      this.processBotActions(game);
+    }
+
     return game;
   }
+
+  // --- Bot AI Logic ---
+  private processBotActions(game: StrictGameState) {
+    const engine = new RulesEngine(game);
+    const botId = game.priorityPlayerId;
+    const bot = game.players[botId];
+
+    if (!bot || !bot.isBot) return;
+
+    // 1. Mulligan: Always Keep
+    if (game.step === 'mulligan') {
+      if (!bot.handKept) {
+        try { engine.resolveMulligan(botId, true, []); } catch (e) { }
+      }
+      return;
+    }
+
+    // 2. Play Land (Main Phase, empty stack)
+    if ((game.phase === 'main1' || game.phase === 'main2') && game.stack.length === 0) {
+      if (game.landsPlayedThisTurn < 1) {
+        const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
+        const land = hand.find(c => c.typeLine?.includes('Land') || c.types.includes('Land'));
+        if (land) {
+          console.log(`[Bot AI] ${bot.name} plays land ${land.name}`);
+          try {
+            engine.playLand(botId, land.instanceId);
+            return;
+          } catch (e) {
+            console.warn("Bot failed to play land:", e);
+          }
+        }
+      }
+    }
+
+    // 3. Play Spell (Main Phase, empty stack)
+    if ((game.phase === 'main1' || game.phase === 'main2') && game.stack.length === 0) {
+      const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
+      const spell = hand.find(c => !c.typeLine?.includes('Land') && !c.types.includes('Land'));
+
+      if (spell) {
+        // Only cast creatures for now to be safe with targets
+        if (spell.types.includes('Creature')) {
+          console.log(`[Bot AI] ${bot.name} casts creature ${spell.name}`);
+          try {
+            engine.castSpell(botId, spell.instanceId, []);
+            return;
+          } catch (e) { console.warn("Bot failed to cast spell:", e); }
+        }
+      }
+    }
+
+    // 4. Combat: Declare Attackers (Active Player only)
+    if (game.step === 'declare_attackers' && game.activePlayerId === botId && !game.attackersDeclared) {
+      const attackers = Object.values(game.cards).filter(c =>
+        c.controllerId === botId &&
+        c.zone === 'battlefield' &&
+        c.types.includes('Creature') &&
+        !c.tapped
+      );
+      const opponents = game.turnOrder.filter(pid => pid !== botId);
+      const targetId = opponents[0];
+
+      if (attackers.length > 0 && targetId) {
+        const declaration = attackers.map(c => ({ attackerId: c.instanceId, targetId }));
+        console.log(`[Bot AI] ${bot.name} attacks with ${attackers.length} creatures.`);
+        try { engine.declareAttackers(botId, declaration); } catch (e) { }
+        return;
+      } else {
+        console.log(`[Bot AI] ${bot.name} skips combat.`);
+        try { engine.declareAttackers(botId, []); } catch (e) { }
+        return;
+      }
+    }
+
+    // 6. Default: Pass Priority
+    try { engine.passPriority(botId); } catch (e) { console.warn("Bot failed to pass priority", e); }
+  }
+
 
   // --- Legacy Sandbox Action Handler (for Admin/Testing) ---
   handleAction(roomId: string, action: any, actorId: string): StrictGameState | null {

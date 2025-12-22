@@ -313,6 +313,7 @@ const draftInterval = setInterval(() => {
 
             const engine = new RulesEngine(game);
             engine.startGame();
+            gameManager.triggerBotCheck(roomId);
             io.to(roomId).emit('game_update', game);
           }
         }
@@ -364,6 +365,7 @@ const draftInterval = setInterval(() => {
         // Initialize Game State (Draw Hands)
         const engine = new RulesEngine(game);
         engine.startGame();
+        gameManager.triggerBotCheck(roomId);
 
         io.to(roomId).emit('game_update', game);
       }
@@ -637,6 +639,7 @@ io.on('connection', (socket) => {
         // Initialize Game State (Draw Hands)
         const engine = new RulesEngine(game);
         engine.startGame();
+        gameManager.triggerBotCheck(room.id);
 
         io.to(room.id).emit('game_update', game);
       }
@@ -700,6 +703,7 @@ io.on('connection', (socket) => {
       // Initialize Game State (Draw Hands)
       const engine = new RulesEngine(game);
       engine.startGame();
+      gameManager.triggerBotCheck(room.id);
 
       io.to(room.id).emit('game_update', game);
     }

@@ -76,6 +76,7 @@ export interface PlayerState {
   handKept?: boolean; // For Mulligan phase
   mulliganCount?: number;
   manaPool: Record<string, number>; // { W: 0, U: 1, ... }
+  isBot?: boolean;
 }
 
 export interface StackObject {
