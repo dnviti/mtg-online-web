@@ -75,6 +75,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [viewingZone, setViewingZone] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardInstance | null>(null);
+  const [dragAnimationMode, setDragAnimationMode] = useState<'start' | 'end'>('end');
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -411,11 +412,26 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveDragId(event.active.id as string);
+    const cardId = event.active.id as string;
+    setActiveDragId(cardId);
+
+    const card = gameState.cards[cardId];
+    if (card && card.zone === 'hand') {
+      setDragAnimationMode('start');
+      // Trigger animation to shrink
+      setTimeout(() => {
+        setDragAnimationMode('end');
+      }, 50);
+    } else {
+      setDragAnimationMode('end');
+    }
+
+    document.body.style.cursor = 'grabbing';
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragId(null);
+    document.body.style.cursor = '';
     const { active, over } = event;
 
     if (!over) return;
@@ -1018,17 +1034,25 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         </div>
         <DragOverlay dropAnimation={{ duration: 0, easing: 'linear' }}>
           {activeDragId ? (
-            <div className="w-24 h-24 pointer-events-none opacity-90 z-[1000] drop-shadow-2xl">
+            <div className="pointer-events-none z-[1000] drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)] scale-110 -rotate-6 transition-transform">
               {(() => {
                 const c = gameState.cards[activeDragId];
                 if (!c) return null;
+
+                // If coming from hand, we animate from Large to Cutout
+                // If start, use 'large' (matches hand size approximately, but we ignore margins)
+                // If end, use 'cutout'
+                const isHandOrigin = c.zone === 'hand';
+                const effectiveViewMode = (isHandOrigin && dragAnimationMode === 'start') ? 'large' : 'cutout';
+
                 return (
                   <CardComponent
                     card={c}
-                    viewMode="cutout"
+                    viewMode={effectiveViewMode}
+                    ignoreZoneLayout={true}
                     onDragStart={() => { }}
                     onClick={() => { }}
-                    className="w-full h-full rounded-lg shadow-2xl ring-2 ring-white/50"
+                    className="rounded-lg shadow-2xl ring-2 ring-white/50"
                   />
                 );
               })()}

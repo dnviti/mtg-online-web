@@ -16,10 +16,11 @@ interface CardComponentProps {
   onDragEnd?: (e: React.DragEvent) => void;
   style?: React.CSSProperties;
   className?: string;
-  viewMode?: 'normal' | 'cutout';
+  viewMode?: 'normal' | 'cutout' | 'large';
+  ignoreZoneLayout?: boolean;
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal' }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal', ignoreZoneLayout = false }) => {
   const { registerCard, unregisterCard } = useGesture();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -58,8 +59,10 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={`
-        relative rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 select-none
-        ${card.zone === 'hand' ? 'w-32 h-44 -ml-12 first:ml-0 hover:z-10 hover:-translate-y-4' : (viewMode === 'cutout' ? 'w-24 h-24' : 'w-24 h-32')}
+        relative rounded-lg shadow-md cursor-grab active:cursor-grabbing transition-all duration-300 ease-[cubic-bezier(0.25,0.8,0.25,1)] select-none
+        ${(!ignoreZoneLayout && card.zone === 'hand')
+          ? 'w-32 h-44 -ml-12 first:ml-0 hover:z-10 hover:-translate-y-4'
+          : (viewMode === 'cutout' ? 'w-24 h-24' : (viewMode === 'large' ? 'w-32 h-44' : 'w-24 h-32'))}
         ${className || ''}
       `}
       style={{

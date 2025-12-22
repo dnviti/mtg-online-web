@@ -38,7 +38,7 @@ export type VisualCard = {
 
 interface CardVisualProps {
   card: VisualCard;
-  viewMode?: 'normal' | 'cutout';
+  viewMode?: 'normal' | 'cutout' | 'large';
   isFoil?: boolean; // Explicit foil styling override
   className?: string;
   style?: React.CSSProperties;

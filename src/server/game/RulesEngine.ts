@@ -107,8 +107,8 @@ export class RulesEngine {
 
   // --- Mana System ---
 
-  private parseManaCost(manaCost: string): { generic: number, colors: Record<string, number> } {
-    const cost = { generic: 0, colors: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } as Record<string, number> };
+  private parseManaCost(manaCost: string): { generic: number, colors: Record<string, number>, hybrids: string[][] } {
+    const cost = { generic: 0, colors: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } as Record<string, number>, hybrids: [] as string[][] };
 
     if (!manaCost) return cost;
 
@@ -123,7 +123,27 @@ export class RulesEngine {
       if (!isNaN(Number(content))) {
         cost.generic += Number(content);
       }
-      // check for hybrid/phyrexian later if needed, for now exact colors
+      // Check for Hybrid (contains /)
+      else if (content.includes('/')) {
+        // e.g. W/U, 2/W
+        const parts = content.split('/');
+        // For now, assume Color/Color hybrid. 
+        // TODO: Handle 2/W or P (Phyrexian) if needed.
+        // We push the options as an array of possible colors/costs.
+        // Filter valid colors to be safe.
+        const options = parts.filter(p => ['W', 'U', 'B', 'R', 'G', 'C'].includes(p));
+
+        // Handle "2/W" -> If part is '2', it's generic? Auto-tap makes this hard.
+        // For MVP, focus on Color/Color which solves the User Request (W/U).
+        if (options.length >= 2) {
+          cost.hybrids.push(options);
+        } else if (options.length === 1 && !isNaN(Number(parts[0]))) {
+          // Case like 2/W ?
+          // cost.hybrids.push([...options, 'GENERIC_' + parts[0]]); 
+          // Let's stick to simple Color/Color for now or single color fallback.
+          cost.hybrids.push(options); // treat as just the color requirement if regex fails strictly
+        }
+      }
       else {
         // Standard colors
         if (['W', 'U', 'B', 'R', 'G', 'C'].includes(content)) {
@@ -196,6 +216,35 @@ export class RulesEngine {
           // Use all we have, but it's not enough
           throw new Error(`Insufficient ${color} mana.`);
         }
+      }
+    }
+
+    // 2.5 Pay Hybrid Costs (Greedy Strategy)
+    // For each hybrid requirement (e.g. [W, U]), try to pay with first option, then second.
+    // Note: This is greedy. Optimal payment is NP-hard in general magic application, 
+    // but for simple auto-tapping we assume simple priority.
+    for (const options of cost.hybrids) {
+      let paid = false;
+      // Try each color option
+      for (const color of options) {
+        // Check Pool
+        if (pool[color] > 0) {
+          pool[color]--;
+          paid = true;
+          break;
+        }
+        // Check Lands
+        // Find a land that produces this color and is UNUSED
+        const land = lands.find(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) === color);
+        if (land) {
+          landsToTap.push(land.instanceId);
+          paid = true;
+          break;
+        }
+      }
+
+      if (!paid) {
+        throw new Error(`Insufficient mana for hybrid cost {${options.join('/')}}.`);
       }
     }
 
