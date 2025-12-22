@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Share2, Users, Play, LogOut, Copy, Check, Hash, Crown, XCircle, MessageSquare, Send, Bell, BellOff, X, Bot, Layers } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers } from 'lucide-react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
@@ -64,7 +64,6 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   // Services
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const [copied, setCopied] = useState(false);
 
   // Restored States
   const [message, setMessage] = useState('');
