@@ -81,6 +81,14 @@ export class RulesEngine {
     const card = this.state.cards[cardId];
     if (!card || card.zone !== 'hand') throw new Error("Invalid card.");
 
+    // Validate Status (Aura needs target)
+    if (this.isAura(card)) {
+      if (targets.length === 0) throw new Error("Aura requires a target.");
+      // Note: We don't strictly validate target legality here for "Casting", 
+      // but usually you can't cast if no legal target exists.
+      // We'll trust the input for now, but `resolveTopStack` will verify correctness.
+    }
+
     // Validate Mana Cost
     if (card.manaCost) {
       this.payManaCost(playerId, card.manaCost);
@@ -103,6 +111,58 @@ export class RulesEngine {
     // Reset priority to caster (Rule 117.3c)
     this.resetPriority(playerId);
     return true;
+  }
+
+  public activateAbility(playerId: string, sourceId: string, _abilityIndex: number, targets: string[] = []) {
+    if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
+
+    const source = this.state.cards[sourceId];
+    if (!source) throw new Error("Invalid source.");
+
+    // TODO: Generic Ability System
+    // For now, we hardcode "Equip" as a special case if the card is Equipment.
+    // In a real engine, we'd look up source.abilities[abilityIndex].
+
+    if (this.isEquipment(source) && source.zone === 'battlefield') {
+      // Equip Ability
+      // Cost: Usually generic. For MVP, assume {1} or free? Or look at card text?
+      // Let's assume generic cost {1} for demo purposes unless defined.
+      // 702.6a Equip [cost]: [Cost]: Attach to target creature you control. Sorcery speed.
+
+      // Speed Check (Sorcery)
+      if (this.state.stack.length > 0 || (this.state.phase !== 'main1' && this.state.phase !== 'main2')) {
+        throw new Error("Equip can only be used as a sorcery.");
+      }
+
+      // Target Check
+      if (targets.length !== 1) throw new Error("Equip requires exactly one target.");
+      const targetId = targets[0];
+      const target = this.state.cards[targetId];
+
+      if (!target || target.zone !== 'battlefield' || !this.isCreature(target) || target.controllerId !== playerId) {
+        throw new Error("Invalid Equip target. Must be a creature you control.");
+      }
+
+      // Pay Cost (Mock: {1})
+      // this.payManaCost(playerId, "{1}"); 
+
+      // Resolve Immediately (Simple) or Stack (Correct)?
+      // Activated abilities go on stack.
+      this.state.stack.push({
+        id: Math.random().toString(36).substr(2, 9),
+        sourceId: sourceId,
+        controllerId: playerId,
+        type: 'ability',
+        name: `Equip ${source.name} to ${target.name}`,
+        text: `Attach ${source.name} to ${target.name}`,
+        targets: [targetId]
+      });
+
+      this.resetPriority(playerId);
+      return true;
+    }
+
+    throw new Error("Ability not implemented.");
   }
 
   // --- Mana System ---
@@ -520,16 +580,85 @@ export class RulesEngine {
         );
 
         if (isPermanent) {
-          this.moveCardToZone(card.instanceId, 'battlefield', false, item.resolutionPosition);
+          if (this.isAura(card)) {
+            // Aura Resolution
+            const targetId = item.targets[0];
+            const target = this.state.cards[targetId];
+            if (target && target.zone === 'battlefield' && this.canAttach(card, target)) {
+              this.moveCardToZone(card.instanceId, 'battlefield', false, item.resolutionPosition);
+              card.attachedTo = target.instanceId;
+              console.log(`${card.name} enters attached to ${target.name}`);
+            } else {
+              // 303.4g If an Aura is entering the battlefield and there is no legal object or player for it to enchant... it is put into its owner's graveyard.
+              console.log(`${card.name} failed to attach. Putting into GY.`);
+              this.moveCardToZone(card.instanceId, 'graveyard');
+            }
+          } else {
+            // Normal Permanent
+            this.moveCardToZone(card.instanceId, 'battlefield', false, item.resolutionPosition);
+          }
         } else {
           // Instant / Sorcery
           this.moveCardToZone(card.instanceId, 'graveyard');
+        }
+      }
+    } else if (item.type === 'ability') {
+      // Handle Ability Resolution (Equip or other Generic)
+      const source = this.state.cards[item.sourceId];
+      if (source && source.zone === 'battlefield') {
+        // Equipment Logic
+        if (this.isEquipment(source)) {
+          const targetId = item.targets[0];
+          const target = this.state.cards[targetId];
+
+          // Generic Validation Check for "Attach"
+          if (target && target.zone === 'battlefield' && this.validateTarget(source, target)) {
+            source.attachedTo = target.instanceId;
+            console.log(`Equipped ${source.name} to ${target.name}`);
+          } else {
+            console.log(`Equip failed: Target invalid.`);
+          }
         }
       }
     }
 
     // After resolution, Active Player gets priority again (Rule 117.3b)
     this.resetPriority(this.state.activePlayerId);
+  }
+
+  // --- Targeting System (Generic) ---
+
+  public validateTarget(source: any, target: any, actionType: 'cast' | 'equip' | 'ability' = 'ability'): boolean {
+    // 1. Basic Existence
+    if (!target || target.zone !== 'battlefield') return false;
+
+    // 2. Protection (Simple Check)
+    if (target.pro_protection) {
+      // Check if source characteristics match protection
+      // E.g. Protection from White -> if source is White, return false.
+      // Not fully implemented yet, but placeholder is here.
+    }
+
+    // 3. Specific Restrictions based on Source Type
+    if (this.isAura(source) || actionType === 'equip') {
+      // "Enchant/Equip Creature" is default for MVP unless specified otherwise
+      // Parse Text or Definition if available
+      // For now, strict Creature check for Equip/Aura (unless Aura says otherwise in text)
+      if (this.isEquipment(source) && !this.isCreature(target)) return false;
+      if (this.isAura(source)) {
+        // Example parsing: "Enchant land"
+        if (source.oracleText?.toLowerCase().includes('enchant land')) {
+          if (!target.types.includes('Land')) return false;
+        } else {
+          // Default Aura -> Creature
+          if (!target.types.includes('Creature')) return false;
+        }
+      }
+
+      // Shroud / Hexproof check would go here
+    }
+
+    return true;
   }
 
   private advanceStep() {
@@ -890,6 +1019,18 @@ export class RulesEngine {
       }
     });
 
+    // 5. Equipment Validity
+    Object.values(cards).forEach(c => {
+      if (c.zone === 'battlefield' && this.isEquipment(c) && c.attachedTo) {
+        const target = cards[c.attachedTo];
+        if (!target || target.zone !== 'battlefield') {
+          console.log(`SBA: ${c.name} (Equipment) detached (Host invalid).`);
+          c.attachedTo = undefined;
+          sbaPerformed = true;
+        }
+      }
+    });
+
     return sbaPerformed;
   }
 
@@ -972,15 +1113,30 @@ export class RulesEngine {
         });
       }
 
-      // Layer 7e: Switch Power/Toughness - skipped for now
-
-      // Final Floor rule: T cannot be less than 0 for logic? No, T can be negative for calculation, but usually treated as 0 for damage?
-      // Actually CR says negative numbers are real in calculation, but treated as 0 for dealing damage.
-      // We store true values.
-
       card.power = p;
       card.toughness = t;
     });
   }
 
+  // --- Helpers ---
+
+  private isAura(card: any): boolean {
+    return card.types && card.types.includes('Enchantment') && card.subtypes && card.subtypes.includes('Aura');
+  }
+
+  private isEquipment(card: any): boolean {
+    return card.types && card.types.includes('Artifact') && card.subtypes && card.subtypes.includes('Equipment');
+  }
+
+  private isCreature(card: any): boolean {
+    return card.types && card.types.includes('Creature');
+  }
+
+  private canAttach(source: any, target: any): boolean {
+    if (this.isAura(source)) {
+      if (source.oracleText?.toLowerCase().includes('enchant land')) return target.types.includes('Land');
+      return target.types.includes('Creature');
+    }
+    return true;
+  }
 }

@@ -498,6 +498,18 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         return;
       }
 
+      // Handle Equipment / Ability on Battlefield
+      if (card.zone === 'battlefield') {
+        const isEquipment = card.types?.includes('Artifact') && card.subtypes?.includes('Equipment');
+
+        if (isEquipment && over.data.current.type === 'card') { // Equip only targets cards (creatures)
+          socketService.socket.emit('game_strict_action', {
+            action: { type: 'ACTIVATE_ABILITY', abilityIndex: 0, sourceId: cardId, targets: [targetId] }
+          });
+          return;
+        }
+      }
+
       // Default Cast with Target
       if (card.zone === 'hand') {
         socketService.socket.emit('game_strict_action', {
@@ -702,9 +714,23 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
 
                   {(() => {
-                    const creatures = myBattlefield.filter(c => c.types?.includes('Creature'));
-                    const allLands = myBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                    const others = myBattlefield.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
+                    // Separate Roots and Attachments
+                    const attachments = myBattlefield.filter(c => c.attachedTo);
+                    const unattached = myBattlefield.filter(c => !c.attachedTo);
+
+                    const creatures = unattached.filter(c => c.types?.includes('Creature'));
+                    const allLands = unattached.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
+                    const others = unattached.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
+
+                    // Map Attachments to Hosts
+                    const attachmentsMap = attachments.reduce((acc, c) => {
+                      const target = c.attachedTo;
+                      if (target) {
+                        if (!acc[target]) acc[target] = [];
+                        acc[target].push(c);
+                      }
+                      return acc;
+                    }, {} as Record<string, CardInstance[]>);
 
                     const landGroups = allLands.reduce((acc, card) => {
                       const key = card.name || 'Unknown Land';
@@ -713,17 +739,17 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                       return acc;
                     }, {} as Record<string, CardInstance[]>);
 
-
-
                     const renderCard = (card: CardInstance) => {
                       const isAttacking = proposedAttackers.has(card.instanceId);
                       const blockingTargetId = proposedBlockers.get(card.instanceId);
                       const isPreviewTapped = previewTappedIds.has(card.instanceId);
 
+                      const attachedCards = attachmentsMap[card.instanceId] || [];
+
                       return (
                         <div
                           key={card.instanceId}
-                          className="relative transition-all duration-300"
+                          className="relative transition-all duration-300 group"
                           style={{
                             zIndex: 10,
                             transform: isAttacking
@@ -738,6 +764,28 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                           }}
                         >
                           <DraggableCardWrapper card={card} disabled={!hasPriority}>
+                            {/* Render Attachments UNDER the card */}
+                            {attachedCards.length > 0 && (
+                              <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 hover:space-y-4 hover:bottom-[-200px] transition-all duration-300 z-[-1] hover:z-50">
+                                {attachedCards.map((att, idx) => (
+                                  <div key={att.instanceId} className="relative transition-transform hover:scale-110" style={{ zIndex: idx }}>
+                                    <CardComponent
+                                      card={att}
+                                      viewMode="cutout"
+                                      onClick={() => { }}
+                                      onDragStart={() => { }}
+                                      className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
+                                    />
+                                    {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
+                                    {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
+                                                Ideally, we define DraggableCardWrapper around THIS too? 
+                                                GameView dnd uses ID. If we use DraggableCardWrapper here, it should work.
+                                            */}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             <CardComponent
                               card={card}
                               viewMode="cutout"
