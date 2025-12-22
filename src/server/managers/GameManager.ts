@@ -366,25 +366,31 @@ export class GameManager extends EventEmitter {
 
     console.log(`[GameManager] Handling Action: ${action.type} for ${roomId} by ${actorId}`);
 
-    switch (action.type) {
-      case 'UPDATE_LIFE':
-        if (game.players[actorId]) {
-          game.players[actorId].life += (action.amount || 0);
-        }
-        break;
-      case 'MOVE_CARD':
-        this.moveCard(game, action, actorId);
-        break;
-      case 'TAP_CARD':
-        this.tapCard(game, action, actorId);
-        break;
-      case 'DRAW_CARD':
-        const engine = new RulesEngine(game);
-        engine.drawCard(actorId);
-        break;
-      case 'RESTART_GAME':
-        this.restartGame(roomId);
-        break;
+    try {
+      switch (action.type) {
+        case 'UPDATE_LIFE':
+          if (game.players[actorId]) {
+            game.players[actorId].life += (action.amount || 0);
+          }
+          break;
+        case 'MOVE_CARD':
+          this.moveCard(game, action, actorId);
+          break;
+        case 'TAP_CARD':
+          this.tapCard(game, action, actorId);
+          break;
+        case 'DRAW_CARD':
+          const engine = new RulesEngine(game);
+          engine.drawCard(actorId);
+          break;
+        case 'RESTART_GAME':
+          this.restartGame(roomId);
+          break;
+      }
+    } catch (e: any) {
+      console.error(`Legacy Action Error [${action?.type}]: ${e.message}`);
+      this.emit('game_error', roomId, { message: e.message, userId: actorId });
+      return null;
     }
 
     return game;
