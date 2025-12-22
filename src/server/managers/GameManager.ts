@@ -449,6 +449,8 @@ export class GameManager extends EventEmitter {
       controllerId: '',
       ownerId: '',
       oracleId: '',
+      scryfallId: cardData.scryfallId || '',
+      setCode: cardData.setCode || '',
       name: '',
       ...cardData,
       damageMarked: 0,

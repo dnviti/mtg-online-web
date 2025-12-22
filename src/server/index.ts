@@ -342,9 +342,11 @@ const draftInterval = setInterval(() => {
               gameManager.addCardToGame(roomId, {
                 ownerId: p.id,
                 controllerId: p.id,
-                oracleId: card.oracle_id || card.id,
+                oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
+                scryfallId: card.scryfallId || card.id || card.definition?.id,
+                setCode: card.setCode || card.set || card.definition?.set,
                 name: card.name,
-                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                imageUrl: "", // Optimisation: Client hydrates from cache
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',
@@ -677,9 +679,11 @@ io.on('connection', (socket) => {
             gameManager.addCardToGame(room.id, {
               ownerId: pid,
               controllerId: pid,
-              oracleId: card.oracle_id || card.id,
+              oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
+              scryfallId: card.scryfallId || card.id || card.definition?.id,
+              setCode: card.setCode || card.set || card.definition?.set,
               name: card.name,
-              imageUrl: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+              imageUrl: "", // Optimisation: Client hydrates from cache
               zone: 'library',
               typeLine: card.typeLine || card.type_line || '',
               oracleText: card.oracleText || card.oracle_text || '',
@@ -799,9 +803,11 @@ io.on('connection', (socket) => {
               gameManager.addCardToGame(matchId, {
                 ownerId: p.id,
                 controllerId: p.id,
-                oracleId: card.oracle_id || card.id,
+                oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
+                scryfallId: card.scryfallId || card.id || card.definition?.id,
+                setCode: card.setCode || card.set || card.definition?.set,
                 name: card.name,
-                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                imageUrl: "", // Optimisation: Client hydrates from cache
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',

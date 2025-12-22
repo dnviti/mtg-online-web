@@ -61,6 +61,8 @@ export interface CardObject {
   position?: { x: number; y: number; z: number };
 
   // Metadata
+  scryfallId?: string;
+  setCode?: string;
   controlledSinceTurn: number; // For Summoning Sickness check
   definition?: any;
 }

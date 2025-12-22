@@ -20,7 +20,9 @@ export interface StackObject {
 
 export interface CardInstance {
   instanceId: string;
-  oracleId: string; // Scryfall ID
+  scryfallId: string; // Used for cache hydration
+  setCode?: string; // Used for cache hydration
+  oracleId: string; // Scryfall Oracle ID
   name: string;
   imageUrl: string;
   controllerId: string;
