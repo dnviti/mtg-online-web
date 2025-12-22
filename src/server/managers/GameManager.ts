@@ -61,6 +61,8 @@ export class GameManager extends EventEmitter {
 
   // Track rooms where a bot is currently "thinking" to avoid double-queuing
   private thinkingRooms: Set<string> = new Set();
+  // Throttle logs
+  private lastBotLog: Record<string, number> = {};
 
   // Helper to trigger bot actions if game is stuck or just started
   public triggerBotCheck(roomId: string): StrictGameState | null {
@@ -86,7 +88,11 @@ export class GameManager extends EventEmitter {
 
     // If it is a Bot's turn to have priority, and we aren't already processing
     if (priorityPlayer?.isBot && !this.thinkingRooms.has(roomId)) {
-      console.log(`[Bot Loop] Bot ${priorityPlayer.name} is thinking...`);
+      const now = Date.now();
+      if (!this.lastBotLog[roomId] || now - this.lastBotLog[roomId] > 5000) {
+        console.log(`[Bot Loop] Bot ${priorityPlayer.name} is thinking...`);
+        this.lastBotLog[roomId] = now;
+      }
       this.thinkingRooms.add(roomId);
 
       setTimeout(() => {
@@ -206,8 +212,18 @@ export class GameManager extends EventEmitter {
 
     if (!bot || !bot.isBot) return;
 
-    // 1. Mulligan: Always Keep
+    // 1. Mulligan: Always Keep (but check if we have cards?)
     if (game.step === 'mulligan') {
+      const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
+      if (hand.length === 0 && !bot.handKept) {
+        // We have NO cards to keep? Something is wrong (deck didn't load?).
+        // Don't loop infinitely trying to keep an empty hand if that's invalid, 
+        // but technically "keeping" 0 cards is just accepting 0 cards.
+        // However, usually this means initialization failed.
+        // We'll log once and stop? Or just keep to unstuck the game?
+        // Let's try to keep.
+        // console.warn(`[Bot AI] ${bot.name} has 0 cards in hand during Mulligan. Initializing?`);
+      }
       if (!bot.handKept) {
         try { engine.resolveMulligan(botId, true, []); } catch (e) { }
       }

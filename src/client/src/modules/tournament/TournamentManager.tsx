@@ -107,6 +107,16 @@ export const TournamentManager: React.FC<TournamentManagerProps> = ({ tournament
                         <Play className="w-4 h-4" /> Play Match
                       </button>
                     )}
+
+                    {/* Resume Button */}
+                    {match.status === 'in_progress' && isMyMatch && (
+                      <button
+                        onClick={() => handleJoinMatch(match.id)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 flex items-center justify-center gap-2 transition-colors animate-pulse"
+                      >
+                        <Play className="w-4 h-4" /> Resume Match
+                      </button>
+                    )}
                   </div>
                 );
               })}

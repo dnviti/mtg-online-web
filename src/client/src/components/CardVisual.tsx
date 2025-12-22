@@ -61,10 +61,14 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     // Robustly resolve Image Source based on viewMode
     let src = card.imageUrl || card.image;
 
+    // Use top-level properties if available (common in DraftCard / Game Card objects)
+    const setCode = card.setCode || card.set || card.definition?.set;
+    const cardId = card.scryfallId || card.definition?.id;
+
     if (viewMode === 'cutout') {
       // Priority 1: Local Cache (standard naming convention) - PREFERRED BY USER
-      if (card.definition?.set && card.definition?.id) {
-        src = `/cards/images/${card.definition.set}/crop/${card.definition.id}.jpg`;
+      if (setCode && cardId) {
+        src = `/cards/images/${setCode}/crop/${cardId}.jpg`;
       }
       // Priority 2: Direct Image URIs (if available) - Fallback
       else if (card.image_uris?.art_crop || card.image_uris?.crop) {
@@ -77,15 +81,19 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       else if (card.definition?.card_faces?.[0]?.image_uris?.art_crop) {
         src = card.definition.card_faces[0].image_uris.art_crop;
       }
-      // Priority 4: If card has a manually set image property that looks like a crop (less reliable)
+      // Priority 4: Server-provided explicit property
+      else if (card.imageArtCrop) {
+        src = card.imageArtCrop;
+      }
 
       // Fallback: If no crop found, src remains whatever it was (likely full)
     } else {
       // Normal / Full View
+
       // Priority 1: Local Cache (standard naming convention) - PREFERRED
-      if (card.definition?.set && card.definition?.id) {
+      if (setCode && cardId) {
         // Check if we want standard full image path
-        src = `/cards/images/${card.definition.set}/full/${card.definition.id}.jpg`;
+        src = `/cards/images/${setCode}/full/${cardId}.jpg`;
       }
       // Priority 2: Direct Image URIs
       else if (card.image_uris?.normal) {

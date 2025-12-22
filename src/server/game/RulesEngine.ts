@@ -615,7 +615,8 @@ export class RulesEngine {
       console.log(`Player ${playerId} draws ${card.name}`);
     } else {
       // Empty library loss?
-      console.log(`Player ${playerId} attempts to draw from empty library.`);
+      // Empty library loss?
+      console.warn(`[RulesEngine] Player ${playerId} attempts to draw from empty library. (Deck size: 0)`);
     }
   }
 

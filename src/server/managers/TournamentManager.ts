@@ -245,7 +245,12 @@ export class TournamentManager extends EventEmitter {
     // Update Player Deck in Tournament Roster
     const player = t.players.find(p => p.id === playerId);
     if (player) {
-      player.deck = deck;
+      if (deck && deck.length > 0) {
+        player.deck = deck;
+      } else if (!player.deck || player.deck.length === 0) {
+        // Only warn if we are missing a deck entirely
+        console.warn(`[Tournament] received empty deck for ${playerId}, and no previous deck found.`);
+      }
     }
 
     // Add to Ready
