@@ -659,15 +659,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             >
               <GestureManager onGesture={handleGesture}>
                 <div
-                  className="w-full h-full relative bg-slate-900/20 border-y border-white/5 shadow-inner flex flex-col"
+                  className="w-full h-full relative flex flex-col overflow-visible"
                   style={{
                     transform: 'rotateX(25deg)',
                     transformOrigin: 'center 40%',
-                    boxShadow: 'inset 0 0 100px rgba(0,0,0,0.8)'
                   }}
                 >
-                  {/* Battlefield Texture/Grid */}
-                  <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:50px_50px] pointer-events-none"></div>
+
 
                   {(() => {
                     const creatures = myBattlefield.filter(c => c.types?.includes('Creature'));
@@ -781,18 +779,16 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
                     return (
                       <>
-                        <div className="flex-1 flex flex-wrap content-end justify-center items-end p-4 gap-2 border-b border-white/5 relative z-10 w-full">
+                        <div className="flex-1 flex flex-wrap content-end justify-center items-end p-4 gap-2 relative z-10 w-full overflow-visible">
                           {creatures.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-                              <span className="text-white text-2xl font-bold uppercase tracking-widest">Combat Zone</span>
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
                             </div>
                           )}
                           {creatures.map(renderCard)}
                         </div>
-                        <div className="min-h-[120px] flex flex-wrap content-center justify-center items-center p-2 gap-2 border-b border-white/5 relative z-0 w-full bg-slate-900/30">
+                        <div className="min-h-[120px] flex flex-wrap content-center justify-center items-center p-2 gap-2 relative z-0 w-full overflow-visible">
                           {others.length > 0 ? others.map(renderCard) : (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
-                              <span className="text-white text-xs font-bold uppercase tracking-widest">Artifacts & Enchantments</span>
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
                             </div>
                           )}
                         </div>
@@ -811,7 +807,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                   key={card.instanceId}
                                   className="absolute origin-center"
                                   style={{
-                                    transform: `translate(${i * 2}px, ${i * -2}px)`,
+                                    transform: `translate(${i * 3}px, ${i * -3}px)`,
                                     zIndex: i,
                                   }}
                                 >
@@ -822,7 +818,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                           )}
 
                           {/* Untapped Lands */}
-                          <div className="flex flex-wrap gap-1 content-start items-start justify-center">
+                          <div className="flex flex-wrap gap-1 content-start items-start justify-start">
                             {untappedLands.map(renderCard)}
                           </div>
                         </div>
