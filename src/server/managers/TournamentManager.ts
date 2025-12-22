@@ -41,7 +41,7 @@ export class TournamentManager extends EventEmitter {
     // Calc next power of 2
     const total = shuffled.length;
     const size = Math.pow(2, Math.ceil(Math.log2(total)));
-    const byes = size - total;
+    // const byes = size - total;
 
     // Distribute byes? Simple method: Add "Bye" players, then resolved them immediately.
     // Actually, let's keep it robust.

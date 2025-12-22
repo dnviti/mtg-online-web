@@ -163,7 +163,9 @@ export class RulesEngine {
     if (this.state.phase !== 'combat' || this.state.step !== 'declare_blockers') throw new Error("Not Declare Blockers step.");
     if (this.state.activePlayerId === playerId) throw new Error("Active Player cannot declare blockers.");
 
-    blockers.forEach(({ blockerId, attackerId }) => {
+    // Safe handling if blockers is undefined
+    const declaredBlockers = blockers || [];
+    declaredBlockers.forEach(({ blockerId, attackerId }) => {
       const blocker = this.state.cards[blockerId];
       const attacker = this.state.cards[attackerId];
 
@@ -178,7 +180,9 @@ export class RulesEngine {
       // Note: 509.2. Damage Assignment Order (if multiple blockers)
     });
 
-    console.log(`Player ${playerId} declared ${blockers.length} blockers.`);
+    console.log(`Player ${playerId} declared ${declaredBlockers.length} blockers.`);
+
+    this.state.blockersDeclared = true; // Fix: Ensure state reflects blockers were declared
 
     // Priority goes to Active Player first after blockers declared
     this.resetPriority(this.state.activePlayerId);

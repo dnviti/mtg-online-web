@@ -47,7 +47,7 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
 
     if (currentStep === 'declare_attackers') {
       if (gameState.attackersDeclared) {
-        actionLabel = "Confirm (Blockers)";
+        actionLabel = "To Blockers";
         actionType = 'PASS_PRIORITY';
       } else {
         const count = contextData?.attackers?.length || 0;
@@ -63,10 +63,24 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
         }
       }
     } else if (currentStep === 'declare_blockers') {
-      actionLabel = "Confirm Blocks";
-      actionType = 'DECLARE_BLOCKERS';
-      ActionIcon = Shield;
-      actionColor = "bg-blue-600 hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]";
+      // If it's MY turn (Active Player), I should NEVER verify blocks myself?
+      // Actually Rules say AP gets priority after blocks.
+      // So if I have priority, it MUST mean blocks are done (or I'm waiting for them, but then I wouldn't have priority?)
+      // Wait, if I am AP, and I have priority in this step, it means blocks are implicitly done (flag should be true).
+      // Fallback: If I am Active Player, always show "To Damage".
+
+      const showToDamage = gameState.blockersDeclared || isMyTurn; // UI Safety for AP
+
+      if (showToDamage) {
+        actionLabel = "To Damage";
+        actionType = 'PASS_PRIORITY';
+        ActionIcon = Swords;
+      } else {
+        actionLabel = "Confirm Blocks";
+        actionType = 'DECLARE_BLOCKERS';
+        ActionIcon = Shield;
+        actionColor = "bg-blue-600 hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]";
+      }
     } else if (isStackEmpty) {
       // Standard Pass
       actionType = 'PASS_PRIORITY';

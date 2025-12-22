@@ -58,6 +58,7 @@ interface GameViewProps {
 }
 
 export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }) => {
+  const hasPriority = gameState.priorityPlayerId === currentPlayerId;
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
   // If useGameSocket is not defined elsewhere, this will cause an error.
@@ -97,15 +98,114 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     }
   }, [isYielding, gameState.priorityPlayerId, gameState.step, currentPlayerId]);
 
-  // Reset Yield on Turn Change
+  // Auto-Yield Logic (Smart Yield against Bot)
+  const activePlayer = gameState.activePlayerId ? gameState.players[gameState.activePlayerId] : undefined;
+  const isBotTurn = activePlayer?.isBot;
+
+  // Ref to track turn changes to force reset yield
+  const prevActivePlayerId = useRef(gameState.activePlayerId);
+
   useEffect(() => {
-    // If turn changes or phase changes significantly? F4 is until EOT.
-    // We can reset if it's my turn again? Or just let user toggle.
-    // Strict F4 resets at cleanup.
-    if (gameState.step === 'cleanup') {
+    // 1. Detect Turn Change (Active Player changed)
+    if (prevActivePlayerId.current !== gameState.activePlayerId) {
+      // Reset yield strictly on any turn change to prevent leakage
       setIsYielding(false);
+      prevActivePlayerId.current = gameState.activePlayerId;
+      // Logic continues below to re-enable if it IS a bot turn...
     }
-  }, [gameState.step]);
+
+    if (isBotTurn) {
+      // Enforce Yielding during Bot turn (except combat decisions)
+      if (['declare_attackers', 'declare_blockers'].includes(gameState.step || '')) {
+        // Must pause yield for decisions
+        setIsYielding(false);
+        // Note: We don't check !isYielding here because if it was true, we want false. 
+        // If it was false, we keep false. 
+        // But we can't condtionally call setIsYielding based on isYielding inside effect IF the effect has isYielding dependency...
+        // Wait, if I set it to false, isYielding changes -> effect runs again.
+        // It enters here. isYielding is false. checks... checks...
+        // It hit this block. We want it false. It is false. No-op. Stable.
+      } else {
+        // Standard Bot Phase -> Yield
+        // However, we must be careful not to infinite loop if we already set it.
+        // BUT, we just set it to false above if turn changed! 
+        // So for Bot Turn start: 
+        // 1. Turn Change detected -> isYielding = false.
+        // 2. isBotTurn is true.
+        // 3. We enter here. We want isYielding = true.
+        // 4. setIsYielding(true).
+        // 5. Render. Effect runs again.
+        // 6. Turn Change NOT detected. matches.
+        // 7. isBotTurn true.
+        // 8. checks isYielding (true). No-op. Stable.
+
+        // One issue: if I manually "Stop Yielding" during bot turn (e.g. to inspect), 
+        // this logic will FORCE it back on.
+        // That is acceptable for "Auto-Yield vs Bot". Bot turn = You don't play.
+        // If you want to Inspect, inspecting doesn't require priority.
+        // If you want to STOP the game to do something... well, you don't have priority anyway.
+        // So forcing Yield on Bot turn is correct per requirements.
+
+        // Only verify we don't set it if it's already true
+        setIsYielding(prev => {
+          if (prev) return prev; // already true
+          return true;
+        });
+      }
+    } else {
+      // Human Turn
+      // We do NOTHING here?
+      // If we reset on turn change, then it starts false.
+      // If I manually enable it, isBotTurn is false. We simply don't interfere.
+      // This allows accurate Manual Yielding!
+    }
+  }, [gameState.activePlayerId, gameState.step, isBotTurn]); // Removed isYielding dependency to avoid loops?
+  // If I access `isYielding` inside `setIsYielding`, I don't need it in dependency.
+  // But wait, the `if (['declare_...'].includes)` logic needs to potentially set it false.
+  // setIsYielding(false) is fine.
+  // The logic seems sound without isYielding in dependency, assuming stable behavior.
+  // BUT: `prevActivePlayerId` check needs stable run.
+
+  // Let's keep `isYielding` in deps if I read it? 
+  // I replaced reads with functional updates or just strict sets?
+  // "if (isYielding) setIsYielding(false)" -> simply "setIsYielding(false)" is safer/idempotent if efficient.
+  // React state updates bail out if same value.
+
+  // BUT wait, if I remove `isYielding` from deps, and I toggle it manually...
+  // The effect WON'T run.
+  // If I toggle manual yield on My Turn. Effect doesn't run. Correct (we don't want it to interfere).
+
+  // If I am in Bot Turn, and I somehow toggle it false? (Button click).
+  // Effect doesn't run. isYielding stays false.
+  // Bot waits forever? No, bot logic (server) continues.
+  // Client just doesn't auto-pass.
+  // But we WANT to force it.
+  // So we SHOULD depend on `isYielding` so if user turns it off, we force it back on?
+  // No, if user turns it off, maybe they want to see?
+  // User Requirement: "Auto-Yield".
+  // If I rely on `isYielding` in deps, I risk the loop again.
+  // Let's try WITHOUT `isYielding` in deps first.
+  // This means if I turn it off, it stays off until next step change or phase change.
+  // Because `gameState.step` IS in deps.
+  // So if step advances, effect runs -> sees Bot Turn -> Forces True.
+  // This is good behavior. Re-enables each step.
+
+  // So, removing isYielding from dependencies seems robust.
+
+  // One catch: `['declare_attackers']`.
+  // If step is declare_attackers. Effect runs.
+  // Forces isYielding(false).
+  // User manually clicks yield (true).
+  // Effect doesn't run.
+  // isYielding stays true.
+  // This might be BAD if we want to enforce safety?
+  // If user yields in declare_attackers... they yield their chance to attack.
+  // That's on them.
+  // But the "Flickering" issue was us fighting them.
+  // If we don't react to isYielding change, we won't fight.
+  // This solves flickering definitively too.
+
+  // Final Plan: Use the logic block above, remove isYielding from deps.
 
   // --- Combat State ---
   const [proposedAttackers, setProposedAttackers] = useState<Set<string>>(new Set());
@@ -323,6 +423,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     const cardId = active.id as string;
     const card = gameState.cards[cardId];
     if (!card) return;
+
+    if (!hasPriority) return; // Strict Lock on executing drops
 
     // --- Drop on Zone ---
     if (over.data.current?.type === 'zone') {
@@ -593,18 +695,21 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                             boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none'
                           }}
                         >
-                          <DraggableCardWrapper card={card}>
+                          <DraggableCardWrapper card={card} disabled={!hasPriority}>
                             <CardComponent
                               card={card}
                               viewMode="cutout"
                               onDragStart={() => { }}
                               onClick={(id) => {
                                 if (gameState.step === 'declare_attackers') {
+                                  // Attack declaration is special: It happens during the "Pause" where AP has priority but isn't passing yet.
+                                  // We allow toggling attackers if it's our turn to attack.
+                                  if (gameState.activePlayerId !== currentPlayerId) return;
+
                                   // Validate Creature Type
                                   const types = card.types || [];
                                   const typeLine = card.typeLine || '';
                                   if (!types.includes('Creature') && !typeLine.includes('Creature')) {
-                                    // Optional: Shake effect or visual feedback that it's invalid
                                     return;
                                   }
 
@@ -612,7 +717,46 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                   if (newSet.has(id)) newSet.delete(id);
                                   else newSet.add(id);
                                   setProposedAttackers(newSet);
+                                } else if (gameState.step === 'declare_blockers') {
+                                  // BLOCKING LOGIC
+                                  // Only Defending Player (NOT active player) can declare blockers
+                                  if (gameState.activePlayerId === currentPlayerId) return;
+
+                                  // Check eligibility (Untapped Creature)
+                                  if (card.tapped) return;
+                                  const types = card.types || [];
+                                  if (!types.includes('Creature') && !card.typeLine?.includes('Creature')) return;
+
+                                  // Find all Valid Attackers
+                                  // Attackers are cards in opponent's control that are marked 'attacking'
+                                  const attackers = Object.values(gameState.cards).filter(c =>
+                                    c.controllerId !== currentPlayerId && c.attacking
+                                  );
+
+                                  if (attackers.length === 0) return; // Nothing to block
+
+                                  const currentTargetId = proposedBlockers.get(id);
+                                  const newMap = new Map(proposedBlockers);
+
+                                  if (!currentTargetId) {
+                                    // Not currently blocking -> Block the first attacker
+                                    newMap.set(id, attackers[0].instanceId);
+                                  } else {
+                                    // Currently blocking -> Cycle to next attacker OR unblock if at end of list
+                                    const currentIndex = attackers.findIndex(a => a.instanceId === currentTargetId);
+                                    if (currentIndex === -1 || currentIndex === attackers.length - 1) {
+                                      // Was blocking last one (or invalid), so Unblock
+                                      newMap.delete(id);
+                                    } else {
+                                      // Cycle to next
+                                      newMap.set(id, attackers[currentIndex + 1].instanceId);
+                                    }
+                                  }
+                                  setProposedBlockers(newMap);
+
                                 } else {
+                                  // Regular Tap (Mana/Ability)
+                                  if (!hasPriority) return;
                                   toggleTap(id);
                                 }
                               }}
@@ -772,7 +916,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                         zIndex: index
                       }}
                     >
-                      <DraggableCardWrapper card={card}>
+                      <DraggableCardWrapper card={card} disabled={!hasPriority}>
                         <CardComponent
                           card={card}
                           viewMode="normal"

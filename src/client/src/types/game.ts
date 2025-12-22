@@ -67,6 +67,7 @@ export interface PlayerState {
   manaPool?: Record<string, number>;
   handKept?: boolean;
   mulliganCount?: number;
+  isBot?: boolean;
 }
 
 export interface GameState {

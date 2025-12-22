@@ -4,6 +4,9 @@ import { RulesEngine } from '../game/RulesEngine';
 
 import { EventEmitter } from 'events';
 
+// Augment EventEmitter to type the emit event if we could, but for now standard.
+// We expect SocketService to listen to 'game_update' from GameManager.
+
 export class GameManager extends EventEmitter {
   public games: Map<string, StrictGameState> = new Map();
 
@@ -56,19 +59,15 @@ export class GameManager extends EventEmitter {
     return gameState;
   }
 
+  // Track rooms where a bot is currently "thinking" to avoid double-queuing
+  private thinkingRooms: Set<string> = new Set();
+
   // Helper to trigger bot actions if game is stuck or just started
   public triggerBotCheck(roomId: string): StrictGameState | null {
     const game = this.games.get(roomId);
     if (!game) return null;
 
-    const MAX_LOOPS = 50;
-    let loops = 0;
-    // Iterate if current priority player is bot, OR if we are in Mulligan and ANY bot needs to act?
-    // My processBotActions handles priorityPlayerId.
-    // In Mulligan, does priorityPlayerId matter?
-    // RulesEngine: resolveMulligan checks playerId.
-    // We should iterate ALL bots in mulligan phase.
-
+    // specific hack for Mulligan phase synchronization
     if (game.step === 'mulligan') {
       Object.values(game.players).forEach(p => {
         if (p.isBot && !p.handKept) {
@@ -76,13 +75,37 @@ export class GameManager extends EventEmitter {
           try { engine.resolveMulligan(p.id, true, []); } catch (e) { }
         }
       });
-      // After mulligan, game might auto-advance.
+      // If bots acted in mulligan, we might need to verify if game advances.
+      // But for Mulligan, we don't need delays as much because it's a hidden phase usually.
+      // Let's keep mulligan instant for simplicity, or we can delay it too?
+      // Let's keep instant for mulligan to "Start Game" faster.
     }
 
-    while (game.players[game.priorityPlayerId]?.isBot && loops < MAX_LOOPS) {
-      loops++;
-      this.processBotActions(game);
+    const priorityId = game.priorityPlayerId;
+    const priorityPlayer = game.players[priorityId];
+
+    // If it is a Bot's turn to have priority, and we aren't already processing
+    if (priorityPlayer?.isBot && !this.thinkingRooms.has(roomId)) {
+      console.log(`[Bot Loop] Bot ${priorityPlayer.name} is thinking...`);
+      this.thinkingRooms.add(roomId);
+
+      setTimeout(() => {
+        this.thinkingRooms.delete(roomId);
+        this.processBotActions(game);
+        // After processing one action, we trigger check again to see if we need to do more (e.g. Pass -> Pass -> My Turn)
+        // But we need to emit the update first! 
+        // processBotActions actually mutates state. 
+        // We should ideally emit 'game_update' here if we were outside the main socket loop.
+        // Since GameManager doesn't have the SocketService instance directly usually, 
+        // strictly speaking we need to rely on the caller to emit, OR GameManager should emit.
+        // GameManager extends EventEmitter. We can emit 'state_change'.
+        this.emit('game_update', roomId, game); // Force emit update
+
+        // Recursive check (will trigger next timeout if still bot's turn)
+        this.triggerBotCheck(roomId);
+      }, 1000);
     }
+
     return game;
   }
 
@@ -149,30 +172,8 @@ export class GameManager extends EventEmitter {
       return null;
     }
 
-    // Bot Cycle: If priority passed to a bot, or it's a bot's turn to act
-    const MAX_LOOPS = 50;
-    let loops = 0;
-
-    // Special Bot Handling for Mulligan (Simultaneous actions allowed, or strict priority ignored by bots)
-    if (game.step === 'mulligan') {
-      console.log(`[GameManager] Checking Bot Mulligans for ${game.roomId}`);
-      Object.values(game.players).forEach(p => {
-        if (p.isBot && !p.handKept) {
-          console.log(`[GameManager] Forcing Bot ${p.name} to keep hand.`);
-          try {
-            // Bots always keep for now
-            engine.resolveMulligan(p.id, true, []);
-          } catch (e) {
-            console.warn(`[Bot Mulligan Error] ${p.name}:`, e);
-          }
-        }
-      });
-    }
-
-    while (game.players[game.priorityPlayerId]?.isBot && loops < MAX_LOOPS) {
-      loops++;
-      this.processBotActions(game);
-    }
+    // Bot Cycle: Trigger Async Check (Instead of synchronous loop)
+    this.triggerBotCheck(roomId);
 
     // Check Win Condition
     this.checkWinCondition(game, roomId);
@@ -253,12 +254,18 @@ export class GameManager extends EventEmitter {
         c.controllerId === botId &&
         c.zone === 'battlefield' &&
         c.types.includes('Creature') &&
-        !c.tapped
+        !c.tapped &&
+        !c.keywords.includes('Defender') // Simple check
       );
+
       const opponents = game.turnOrder.filter(pid => pid !== botId);
       const targetId = opponents[0];
 
+      // Simple Heuristic: Attack with everything if we have profitable attacks?
+      // For now: Attack with everything that isn't summon sick or defender.
       if (attackers.length > 0 && targetId) {
+        // Randomly decide to attack to simulate "thinking" or non-suicidal behavior? 
+        // For MVP: Aggro Bot - always attacks.
         const declaration = attackers.map(c => ({ attackerId: c.instanceId, targetId }));
         console.log(`[Bot AI] ${bot.name} attacks with ${attackers.length} creatures.`);
         try { engine.declareAttackers(botId, declaration); } catch (e) { }
@@ -270,8 +277,63 @@ export class GameManager extends EventEmitter {
       }
     }
 
-    // 6. Default: Pass Priority
-    try { engine.passPriority(botId); } catch (e) { console.warn("Bot failed to pass priority", e); }
+    // 5. Combat: Declare Blockers (Defending Player)
+    if (game.step === 'declare_blockers' && game.activePlayerId !== botId && !game.blockersDeclared) {
+      // Identify attackers attacking ME
+      const attackers = Object.values(game.cards).filter(c => c.attacking === botId);
+
+      if (attackers.length > 0) {
+        // Identify my blockers
+        const blockers = Object.values(game.cards).filter(c =>
+          c.controllerId === botId &&
+          c.zone === 'battlefield' &&
+          c.types.includes('Creature') &&
+          !c.tapped
+        );
+
+        // Simple Heuristic: Block 1-to-1 if possible, just to stop damage.
+        // Don't double block.
+        const declaration: { blockerId: string, attackerId: string }[] = [];
+
+        blockers.forEach((blocker, idx) => {
+          if (idx < attackers.length) {
+            declaration.push({ blockerId: blocker.instanceId, attackerId: attackers[idx].instanceId });
+          }
+        });
+
+        if (declaration.length > 0) {
+          console.log(`[Bot AI] ${bot.name} declares ${declaration.length} blockers.`);
+          try { engine.declareBlockers(botId, declaration); } catch (e) { }
+          return;
+        }
+      }
+
+      // Default: No blocks
+      console.log(`[Bot AI] ${bot.name} declares no blockers.`);
+      try { engine.declareBlockers(botId, []); } catch (e) { }
+      return;
+    }
+
+    // 6. End Step / Cleanup -> Pass
+    if (game.phase === 'ending') {
+      try { engine.passPriority(botId); } catch (e) { }
+      return;
+    }
+
+    // 7. Default: Pass Priority (Catch-all for response windows, or empty stack)
+    // Add artificial delay logic here? Use setTimeout? 
+    // We can't easily wait in this synchronous loop. The loop relies on state updating.
+    // If we want delay, we should likely return from the loop and use `setTimeout` to call `triggerBotCheck` again?
+    // But `handleStrictAction` expects immediate return.
+    // Ideally, the BOT actions should happen asynchronously if we want delay.
+    // For now, we accept instant-speed bots.
+
+    // console.log(`[Bot AI] ${bot.name} passes priority.`);
+    try { engine.passPriority(botId); } catch (e) {
+      console.warn("Bot failed to pass priority", e);
+      // Force break loop if we are stuck?
+      // RulesEngine.passPriority usually always succeeds if it's your turn.
+    }
   }
 
 

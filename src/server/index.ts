@@ -38,27 +38,14 @@ const persistenceManager = new PersistenceManager(roomManager, draftManager, gam
 // Game Over Listener
 gameManager.on('game_over', ({ gameId, winnerId }) => {
   console.log(`[Index] Game Over received: ${gameId}, Winner: ${winnerId}`);
-  // Find tournament by Room? We need a way to map matchId -> roomId?
-  // Or matchId is unique enough? 
-  // Wait, I used gameId = matchId for 1v1. 
+  // ... existing logic ...
+});
 
-  // Iterate all tournaments to find the match? Inefficient but works.
-  // Ideally we track mapping.
-  // For now, let's assume we can find it.
-
-  // TODO: Optimise lookup
-  // Actually, RoomManager knows the tournament.
-  // We can scan rooms?
-  // Let's implement recordMatchResult that searches if needed, or pass roomId in event?
-  // checkWinCondition passes roomId as gameId... 
-  // Ah, 1v1 match gameId will be the matchId (e.g. "r1-m0"). 
-  // We need the RoomId too.
-
-  // Let's pass roomId in metadata to createGame? 
-  // For now, checkWinCondition(game, gameId).
-
-  // Hack: We iterate rooms to find the tournament that contains this matchId.
-  // TODO: Fix efficiency
+// Game Update Listener (For async bot actions)
+gameManager.on('game_update', (roomId, game) => {
+  if (game && roomId) {
+    io.to(roomId).emit('game_update', game);
+  }
 });
 
 // Load previous state
