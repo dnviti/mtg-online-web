@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { GameState, Phase, Step } from '../../types/game';
-import { Shield, Swords, Hourglass, Zap, Hand, ChevronRight, XCircle, Play, RotateCcw, Clock, Files, Crosshair, Skull, Flag, Moon, Trash2 } from 'lucide-react';
+import { ManaIcon } from '../../components/ManaIcon';
+import { Shield, Swords, Hourglass, Zap, Hand, ChevronRight, XCircle, Play, Clock, Files, Crosshair, Skull, Flag, Moon, Trash2 } from 'lucide-react';
 
 interface PhaseStripProps {
   gameState: GameState;
@@ -115,7 +116,7 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
   }
 
   const stepsList: VisualStep[] = useMemo(() => [
-    { id: 'untap', label: 'Untap', icon: RotateCcw, phase: 'beginning', step: 'untap' },
+    { id: 'untap', label: 'Untap', icon: (props: any) => <ManaIcon symbol="untap" className="text-current" {...props} />, phase: 'beginning', step: 'untap' },
     { id: 'upkeep', label: 'Upkeep', icon: Clock, phase: 'beginning', step: 'upkeep' },
     { id: 'draw', label: 'Draw', icon: Files, phase: 'beginning', step: 'draw' },
     { id: 'main1', label: 'Main 1', icon: Zap, phase: 'main1', step: 'main' },

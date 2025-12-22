@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { ChevronLeft, Eye, RotateCcw } from 'lucide-react';
+import { ManaIcon } from '../../components/ManaIcon';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { GameState, CardInstance } from '../../types/game';
@@ -15,6 +16,7 @@ import { GestureManager } from './GestureManager';
 import { MulliganView } from './MulliganView';
 import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
+import { formatOracleText } from '../../utils/textUtils';
 
 // --- DnD Helpers ---
 const DraggableCardWrapper = ({ children, card, disabled }: { children: React.ReactNode, card: CardInstance, disabled?: boolean }) => {
@@ -224,12 +226,12 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
       if (card) {
         setRadialPosition({ x: payload.x || window.innerWidth / 2, y: payload.y || window.innerHeight / 2 });
         setRadialOptions([
-          { id: 'W', label: 'White', color: '#f0f2eb', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'W' } }) },
-          { id: 'U', label: 'Blue', color: '#aae0fa', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'U' } }) },
-          { id: 'B', label: 'Black', color: '#cbc2bf', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'B' } }) },
-          { id: 'R', label: 'Red', color: '#f9aa8f', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'R' } }) },
-          { id: 'G', label: 'Green', color: '#9bd3ae', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'G' } }) },
-          { id: 'C', label: 'Colorless', color: '#ccc2c0', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'C' } }) },
+          { id: 'W', label: 'White', icon: <ManaIcon symbol="w" size="2x" shadow />, color: '#f0f2eb', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'W' } }) },
+          { id: 'U', label: 'Blue', icon: <ManaIcon symbol="u" size="2x" shadow />, color: '#aae0fa', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'U' } }) },
+          { id: 'B', label: 'Black', icon: <ManaIcon symbol="b" size="2x" shadow />, color: '#cbc2bf', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'B' } }) },
+          { id: 'R', label: 'Red', icon: <ManaIcon symbol="r" size="2x" shadow />, color: '#f9aa8f', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'R' } }) },
+          { id: 'G', label: 'Green', icon: <ManaIcon symbol="g" size="2x" shadow />, color: '#9bd3ae', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'G' } }) },
+          { id: 'C', label: 'Colorless', icon: <ManaIcon symbol="c" size="2x" shadow />, color: '#ccc2c0', onSelect: () => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', color: 'C' } }) },
         ]);
       }
       return;
@@ -543,7 +545,12 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     <h3 className="text-lg font-bold text-slate-200 leading-tight">{hoveredCard.name}</h3>
 
                     {hoveredCard.manaCost && (
-                      <p className="text-sm text-slate-400 mt-1 font-mono tracking-widest">{hoveredCard.manaCost}</p>
+                      <div className="mt-1 flex items-center text-slate-400">
+                        {hoveredCard.manaCost.match(/\{([^}]+)\}/g)?.map((s, i) => {
+                          const sym = s.replace(/[{}]/g, '').toLowerCase().replace('/', '');
+                          return <ManaIcon key={i} symbol={sym} shadow className="text-base mr-0.5" />;
+                        }) || <span className="font-mono">{hoveredCard.manaCost}</span>}
+                      </div>
                     )}
 
                     {hoveredCard.typeLine && (
@@ -552,9 +559,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                       </div>
                     )}
 
+
                     {hoveredCard.oracleText && (
-                      <div className="text-sm text-slate-300 text-left bg-slate-900/50 p-3 rounded-lg border border-slate-800 whitespace-pre-wrap leading-relaxed shadow-inner">
-                        {hoveredCard.oracleText}
+                      <div className="text-sm text-slate-300 text-left bg-slate-900/50 p-3 rounded-lg border border-slate-800 leading-relaxed shadow-inner">
+                        {formatOracleText(hoveredCard.oracleText)}
                       </div>
                     )}
                   </div>
@@ -938,20 +946,15 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               </div>
 
               {/* Mana Pool Display */}
+              {/* Mana Pool Display */}
               <div className="w-full bg-slate-800/50 rounded-lg p-2 grid grid-cols-3 gap-x-1 gap-y-1 border border-white/5">
                 {['W', 'U', 'B', 'R', 'G', 'C'].map(color => {
                   const count = myPlayer?.manaPool?.[color] || 0;
-                  const icons: Record<string, string> = {
-                    W: '☀️', U: '💧', B: '💀', R: '🔥', G: '🌳', C: '💎'
-                  };
-                  const colors: Record<string, string> = {
-                    W: 'text-yellow-100', U: 'text-blue-300', B: 'text-slate-400', R: 'text-red-400', G: 'text-green-400', C: 'text-slate-300'
-                  };
-
+                  // Use ManaIcon instead of emojis
                   return (
                     <div key={color} className="flex flex-col items-center">
-                      <div className={`text-xs ${colors[color]} font-bold flex items-center gap-1`}>
-                        {icons[color]}
+                      <div className={`text-xs font-bold flex items-center gap-1`}>
+                        <ManaIcon symbol={color.toLowerCase()} size="lg" shadow />
                       </div>
 
                       <div className="flex items-center gap-1 mt-1">
