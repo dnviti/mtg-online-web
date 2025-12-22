@@ -126,6 +126,15 @@ export class GameManager {
         case 'MULLIGAN_DECISION':
           engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);
           break;
+        case 'DRAW_CARD':
+          // Strict validation: Must be Draw step, Must be Active Player
+          if (game.step !== 'draw') throw new Error("Can only draw in Draw Step.");
+          if (game.activePlayerId !== actorId) throw new Error("Only Active Player can draw.");
+
+          engine.drawCard(actorId);
+          // After drawing, 504.2 says AP gets priority.
+          engine.resetPriority(actorId);
+          break;
         // TODO: Activate Ability
         default:
           console.warn(`Unknown strict action: ${action.type}`);

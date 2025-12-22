@@ -454,9 +454,38 @@ export class RulesEngine {
 
     // 2. Draw Step
     if (step === 'draw') {
+      const player = this.state.players[activePlayerId];
       if (this.state.turnCount > 1 || this.state.turnOrder.length > 2) {
-        this.drawCard(activePlayerId);
+        // If Bot: Auto Draw
+        if (player && player.isBot) {
+          console.log(`[Auto] Bot ${player.name} drawing card.`);
+          this.drawCard(activePlayerId);
+          // After draw, AP priority
+          this.resetPriority(activePlayerId);
+        } else {
+          // If Human: Wait for Manual Action
+          console.log(`[Manual] Waiting for Human ${player?.name} to draw.`);
+          // We do NOT call drawCard here.
+          // We DO reset priority to them so they can take the action?
+          // Actually, if we are in 'draw' step, strict rules say AP gets priority.
+          // Yet, the "Turn Based Action" of drawing usually happens *immediately* at start of step, BEFORE priority.
+          // 504.1. First, the active player draws a card. This turn-based action doesn't use the stack.
+          // 504.2. Second, the active player gets priority.
+          // So for "Manual" feeling, we pause BEFORE 504.1 is considered "done"?
+          // Effectively, we treat the "DRAW_CARD" action as the completion of 504.1.
+
+          // Ensure they are the priority player so the UI lets them act (if we key off priority)
+          // But strict action validation for DRAW_CARD will check if they are AP and in Draw step.
+          if (this.state.priorityPlayerId !== activePlayerId) {
+            this.state.priorityPlayerId = activePlayerId;
+          }
+        }
+      } else {
+        // Skip draw (Turn 1 in 2p game)
+        console.log("Skipping Draw (Turn 1 2P).");
+        this.resetPriority(activePlayerId);
       }
+      return;
     }
 
     // 3. Cleanup Step

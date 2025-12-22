@@ -797,10 +797,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           </DroppableZone>
 
           {/* Bottom Area: Controls & Hand */}
-          <div className="h-48 relative z-20 flex bg-gradient-to-t from-black to-slate-900/80 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
+          <div className="h-64 relative z-20 flex bg-gradient-to-t from-black to-slate-900/80 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
 
-            {/* Left Controls: Library/Grave */}
-            <div className="w-40 p-2 flex flex-col gap-2 items-center justify-center border-r border-white/10">
+            {/* Left Controls: Library/Grave/Exile */}
+            <div className="w-40 p-2 flex flex-col gap-2 items-center justify-start pt-6 border-r border-white/10">
               {/* Phase Strip Integration */}
               <div className="mb-2 scale-75 origin-center">
                 <PhaseStrip gameState={gameState} />
@@ -839,6 +839,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   </div>
                 </DroppableZone>
               </div>
+
+              <DroppableZone id="exile" data={{ type: 'zone' }} className="w-full text-center border-t border-white/10 mt-2 pt-2 cursor-pointer hover:bg-white/5 rounded p-1">
+                <div onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'exile')}>
+                  <span className="text-xs text-slate-500 block">Exile</span>
+                  <span className="text-lg font-bold text-slate-400">{myExile.length}</span>
+                </div>
+              </DroppableZone>
             </div>
 
             {/* Hand Area & Smart Button */}
@@ -890,7 +897,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             </div>
 
             {/* Right Controls: Exile / Life */}
-            <div className="w-40 p-2 flex flex-col gap-4 items-center justify-between border-l border-white/10 py-4">
+            <div className="w-52 p-2 flex flex-col gap-2 items-center justify-between border-l border-white/10 py-2">
               <div className="text-center w-full relative">
                 <button
                   className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
@@ -910,18 +917,18 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 </button>
 
                 <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Your Life</div>
-                <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-700 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">
+                <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-700 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">
                   {myPlayer?.life}
                 </div>
-                <div className="flex gap-1 mt-2 justify-center">
+                <div className="flex gap-1 mt-1 justify-center">
                   <button
-                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-red-500/20 text-red-500 border border-slate-700 hover:border-red-500 transition-colors flex items-center justify-center font-bold"
+                    className="w-6 h-6 rounded-full bg-slate-800 hover:bg-red-500/20 text-red-500 border border-slate-700 hover:border-red-500 transition-colors flex items-center justify-center font-bold"
                     onClick={() => socketService.socket.emit('game_action', { action: { type: 'UPDATE_LIFE', amount: -1 } })}
                   >
                     -
                   </button>
                   <button
-                    className="w-8 h-8 rounded-full bg-slate-800 hover:bg-emerald-500/20 text-emerald-500 border border-slate-700 hover:border-emerald-500 transition-colors flex items-center justify-center font-bold"
+                    className="w-6 h-6 rounded-full bg-slate-800 hover:bg-emerald-500/20 text-emerald-500 border border-slate-700 hover:border-emerald-500 transition-colors flex items-center justify-center font-bold"
                     onClick={() => socketService.socket.emit('game_action', { action: { type: 'UPDATE_LIFE', amount: 1 } })}
                   >
                     +
@@ -930,7 +937,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               </div>
 
               {/* Mana Pool Display */}
-              <div className="w-full bg-slate-800/50 rounded-lg p-2 flex flex-wrap justify-between gap-1 border border-white/5">
+              <div className="w-full bg-slate-800/50 rounded-lg p-2 grid grid-cols-3 gap-x-1 gap-y-1 border border-white/5">
                 {['W', 'U', 'B', 'R', 'G', 'C'].map(color => {
                   const count = myPlayer?.manaPool?.[color] || 0;
                   const icons: Record<string, string> = {
@@ -941,20 +948,34 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   };
 
                   return (
-                    <div key={color} className={`flex flex-col items-center w-[30%] ${count > 0 ? 'opacity-100 scale-110 font-bold' : 'opacity-30'} transition-all`}>
-                      <div className={`text-xs ${colors[color]}`}>{icons[color]}</div>
-                      <div className="text-sm font-mono">{count}</div>
+                    <div key={color} className="flex flex-col items-center">
+                      <div className={`text-xs ${colors[color]} font-bold flex items-center gap-1`}>
+                        {icons[color]}
+                      </div>
+
+                      <div className="flex items-center gap-1 mt-1">
+                        <button
+                          className="w-4 h-4 flex items-center justify-center rounded bg-slate-700 hover:bg-red-900/50 text-red-500 text-[10px] disabled:opacity-30 disabled:hover:bg-slate-700"
+                          onClick={() => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', mana: { color, amount: -1 } } })}
+                          disabled={count <= 0}
+                        >
+                          -
+                        </button>
+                        <span className={`text-sm font-mono w-4 text-center ${count > 0 ? 'text-white font-bold' : 'text-slate-500'}`}>
+                          {count}
+                        </span>
+                        <button
+                          className="w-4 h-4 flex items-center justify-center rounded bg-slate-700 hover:bg-emerald-900/50 text-emerald-500 text-[10px] hover:text-emerald-400"
+                          onClick={() => socketService.socket.emit('game_strict_action', { action: { type: 'ADD_MANA', mana: { color, amount: 1 } } })}
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
 
-              <DroppableZone id="exile" data={{ type: 'zone' }} className="w-full text-center border-t border-white/5 pt-2 cursor-pointer hover:bg-white/5 rounded p-1">
-                <div onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'exile')}>
-                  <span className="text-xs text-slate-500 block">Exile Drop Zone</span>
-                  <span className="text-lg font-bold text-slate-400">{myExile.length}</span>
-                </div>
-              </DroppableZone>
             </div>
 
           </div>
