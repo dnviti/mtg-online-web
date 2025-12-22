@@ -346,7 +346,7 @@ const draftInterval = setInterval(() => {
                 scryfallId: card.scryfallId || card.id || card.definition?.id,
                 setCode: card.setCode || card.set || card.definition?.set,
                 name: card.name,
-                imageUrl: "", // Optimisation: Client hydrates from cache
+                imageUrl: card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "",
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',
@@ -683,7 +683,7 @@ io.on('connection', (socket) => {
               scryfallId: card.scryfallId || card.id || card.definition?.id,
               setCode: card.setCode || card.set || card.definition?.set,
               name: card.name,
-              imageUrl: "", // Optimisation: Client hydrates from cache
+              imageUrl: card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "",
               zone: 'library',
               typeLine: card.typeLine || card.type_line || '',
               oracleText: card.oracleText || card.oracle_text || '',

@@ -445,7 +445,7 @@ export class GameManager extends EventEmitter {
       toughness: 0,
       basePower: 0,
       baseToughness: 0,
-      imageUrl: '',
+      imageUrl: cardData.imageUrl || '',
       controllerId: '',
       ownerId: '',
       oracleId: '',
