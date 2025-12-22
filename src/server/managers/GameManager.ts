@@ -2,10 +2,12 @@
 import { StrictGameState, PlayerState, CardObject } from '../game/types';
 import { RulesEngine } from '../game/RulesEngine';
 
-export class GameManager {
+import { EventEmitter } from 'events';
+
+export class GameManager extends EventEmitter {
   public games: Map<string, StrictGameState> = new Map();
 
-  createGame(roomId: string, players: { id: string; name: string; isBot?: boolean }[]): StrictGameState {
+  createGame(gameId: string, players: { id: string; name: string; isBot?: boolean }[]): StrictGameState {
 
     // Convert array to map
     const playerRecord: Record<string, PlayerState> = {};
@@ -26,7 +28,7 @@ export class GameManager {
     const firstPlayerId = players.length > 0 ? players[0].id : '';
 
     const gameState: StrictGameState = {
-      roomId,
+      roomId: gameId,
       players: playerRecord,
       cards: {}, // Populated later
       stack: [],
@@ -50,7 +52,7 @@ export class GameManager {
       gameState.players[firstPlayerId].isActive = true;
     }
 
-    this.games.set(roomId, gameState);
+    this.games.set(gameId, gameState);
     return gameState;
   }
 
@@ -150,12 +152,49 @@ export class GameManager {
     // Bot Cycle: If priority passed to a bot, or it's a bot's turn to act
     const MAX_LOOPS = 50;
     let loops = 0;
+
+    // Special Bot Handling for Mulligan (Simultaneous actions allowed, or strict priority ignored by bots)
+    if (game.step === 'mulligan') {
+      console.log(`[GameManager] Checking Bot Mulligans for ${game.roomId}`);
+      Object.values(game.players).forEach(p => {
+        if (p.isBot && !p.handKept) {
+          console.log(`[GameManager] Forcing Bot ${p.name} to keep hand.`);
+          try {
+            // Bots always keep for now
+            engine.resolveMulligan(p.id, true, []);
+          } catch (e) {
+            console.warn(`[Bot Mulligan Error] ${p.name}:`, e);
+          }
+        }
+      });
+    }
+
     while (game.players[game.priorityPlayerId]?.isBot && loops < MAX_LOOPS) {
       loops++;
       this.processBotActions(game);
     }
 
+    // Check Win Condition
+    this.checkWinCondition(game, roomId);
+
     return game;
+  }
+
+  // Check if game is over
+  public checkWinCondition(game: StrictGameState, gameId: string) {
+    const alivePlayers = Object.values(game.players).filter(p => p.life > 0 && p.poison < 10);
+
+    // 1v1 Logic
+    if (alivePlayers.length === 1 && Object.keys(game.players).length > 1) {
+      // Winner found
+      const winner = alivePlayers[0];
+      // Only emit once
+      if (game.phase !== 'ending') {
+        console.log(`[GameManager] Game Over. Winner: ${winner.name}`);
+        this.emit('game_over', { gameId, winnerId: winner.id });
+        game.phase = 'ending'; // Mark as ending so we don't double emit
+      }
+    }
   }
 
   // --- Bot AI Logic ---

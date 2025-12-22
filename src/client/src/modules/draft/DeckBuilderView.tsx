@@ -17,7 +17,10 @@ interface DeckBuilderViewProps {
   roomId: string;
   currentPlayerId: string;
   initialPool: any[];
+  initialDeck?: any[];
   availableBasicLands?: any[];
+  onSubmit?: (deck: any[]) => void;
+  submitLabel?: string;
 }
 
 const ManaCurve = ({ deck }: { deck: any[] }) => {
@@ -176,6 +179,40 @@ const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: 
   );
 };
 
+const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
+  const displayImage = useArtCrop ? card.imageArtCrop : card.image;
+  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      onHover(card);
+    } else {
+      onCardClick(card);
+    }
+  }, card);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => onHover(card)}
+      onMouseLeave={() => onHover(null)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+      onTouchMove={onTouchMove}
+      className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
+    >
+      <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+        {isFoil && <FoilOverlay />}
+        {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
+        {displayImage ? (
+          <img src={displayImage} alt={card.name} className="w-full h-full object-cover" draggable={false} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
+        )}
+        <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' : card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' : 'bg-black'}`} />
+      </div>
+    </div>
+  );
+};
+
 // Extracted Component to avoid re-mounting issues
 const CardsDisplay: React.FC<{
   cards: any[];
@@ -273,7 +310,7 @@ const CardsDisplay: React.FC<{
   )
 };
 
-export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, availableBasicLands = [] }) => {
+export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, initialDeck = [], availableBasicLands = [], onSubmit, submitLabel }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   /* --- Hooks --- */
@@ -359,8 +396,17 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   useEffect(() => localStorage.setItem('deck_groupBy', groupBy), [groupBy]);
   useEffect(() => localStorage.setItem('deck_cardWidth', cardWidth.toString()), [cardWidth]);
 
-  const [pool, setPool] = useState<any[]>(initialPool);
-  const [deck, setDeck] = useState<any[]>([]);
+  const [deck, setDeck] = useState<any[]>(initialDeck);
+  const [pool, setPool] = useState<any[]>(() => {
+    if (initialDeck && initialDeck.length > 0) {
+      // Need to be careful about IDs. 
+      // If initialDeck cards are from the pool, they share IDs?
+      // Usually yes.
+      const deckIds = new Set(initialDeck.map(c => c.id));
+      return initialPool.filter(c => !deckIds.has(c.id));
+    }
+    return initialPool;
+  });
   // const [lands, setLands] = useState(...); // REMOVED: Managed directly in deck now
   const [hoveredCard, setHoveredCard] = useState<any>(null);
   const [displayCard, setDisplayCard] = useState<any>(null);
@@ -498,7 +544,13 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
       return cardWithDefinition;
     });
 
-    socketService.socket.emit('player_ready', { deck: preparedDeck });
+
+
+    if (onSubmit) {
+      onSubmit(preparedDeck);
+    } else {
+      socketService.socket.emit('player_ready', { deck: preparedDeck });
+    }
   };
 
   const handleAutoBuild = async () => {
@@ -876,7 +928,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
               onClick={submitDeck}
               className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105 text-sm"
             >
-              <Save className="w-4 h-4" /> <span className="hidden sm:inline">Submit Deck</span><span className="sm:hidden">Save</span>
+              <Save className="w-4 h-4" /> <span className="hidden sm:inline">{submitLabel || 'Submit Deck'}</span><span className="sm:hidden">Save</span>
             </button>
           </div>
         </div>
@@ -1004,36 +1056,4 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, a
   );
 };
 
-const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
-  const displayImage = useArtCrop ? card.imageArtCrop : card.image;
-  const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
-    if (window.matchMedia('(pointer: coarse)').matches) {
-      onHover(card);
-    } else {
-      onCardClick(card);
-    }
-  }, card);
 
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => onHover(card)}
-      onMouseLeave={() => onHover(null)}
-      onTouchStart={onTouchStart}
-      onTouchEnd={onTouchEnd}
-      onTouchMove={onTouchMove}
-      className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
-    >
-      <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
-        {isFoil && <FoilOverlay />}
-        {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
-        {displayImage ? (
-          <img src={displayImage} alt={card.name} className="w-full h-full object-cover" draggable={false} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
-        )}
-        <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' : card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' : card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' : 'bg-black'}`} />
-      </div>
-    </div>
-  );
-};

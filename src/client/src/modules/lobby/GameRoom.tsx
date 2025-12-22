@@ -6,6 +6,7 @@ import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
+import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
 
 interface Player {
@@ -71,6 +72,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<any>(initialGameState || null);
   const [draftState, setDraftState] = useState<any>(initialDraftState || null);
+  const [tournamentState, setTournamentState] = useState<any>((initialRoom as any).tournament || null);
+  const [preparingMatchId, setPreparingMatchId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game'); // Keep for mobile
 
   // Derived State
@@ -180,14 +183,32 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       setGameState(data);
     };
 
+    const handleTournamentUpdate = (data: any) => {
+      setTournamentState(data);
+    };
+
+    // Also handle finish
+    const handleTournamentFinished = (data: any) => {
+      showToast(`Tournament Winner: ${data.winner.name}!`, 'success');
+    };
+
     socket.on('draft_update', handleDraftUpdate);
     socket.on('draft_error', handleDraftError);
     socket.on('game_update', handleGameUpdate);
+    socket.on('tournament_update', handleTournamentUpdate);
+    socket.on('tournament_finished', handleTournamentFinished);
+
+    socket.on('match_start', () => {
+      setPreparingMatchId(null);
+    });
 
     return () => {
       socket.off('draft_update', handleDraftUpdate);
       socket.off('draft_error', handleDraftError);
       socket.off('game_update', handleGameUpdate);
+      socket.off('tournament_update', handleTournamentUpdate);
+      socket.off('tournament_finished', handleTournamentFinished);
+      socket.off('match_start');
     };
   }, []);
 
@@ -269,6 +290,29 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
       const myPool = draftState.players[currentPlayerId]?.pool || [];
       return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} availableBasicLands={room.basicLands} />;
+    }
+
+    if (room.status === 'tournament' && tournamentState) {
+      if (preparingMatchId) {
+        const myTournamentPlayer = tournamentState.players.find((p: any) => p.id === currentPlayerId);
+        const myPool = draftState?.players[currentPlayerId]?.pool || [];
+        const myDeck = myTournamentPlayer?.deck || [];
+
+        return <DeckBuilderView
+          roomId={room.id}
+          currentPlayerId={currentPlayerId}
+          initialPool={myPool}
+          initialDeck={myDeck}
+          availableBasicLands={room.basicLands}
+          onSubmit={(deck) => {
+            socketService.socket.emit('match_ready', { matchId: preparingMatchId, deck });
+            setPreparingMatchId(null);
+            showToast("Deck ready! Waiting for game to start...", 'success');
+          }}
+          submitLabel="Ready for Match"
+        />;
+      }
+      return <TournamentView tournament={tournamentState} currentPlayerId={currentPlayerId} onJoinMatch={setPreparingMatchId} />;
     }
 
     return (

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Layers, Box, Trophy, Users, Play } from 'lucide-react';
 import { CubeManager } from './modules/cube/CubeManager';
-import { TournamentManager } from './modules/tournament/TournamentManager';
 import { LobbyManager } from './modules/lobby/LobbyManager';
 import { DeckTester } from './modules/tester/DeckTester';
 import { Pack } from './services/PackGeneratorService';
@@ -130,7 +129,13 @@ export const App: React.FC = () => {
             )}
             {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
             {activeTab === 'tester' && <DeckTester />}
-            {activeTab === 'bracket' && <TournamentManager />}
+            {activeTab === 'bracket' && (
+              <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                <Trophy className="w-16 h-16 mb-4 opacity-50" />
+                <h2 className="text-xl font-bold">Tournament Manager</h2>
+                <p>Tournaments are now managed within the Online Lobby.</p>
+              </div>
+            )}
           </main>
 
           <footer className="bg-slate-900 border-t border-slate-800 p-2 text-center text-xs text-slate-500 shrink-0">

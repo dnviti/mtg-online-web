@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { RoomManager } from './managers/RoomManager';
 import { GameManager } from './managers/GameManager';
 import { DraftManager } from './managers/DraftManager';
+import { TournamentManager } from './managers/TournamentManager';
 import { CardService } from './services/CardService';
 import { ScryfallService } from './services/ScryfallService';
 import { PackGeneratorService } from './services/PackGeneratorService';
@@ -31,7 +32,34 @@ const io = new Server(httpServer, {
 const roomManager = new RoomManager();
 const gameManager = new GameManager();
 const draftManager = new DraftManager();
+const tournamentManager = new TournamentManager();
 const persistenceManager = new PersistenceManager(roomManager, draftManager, gameManager);
+
+// Game Over Listener
+gameManager.on('game_over', ({ gameId, winnerId }) => {
+  console.log(`[Index] Game Over received: ${gameId}, Winner: ${winnerId}`);
+  // Find tournament by Room? We need a way to map matchId -> roomId?
+  // Or matchId is unique enough? 
+  // Wait, I used gameId = matchId for 1v1. 
+
+  // Iterate all tournaments to find the match? Inefficient but works.
+  // Ideally we track mapping.
+  // For now, let's assume we can find it.
+
+  // TODO: Optimise lookup
+  // Actually, RoomManager knows the tournament.
+  // We can scan rooms?
+  // Let's implement recordMatchResult that searches if needed, or pass roomId in event?
+  // checkWinCondition passes roomId as gameId... 
+  // Ah, 1v1 match gameId will be the matchId (e.g. "r1-m0"). 
+  // We need the RoomId too.
+
+  // Let's pass roomId in metadata to createGame? 
+  // For now, checkWinCondition(game, gameId).
+
+  // Hack: We iterate rooms to find the tournament that contains this matchId.
+  // TODO: Fix efficiency
+});
 
 // Load previous state
 persistenceManager.load();
@@ -281,40 +309,20 @@ const draftInterval = setInterval(() => {
           // Check if EVERYONE is ready to start game automatically
           const activePlayers = room.players.filter(p => p.role === 'player');
           if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
-            console.log(`All players ready (including bots) in room ${roomId}. Starting game.`);
-            room.status = 'playing';
+            console.log(`All players ready (including bots) in room ${roomId}. Starting TOURNAMENT.`);
+            room.status = 'tournament';
             io.to(roomId).emit('room_update', room);
 
-            const game = gameManager.createGame(roomId, room.players);
+            // Create Tournament
+            const tournament = tournamentManager.createTournament(roomId, room.players.map(p => ({
+              id: p.id,
+              name: p.name,
+              isBot: !!p.isBot,
+              deck: p.deck
+            })));
 
-            // Populate Decks
-            activePlayers.forEach(p => {
-              if (p.deck) {
-                p.deck.forEach((card: any) => {
-                  gameManager.addCardToGame(roomId, {
-                    ownerId: p.id,
-                    controllerId: p.id,
-                    oracleId: card.oracle_id || card.id,
-                    name: card.name,
-                    imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-                    zone: 'library',
-                    typeLine: card.typeLine || card.type_line || '',
-                    oracleText: card.oracleText || card.oracle_text || '',
-                    manaCost: card.manaCost || card.mana_cost || '',
-                    keywords: card.keywords || [],
-                    power: card.power,
-                    toughness: card.toughness,
-                    damageMarked: 0,
-                    controlledSinceTurn: 0
-                  });
-                });
-              }
-            });
-
-            const engine = new RulesEngine(game);
-            engine.startGame();
-            gameManager.triggerBotCheck(roomId);
-            io.to(roomId).emit('game_update', game);
+            room.tournament = tournament;
+            io.to(roomId).emit('tournament_update', tournament);
           }
         }
       }
@@ -411,7 +419,12 @@ io.on('connection', (socket) => {
         if (currentDraft) socket.emit('draft_update', currentDraft);
       }
 
-      callback({ success: true, room, draftState: currentDraft });
+      if (room.status === 'tournament' && room.tournament) {
+        socket.emit('tournament_update', room.tournament);
+        // Assuming join_room is initial join, probably not in a match yet unless re-joining
+      }
+
+      callback({ success: true, room, draftState: currentDraft, tournament: room.tournament });
     } else {
       callback({ success: false, message: 'Room not found or full' });
     }
@@ -451,11 +464,27 @@ io.on('connection', (socket) => {
         if (room.status === 'playing') {
           currentGame = gameManager.getGame(roomId);
           if (currentGame) socket.emit('game_update', currentGame);
+        } else if (room.status === 'tournament') {
+          if (room.tournament) {
+            socket.emit('tournament_update', room.tournament);
+
+            // If player was in a match
+            // We need to check if they have a matchId in their player object
+            // room.players is the source of truth
+            const p = room.players.find(rp => rp.id === playerId);
+            if (p && p.matchId) {
+              currentGame = gameManager.getGame(p.matchId);
+              if (currentGame) {
+                socket.join(p.matchId); // Re-join socket room
+                socket.emit('game_update', currentGame);
+              }
+            }
+          }
         }
 
         // ACK Callback
         if (typeof callback === 'function') {
-          callback({ success: true, room, draftState: currentDraft, gameState: currentGame });
+          callback({ success: true, room, draftState: currentDraft, gameState: currentGame, tournament: room.tournament });
         }
       } else {
         // Room found but player not in it? Or room not found?
@@ -609,39 +638,17 @@ io.on('connection', (socket) => {
       io.to(room.id).emit('room_update', updatedRoom);
       const activePlayers = updatedRoom.players.filter(p => p.role === 'player');
       if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
-        updatedRoom.status = 'playing';
+        updatedRoom.status = 'tournament';
         io.to(room.id).emit('room_update', updatedRoom);
 
-        const game = gameManager.createGame(room.id, updatedRoom.players);
-        activePlayers.forEach(p => {
-          if (p.deck) {
-            p.deck.forEach((card: any) => {
-              gameManager.addCardToGame(room.id, {
-                ownerId: p.id,
-                controllerId: p.id,
-                oracleId: card.oracle_id || card.id,
-                name: card.name,
-                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
-                zone: 'library',
-                typeLine: card.typeLine || card.type_line || '',
-                oracleText: card.oracleText || card.oracle_text || '',
-                manaCost: card.manaCost || card.mana_cost || '',
-                keywords: card.keywords || [],
-                power: card.power, // Add Power
-                toughness: card.toughness, // Add Toughness
-                damageMarked: 0,
-                controlledSinceTurn: 0
-              });
-            });
-          }
-        });
-
-        // Initialize Game State (Draw Hands)
-        const engine = new RulesEngine(game);
-        engine.startGame();
-        gameManager.triggerBotCheck(room.id);
-
-        io.to(room.id).emit('game_update', game);
+        const tournament = tournamentManager.createTournament(room.id, updatedRoom.players.map(p => ({
+          id: p.id,
+          name: p.name,
+          isBot: !!p.isBot,
+          deck: p.deck
+        })));
+        updatedRoom.tournament = tournament;
+        io.to(room.id).emit('tournament_update', tournament);
       }
     }
   });
@@ -714,9 +721,12 @@ io.on('connection', (socket) => {
     if (!context) return;
     const { room, player } = context;
 
-    const game = gameManager.handleAction(room.id, action, player.id);
+    // Fix: If in a match (Tournament), actions go to matchId, not roomId
+    const targetGameId = player.matchId || room.id;
+
+    const game = gameManager.handleAction(targetGameId, action, player.id);
     if (game) {
-      io.to(room.id).emit('game_update', game);
+      io.to(game.roomId).emit('game_update', game);
     }
   });
 
@@ -725,9 +735,107 @@ io.on('connection', (socket) => {
     if (!context) return;
     const { room, player } = context;
 
-    const game = gameManager.handleStrictAction(room.id, action, player.id);
+    // Fix: If in a match (Tournament), actions go to matchId, not roomId
+    const targetGameId = player.matchId || room.id;
+
+    const game = gameManager.handleStrictAction(targetGameId, action, player.id);
     if (game) {
-      io.to(room.id).emit('game_update', game);
+      io.to(game.roomId).emit('game_update', game);
+    }
+  });
+
+  socket.on('join_match', ({ matchId }, callback) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    if (!room.tournament) {
+      callback({ success: false, message: "No active tournament." });
+      return;
+    }
+
+    const match = tournamentManager.getMatch(room.tournament, matchId);
+    if (!match) {
+      callback({ success: false, message: "Match not found." });
+      return;
+    }
+
+    if (match.status === 'pending') {
+      callback({ success: false, message: "Match is pending." });
+      return;
+    }
+
+    // Check if Game Exists (Maybe it was already created by the other player becoming ready?)
+    let game = gameManager.getGame(matchId);
+
+    // Join Socket to Match Room
+    socket.join(matchId);
+    player.matchId = matchId; // Track match
+
+    // If game exists (both players already ready), send it
+    if (game) {
+      socket.emit('game_update', game);
+    }
+
+    callback({ success: true, match, gameCreated: !!game });
+  });
+
+  socket.on('match_ready', ({ matchId, deck }) => {
+    const context = getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    if (!room.tournament) return;
+
+    const readyState = tournamentManager.setMatchReady(room.id, matchId, player.id, deck);
+    if (readyState?.bothReady) {
+      console.log(`[Index] Both players ready for match ${matchId}. Starting Game.`);
+
+      const match = tournamentManager.getMatch(room.tournament, matchId);
+      if (match && match.player1 && match.player2) {
+        const p1 = room.players.find(p => p.id === match.player1!.id)!;
+        const p2 = room.players.find(p => p.id === match.player2!.id)!;
+
+        // Get Decks from Ready State (stored in tournament manager)
+        const deck1 = readyState.decks[p1.id];
+        const deck2 = readyState.decks[p2.id];
+
+        const game = gameManager.createGame(matchId, [
+          { id: p1.id, name: p1.name, isBot: p1.isBot },
+          { id: p2.id, name: p2.name, isBot: p2.isBot }
+        ]);
+
+        // Populate Decks
+        [{ p: p1, d: deck1 }, { p: p2, d: deck2 }].forEach(({ p, d }) => {
+          if (d) {
+            d.forEach((card: any) => {
+              gameManager.addCardToGame(matchId, {
+                ownerId: p.id,
+                controllerId: p.id,
+                oracleId: card.oracle_id || card.id,
+                name: card.name,
+                imageUrl: card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal || "",
+                zone: 'library',
+                typeLine: card.typeLine || card.type_line || '',
+                oracleText: card.oracleText || card.oracle_text || '',
+                manaCost: card.manaCost || card.mana_cost || '',
+                keywords: card.keywords || [],
+                power: card.power,
+                toughness: card.toughness,
+                damageMarked: 0,
+                controlledSinceTurn: 0
+              });
+            });
+          }
+        });
+
+        const engine = new RulesEngine(game);
+        engine.startGame();
+        gameManager.triggerBotCheck(matchId);
+
+        io.to(matchId).emit('game_update', game);
+        io.to(matchId).emit('match_start', { gameId: matchId });
+      }
     }
   });
 

@@ -11,6 +11,13 @@ class SocketService {
     this.socket = io(URL, {
       autoConnect: false
     });
+
+    // Debug Wrapper
+    const originalEmit = this.socket.emit;
+    this.socket.emit = (event: string, ...args: any[]) => {
+      console.log(`[Socket] 📤 Emitting: ${event}`, args);
+      return originalEmit.apply(this.socket, [event, ...args]);
+    };
   }
 
   connect() {

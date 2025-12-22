@@ -11,6 +11,7 @@ interface SidePanelPreviewProps {
   onToggleCollapse: (collapsed: boolean) => void;
   onResizeStart?: (e: React.MouseEvent | React.TouchEvent) => void;
   className?: string; // For additional styling (positioning, z-index, etc)
+  children?: React.ReactNode;
 }
 
 export const SidePanelPreview: React.FC<SidePanelPreviewProps> = ({

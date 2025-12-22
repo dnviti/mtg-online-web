@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { GameState, Phase, Step } from '../../types/game';
 import { ManaIcon } from '../../components/ManaIcon';
-import { Shield, Swords, Hourglass, Zap, Hand, ChevronRight, XCircle, Play, Clock, Files, Crosshair, Skull, Flag, Moon, Trash2 } from 'lucide-react';
+import { Shield, Swords, Hourglass, Zap, Hand, ChevronRight, XCircle, Clock, Files, Crosshair, Skull, Flag, Moon, Trash2 } from 'lucide-react';
 
 interface PhaseStripProps {
   gameState: GameState;
@@ -75,7 +75,7 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
       else actionLabel = "Pass";
     } else {
       // Resolve
-      const topItem = gameState.stack![gameState.stack!.length - 1];
+      // const topItem = gameState.stack![gameState.stack!.length - 1]; // Unused
       actionLabel = "Resolve";
       actionType = 'PASS_PRIORITY';
       ActionIcon = Zap;

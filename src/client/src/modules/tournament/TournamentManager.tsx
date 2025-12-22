@@ -1,97 +1,119 @@
-import React, { useState } from 'react';
-import { Users } from 'lucide-react';
-import { useToast } from '../../components/Toast';
+import React from 'react';
+import { Trophy, Play } from 'lucide-react';
+import { socketService } from '../../services/SocketService';
+
+interface TournamentPlayer {
+  id: string;
+  name: string;
+  isBot: boolean;
+}
 
 interface Match {
-  id: number;
-  p1: string;
-  p2: string;
+  id: string;
+  round: number;
+  matchIndex: number;
+  player1: TournamentPlayer | null;
+  player2: TournamentPlayer | null;
+  winnerId?: string;
+  status: 'pending' | 'ready' | 'in_progress' | 'finished';
 }
 
-interface Bracket {
-  round1: Match[];
-  totalPlayers: number;
+interface Tournament {
+  id: string;
+  players: TournamentPlayer[];
+  rounds: Match[][];
+  currentRound: number;
+  status: 'setup' | 'active' | 'finished';
+  winner?: TournamentPlayer;
 }
 
-export const TournamentManager: React.FC = () => {
-  const [playerInput, setPlayerInput] = useState('');
-  const [bracket, setBracket] = useState<Bracket | null>(null);
-  const { showToast } = useToast();
+interface TournamentManagerProps {
+  tournament: Tournament;
+  currentPlayerId: string;
+  onJoinMatch: (matchId: string) => void;
+}
 
-  const shuffleArray = (array: any[]) => {
-    let currentIndex = array.length, randomIndex;
-    const newArray = [...array];
-    while (currentIndex !== 0) {
-      randomIndex = Math.floor(Math.random() * currentIndex);
-      currentIndex--;
-      [newArray[currentIndex], newArray[randomIndex]] = [newArray[randomIndex], newArray[currentIndex]];
-    }
-    return newArray;
-  };
+export const TournamentManager: React.FC<TournamentManagerProps> = ({ tournament, currentPlayerId, onJoinMatch }) => {
+  const { rounds, winner } = tournament;
 
-  const generateBracket = () => {
-    if (!playerInput.trim()) return;
-    const names = playerInput.split('\n').filter(n => n.trim() !== '').map(n => n.trim());
-    if (names.length < 2) {
-      showToast("Enter at least 2 players.", 'error');
-      return;
-    }
-
-    const shuffled = shuffleArray(names);
-    const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(shuffled.length)));
-    const byesNeeded = nextPowerOf2 - shuffled.length;
-
-    const fullRoster = [...shuffled];
-    for (let i = 0; i < byesNeeded; i++) fullRoster.push("BYE");
-
-    const pairings: Match[] = [];
-    for (let i = 0; i < fullRoster.length; i += 2) {
-      pairings.push({ id: i, p1: fullRoster[i], p2: fullRoster[i + 1] });
-    }
-
-    setBracket({ round1: pairings, totalPlayers: names.length });
+  const handleJoinMatch = (matchId: string) => {
+    socketService.socket.emit('join_match', { matchId }, (response: any) => {
+      if (!response.success) {
+        console.error(response.message);
+        // Ideally show toast
+        alert(response.message); // Fallback
+      } else {
+        onJoinMatch(matchId);
+      }
+    });
   };
 
   return (
-    <div className="h-full overflow-y-auto max-w-4xl mx-auto p-4 md:p-6">
-      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl mb-8">
-        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <Users className="w-5 h-5 text-blue-400" /> Players
-        </h2>
-        <p className="text-sm text-slate-400 mb-2">Enter one name per line</p>
-        <textarea
-          className="w-full h-32 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-300 focus:ring-2 focus:ring-blue-500 outline-none resize-none mb-4"
-          placeholder={`Player 1\nPlayer 2...`}
-          value={playerInput}
-          onChange={(e) => setPlayerInput(e.target.value)}
-        />
-        <button
-          onClick={generateBracket}
-          className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-bold w-full md:w-auto transition-colors"
-        >
-          Generate Bracket
-        </button>
+    <div className="h-full overflow-y-auto max-w-6xl mx-auto p-4 md:p-6 text-slate-100">
+
+      {/* Header */}
+      <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl mb-8 flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+            <Trophy className="w-6 h-6 text-yellow-500" /> Tournament Bracket
+          </h2>
+          <p className="text-slate-400 text-sm mt-1">Round {tournament.currentRound}</p>
+        </div>
+        {winner && (
+          <div className="bg-yellow-500/20 border border-yellow-500 text-yellow-200 px-6 py-3 rounded-xl flex items-center gap-3 animate-pulse">
+            <Trophy className="w-8 h-8" />
+            <div>
+              <div className="text-xs uppercase font-bold tracking-wider">Winner</div>
+              <div className="text-xl font-bold">{winner.name}</div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {bracket && (
-        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl overflow-x-auto">
-          <h3 className="text-lg font-bold text-white mb-6 border-b border-slate-700 pb-2">Round 1 (Single Elimination)</h3>
-          <div className="flex flex-col gap-4 min-w-[300px]">
-            {bracket.round1.map((match, i) => (
-              <div key={i} className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex flex-col gap-2 relative">
-                <div className="absolute -left-3 top-1/2 w-3 h-px bg-slate-600"></div>
-                <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                  <span className={match.p1 === 'BYE' ? 'text-slate-500 italic' : 'font-bold text-white'}>{match.p1}</span>
-                </div>
-                <div className="text-xs text-center text-slate-500">VS</div>
-                <div className="flex justify-between items-center bg-slate-800/50 p-2 rounded border border-slate-700/50">
-                  <span className={match.p2 === 'BYE' ? 'text-slate-500 italic' : 'font-bold text-white'}>{match.p2}</span>
-                </div>
-              </div>
-            ))}
+      <div className="flex gap-8 overflow-x-auto pb-8 snap-x">
+        {rounds.map((roundMatches, roundIndex) => (
+          <div key={roundIndex} className="flex flex-col justify-center gap-16 min-w-[280px] snap-center">
+            <h3 className="text-center font-bold text-slate-500 uppercase tracking-widest text-sm mb-4">
+              {roundIndex === rounds.length - 1 ? "Finals" : `Round ${roundIndex + 1}`}
+            </h3>
+            <div className="flex flex-col gap-8 justify-center flex-1">
+              {roundMatches.map((match) => {
+                const isMyMatch = (match.player1?.id === currentPlayerId || match.player2?.id === currentPlayerId);
+                const isPlayable = isMyMatch && match.status === 'ready' && !match.winnerId;
+
+                return (
+                  <div key={match.id} className={`bg-slate-900 border ${isMyMatch ? 'border-blue-500 ring-1 ring-blue-500/50' : 'border-slate-700'} rounded-lg p-0 overflow-hidden relative shadow-lg`}>
+                    {/* Status Indicator */}
+                    {match.status === 'in_progress' && <div className="absolute top-0 right-0 bg-green-500 text-xs text-black font-bold px-2 py-0.5">LIVE</div>}
+
+                    <div className={`p-3 border-b border-slate-800 flex justify-between items-center ${match.winnerId === match.player1?.id ? 'bg-emerald-900/30' : ''}`}>
+                      <span className={match.player1 ? 'font-bold' : 'text-slate-600 italic'}>
+                        {match.player1 ? match.player1.name : 'Waiting...'}
+                      </span>
+                      {match.winnerId === match.player1?.id && <Trophy className="w-4 h-4 text-emerald-500" />}
+                    </div>
+                    <div className={`p-3 flex justify-between items-center ${match.winnerId === match.player2?.id ? 'bg-emerald-900/30' : ''}`}>
+                      <span className={match.player2 ? 'font-bold' : 'text-slate-600 italic'}>
+                        {match.player2 ? match.player2.name : 'Waiting...'}
+                      </span>
+                      {match.winnerId === match.player2?.id && <Trophy className="w-4 h-4 text-emerald-500" />}
+                    </div>
+
+                    {isPlayable && (
+                      <button
+                        onClick={() => handleJoinMatch(match.id)}
+                        className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <Play className="w-4 h-4" /> Play Match
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 };

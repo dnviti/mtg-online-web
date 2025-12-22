@@ -77,7 +77,10 @@ export const MulliganView: React.FC<MulliganViewProps> = ({ hand, mulliganCount,
       {/* Controls */}
       <div className="flex gap-8">
         <button
-          onClick={() => onDecision(false, [])}
+          onClick={() => {
+            console.log("Mulligan Clicked");
+            onDecision(false, []);
+          }}
           className="px-8 py-4 bg-red-600/20 hover:bg-red-600/40 border border-red-500 text-red-100 rounded-xl font-bold text-lg transition-all flex flex-col items-center gap-1 group"
         >
           <span>Mulligan</span>
@@ -85,7 +88,12 @@ export const MulliganView: React.FC<MulliganViewProps> = ({ hand, mulliganCount,
         </button>
 
         <button
-          onClick={() => isSelectionValid && onDecision(true, Array.from(selectedToBottom))}
+          onClick={() => {
+            if (isSelectionValid) {
+              console.log("Keep Hand Clicked", Array.from(selectedToBottom));
+              onDecision(true, Array.from(selectedToBottom));
+            }
+          }}
           disabled={!isSelectionValid}
           className={`px-8 py-4 rounded-xl font-bold text-lg transition-all flex flex-col items-center gap-1 min-w-[200px] ${isSelectionValid
             ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.4)]'

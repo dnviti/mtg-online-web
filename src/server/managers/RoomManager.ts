@@ -1,3 +1,5 @@
+import { Tournament } from './TournamentManager';
+
 interface Player {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ interface Player {
   socketId?: string; // Current or last known socket
   isOffline?: boolean;
   isBot?: boolean;
+  matchId?: string; // Current match in tournament
 }
 
 interface ChatMessage {
@@ -23,10 +26,11 @@ interface Room {
   players: Player[];
   packs: any[]; // Store generated packs (JSON)
   basicLands?: any[];
-  status: 'waiting' | 'drafting' | 'deck_building' | 'playing' | 'finished';
+  status: 'waiting' | 'drafting' | 'deck_building' | 'playing' | 'finished' | 'tournament';
   messages: ChatMessage[];
   maxPlayers: number;
   lastActive: number; // For persistence cleanup
+  tournament?: Tournament | null;
 }
 
 export class RoomManager {

@@ -429,10 +429,15 @@ export class RulesEngine {
 
     // 0. Mulligan Step
     if (step === 'mulligan') {
+      const total = Object.keys(this.state.players).length;
+      const kept = Object.values(this.state.players).filter(p => p.handKept).length;
+      console.log(`[RulesEngine] Performing Mulligan TBA. Kept: ${kept}/${total}`);
+
       // Draw 7 for everyone if they have 0 cards in hand and haven't kept
       Object.values(this.state.players).forEach(p => {
         const hand = Object.values(this.state.cards).filter(c => c.ownerId === p.id && c.zone === 'hand');
         if (hand.length === 0 && !p.handKept) {
+          console.log(`[RulesEngine] Initial Draw 7 for ${p.name}`);
           // Initial Draw
           for (let i = 0; i < 7; i++) {
             this.drawCard(p.id);
@@ -442,10 +447,12 @@ export class RulesEngine {
       // Check if all kept
       const allKept = Object.values(this.state.players).every(p => p.handKept);
       if (allKept) {
-        console.log("All players kept hand. Starting game.");
+        console.log("[RulesEngine] All players kept hand. Advancing Step.");
         // Normally untap is automatic?
         // advanceStep will go to beginning/untap
         this.advanceStep();
+      } else {
+        console.log("[RulesEngine] Waiting for more mulligan decisions.");
       }
       return; // Wait for actions
     }
