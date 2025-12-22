@@ -471,14 +471,25 @@ export class RulesEngine {
     // 4. Combat Steps requiring declaration (Pause for External Action)
     if (step === 'declare_attackers') {
       // WAITING for declareAttackers() from Client
-      // Do NOT reset priority yet.
-      // TODO: Maybe set a timeout or auto-skip if no creatures?
+      // 508.1. Active Player gets priority to declare attackers.
+      // Unlike other steps where AP gets priority to cast spells, here the "Action" determines the flow.
+      // But technically, the AP *must* act. So we ensure they have priority.
+      if (this.state.priorityPlayerId !== activePlayerId) {
+        this.resetPriority(activePlayerId);
+      }
       return;
     }
 
     if (step === 'declare_blockers') {
       // WAITING for declareBlockers() from Client (Defending Player)
-      // Do NOT reset priority yet.
+      // 509.1. Defending Player gets priority to declare blockers.
+      // In 1v1, this is the non-active player.
+      const defendingPlayerId = this.state.turnOrder.find(id => id !== activePlayerId);
+      if (defendingPlayerId) {
+        if (this.state.priorityPlayerId !== defendingPlayerId) {
+          this.resetPriority(defendingPlayerId);
+        }
+      }
       return;
     }
 

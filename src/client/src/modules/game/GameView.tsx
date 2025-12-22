@@ -706,6 +706,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                               onDragStart={() => { }}
                               onClick={(id) => {
                                 if (gameState.step === 'declare_attackers') {
+                                  // Validate Creature Type
+                                  const types = card.types || [];
+                                  const typeLine = card.typeLine || '';
+                                  if (!types.includes('Creature') && !typeLine.includes('Creature')) {
+                                    // Optional: Shake effect or visual feedback that it's invalid
+                                    return;
+                                  }
+
                                   const newSet = new Set(proposedAttackers);
                                   if (newSet.has(id)) newSet.delete(id);
                                   else newSet.add(id);

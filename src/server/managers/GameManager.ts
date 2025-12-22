@@ -110,7 +110,12 @@ export class GameManager {
           engine.castSpell(actorId, action.cardId, action.targets, action.position);
           break;
         case 'DECLARE_ATTACKERS':
-          engine.declareAttackers(actorId, action.attackers);
+          try {
+            engine.declareAttackers(actorId, action.attackers);
+          } catch (err: any) {
+            console.error(`[DeclareAttackers Error] Actor: ${actorId}, Active: ${game.activePlayerId}, Priority: ${game.priorityPlayerId}, Step: ${game.step}`);
+            throw err; // Re-throw to catch block below
+          }
           break;
         case 'DECLARE_BLOCKERS':
           engine.declareBlockers(actorId, action.blockers);
