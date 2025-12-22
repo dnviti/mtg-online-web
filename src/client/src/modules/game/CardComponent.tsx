@@ -29,26 +29,39 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
     return () => unregisterCard(card.instanceId);
   }, [card.instanceId]);
 
-  // Robustly resolve Art Crop
+  // Robustly resolve Image Source based on viewMode
   let imageSrc = card.imageUrl;
 
-  if (card.image_uris) {
-    if (viewMode === 'cutout' && card.image_uris.crop) {
-      imageSrc = card.image_uris.crop;
-    } else if (card.image_uris.normal) {
-      imageSrc = card.image_uris.normal;
-    }
-  } else if (card.definition && card.definition.set && card.definition.id) {
-    if (viewMode === 'cutout') {
+  if (viewMode === 'cutout') {
+    // Priority 1: Local Cache (standard naming convention) - PREFERRED BY USER
+    if (card.definition?.set && card.definition?.id) {
       imageSrc = `/cards/images/${card.definition.set}/crop/${card.definition.id}.jpg`;
-    } else {
+    }
+    // Priority 2: Direct Image URIs (if available) - Fallback
+    else if (card.image_uris?.art_crop || card.image_uris?.crop) {
+      imageSrc = card.image_uris.art_crop || card.image_uris.crop!;
+    }
+    // Priority 3: Deep Definition Data
+    else if (card.definition?.image_uris?.art_crop) {
+      imageSrc = card.definition.image_uris.art_crop;
+    }
+    else if (card.definition?.card_faces?.[0]?.image_uris?.art_crop) {
+      imageSrc = card.definition.card_faces[0].image_uris.art_crop;
+    }
+    // Fallback: If no crop found, imageSrc remains card.imageUrl (likely full)
+  } else {
+    // Normal / Full View
+    // Priority 1: Local Cache (standard naming convention) - PREFERRED
+    if (card.definition?.set && card.definition?.id) {
+      // Check if we want standard full image path
       imageSrc = `/cards/images/${card.definition.set}/full/${card.definition.id}.jpg`;
     }
-  } else if (viewMode === 'cutout' && card.definition) {
-    if (card.definition.image_uris?.art_crop) {
-      imageSrc = card.definition.image_uris.art_crop;
-    } else if (card.definition.card_faces?.[0]?.image_uris?.art_crop) {
-      imageSrc = card.definition.card_faces[0].image_uris.art_crop;
+    // Priority 2: Direct Image URIs
+    else if (card.image_uris?.normal) {
+      imageSrc = card.image_uris.normal;
+    }
+    else if (card.definition?.image_uris?.normal) {
+      imageSrc = card.definition.image_uris.normal;
     }
   }
 
