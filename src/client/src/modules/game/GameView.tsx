@@ -17,6 +17,7 @@ import { MulliganView } from './MulliganView';
 import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
+import { calculateAutoTap } from '../../utils/manaUtils';
 
 // --- DnD Helpers ---
 const DraggableCardWrapper = ({ children, card, disabled }: { children: React.ReactNode, card: CardInstance, disabled?: boolean }) => {
@@ -76,6 +77,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [viewingZone, setViewingZone] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardInstance | null>(null);
   const [dragAnimationMode, setDragAnimationMode] = useState<'start' | 'end'>('end');
+  const [previewTappedIds, setPreviewTappedIds] = useState<Set<string>>(new Set());
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -418,6 +420,21 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     const card = gameState.cards[cardId];
     if (card && card.zone === 'hand') {
       setDragAnimationMode('start');
+
+      // PREVIEW AUTO TAP
+      // If no cost (Land), do nothing.
+      if (card.manaCost && myPlayer) {
+        const myLands = Object.values(gameState.cards).filter(c =>
+          c.controllerId === currentPlayerId &&
+          c.zone === 'battlefield' &&
+          (c.types?.includes('Land') || c.typeLine?.includes('Land'))
+        );
+        const toTap = calculateAutoTap(card.manaCost, myPlayer, myLands);
+        if (toTap.size > 0) {
+          setPreviewTappedIds(toTap);
+        }
+      }
+
       // Trigger animation to shrink
       setTimeout(() => {
         setDragAnimationMode('end');
@@ -431,6 +448,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragId(null);
+    setPreviewTappedIds(new Set()); // Clear preview
     document.body.style.cursor = '';
     const { active, over } = event;
 
@@ -700,6 +718,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     const renderCard = (card: CardInstance) => {
                       const isAttacking = proposedAttackers.has(card.instanceId);
                       const blockingTargetId = proposedBlockers.get(card.instanceId);
+                      const isPreviewTapped = previewTappedIds.has(card.instanceId);
 
                       return (
                         <div
@@ -711,8 +730,11 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                               ? 'translateY(-40px) scale(1.1) rotateX(10deg)'
                               : blockingTargetId
                                 ? 'translateY(-20px) scale(1.05)'
-                                : 'none',
-                            boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none'
+                                : isPreviewTapped
+                                  ? 'rotate(10deg)'  // Preview Tap Rotation
+                                  : 'none',
+                            boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none',
+                            opacity: isPreviewTapped ? 0.7 : 1 // Preview Tap Opacity
                           }}
                         >
                           <DraggableCardWrapper card={card} disabled={!hasPriority}>
