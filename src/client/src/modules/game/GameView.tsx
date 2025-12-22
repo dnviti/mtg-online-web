@@ -796,6 +796,21 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             </div>
           </DroppableZone>
 
+          {/* New Phase Control Bar - Between Battlefield and Hand */}
+          <div className="w-full z-30 bg-black border-y border-white/10 flex justify-center shrink-0 relative shadow-2xl">
+            <PhaseStrip
+              gameState={gameState}
+              currentPlayerId={currentPlayerId}
+              onAction={(type: string, payload: any) => socketService.socket.emit(type, { action: payload })}
+              contextData={{
+                attackers: Array.from(proposedAttackers).map(id => ({ attackerId: id, targetId: opponentId })),
+                blockers: Array.from(proposedBlockers.entries()).map(([blockerId, attackerId]) => ({ blockerId, attackerId }))
+              }}
+              isYielding={isYielding}
+              onYieldToggle={() => setIsYielding(!isYielding)}
+            />
+          </div>
+
           {/* Bottom Area: Controls & Hand */}
           <div className="h-64 relative z-20 flex bg-gradient-to-t from-black to-slate-900/80 backdrop-blur-md shadow-[0_-5px_20px_rgba(0,0,0,0.5)]">
 
@@ -850,21 +865,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             <div className="flex-1 relative flex flex-col items-center justify-end px-4 pb-2">
               <DroppableZone id="hand" data={{ type: 'zone' }} className="flex-1 w-full h-full flex flex-col justify-end">
 
-                {/* Smart Button / Action Strip Floating above Hand */}
-                <div className="mb-4 z-40 self-center flex flex-col items-center gap-4 w-full">
-                  {/* Phase Strip Central Integration (Now acts as Smart Button) */}
-                  <PhaseStrip
-                    gameState={gameState}
-                    currentPlayerId={currentPlayerId}
-                    onAction={(type, payload) => socketService.socket.emit(type, { action: payload })}
-                    contextData={{
-                      attackers: Array.from(proposedAttackers).map(id => ({ attackerId: id, targetId: opponentId })),
-                      blockers: Array.from(proposedBlockers.entries()).map(([blockerId, attackerId]) => ({ blockerId, attackerId }))
-                    }}
-                    isYielding={isYielding}
-                    onYieldToggle={() => setIsYielding(!isYielding)}
-                  />
-                </div>
+
 
 
                 <div className="flex justify-center -space-x-12 w-full h-full items-end pb-4 perspective-500">
