@@ -81,7 +81,10 @@ export class RulesEngine {
     const card = this.state.cards[cardId];
     if (!card || card.zone !== 'hand') throw new Error("Invalid card.");
 
-    // TODO: Check Timing (Instant vs Sorcery)
+    // Validate Mana Cost
+    if (card.manaCost) {
+      this.payManaCost(playerId, card.manaCost);
+    }
 
     // Move to Stack
     card.zone = 'stack';
@@ -100,6 +103,143 @@ export class RulesEngine {
     // Reset priority to caster (Rule 117.3c)
     this.resetPriority(playerId);
     return true;
+  }
+
+  // --- Mana System ---
+
+  private parseManaCost(manaCost: string): { generic: number, colors: Record<string, number> } {
+    const cost = { generic: 0, colors: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 } as Record<string, number> };
+
+    if (!manaCost) return cost;
+
+    // Use regex to match {X} blocks
+    const matches = manaCost.match(/{[^{}]+}/g);
+    if (!matches) return cost;
+
+    matches.forEach(symbol => {
+      const content = symbol.replace(/[{}]/g, '');
+
+      // Check for generic number
+      if (!isNaN(Number(content))) {
+        cost.generic += Number(content);
+      }
+      // check for hybrid/phyrexian later if needed, for now exact colors
+      else {
+        // Standard colors
+        if (['W', 'U', 'B', 'R', 'G', 'C'].includes(content)) {
+          cost.colors[content]++;
+        } else {
+          // Handle 'X' or other symbols if necessary, currently ignored as 0 cost
+        }
+      }
+    });
+
+    return cost;
+  }
+
+  private getLandColor(card: any): string | null {
+    if (!card.typeLine?.includes('Land') && !card.types.includes('Land')) return null;
+
+    // Basic heuristic based on type line names
+    if (card.typeLine.includes('Plains')) return 'W';
+    if (card.typeLine.includes('Island')) return 'U';
+    if (card.typeLine.includes('Swamp')) return 'B';
+    if (card.typeLine.includes('Mountain')) return 'R';
+    if (card.typeLine.includes('Forest')) return 'G';
+
+    // Fallback: Wastes or special lands? 
+    // For MVP, we assume typed basic lands or nothing.
+    return null;
+  }
+
+  private payManaCost(playerId: string, manaCostStr: string) {
+    const player = this.state.players[playerId];
+    const cost = this.parseManaCost(manaCostStr);
+
+    // 1. Gather Resources
+    const pool = { ...player.manaPool }; // Copy pool
+    const lands = Object.values(this.state.cards).filter(c =>
+      c.controllerId === playerId &&
+      c.zone === 'battlefield' &&
+      !c.tapped &&
+      (c.types.includes('Land') || c.typeLine?.includes('Land'))
+    );
+
+    const landsToTap: string[] = []; // List of IDs
+
+    // 2. Pay Colored Costs
+    for (const color of ['W', 'U', 'B', 'R', 'G', 'C']) {
+      let required = cost.colors[color];
+      if (required <= 0) continue;
+
+      // a. Pay from Pool first
+      if (pool[color] >= required) {
+        pool[color] -= required;
+        required = 0;
+      } else {
+        required -= pool[color];
+        pool[color] = 0;
+      }
+
+      // b. Pay from Lands
+      if (required > 0) {
+        // Find lands producing this color
+        const producers = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) === color);
+
+        if (producers.length >= required) {
+          // Mark first N as used
+          for (let i = 0; i < required; i++) {
+            landsToTap.push(producers[i].instanceId);
+          }
+          required = 0;
+        } else {
+          // Use all we have, but it's not enough
+          throw new Error(`Insufficient ${color} mana.`);
+        }
+      }
+    }
+
+    // 3. Pay Generic Cost
+    let genericRequired = cost.generic;
+
+    if (genericRequired > 0) {
+      // a. Consume any remaining pools (greedy, order doesn't matter for generic usually, but maybe keep 'better' colors? No, random for now)
+      for (const color of Object.keys(pool)) {
+        if (genericRequired <= 0) break;
+        const available = pool[color];
+        if (available > 0) {
+          const params = Math.min(available, genericRequired);
+          pool[color] -= params;
+          genericRequired -= params;
+        }
+      }
+
+      // b. Tap remaining unused lands
+      if (genericRequired > 0) {
+        // Filter lands not yet marked for tap
+        const unusedLands = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) !== null);
+
+        if (unusedLands.length >= genericRequired) {
+          for (let i = 0; i < genericRequired; i++) {
+            landsToTap.push(unusedLands[i].instanceId);
+          }
+          genericRequired = 0;
+        } else {
+          throw new Error("Insufficient mana for generic cost.");
+        }
+      }
+    }
+
+    // 4. Commit Payments
+    // Update Pool
+    player.manaPool = pool;
+    // Tap Lands
+    landsToTap.forEach(lid => {
+      const land = this.state.cards[lid];
+      land.tapped = true;
+      console.log(`Auto-tapped ${land.name} for mana.`);
+    });
+    console.log(`Paid mana cost ${manaCostStr}. Remaining Pool:`, pool);
   }
 
   public addMana(playerId: string, mana: { color: string, amount: number }) {

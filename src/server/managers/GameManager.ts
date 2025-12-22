@@ -173,8 +173,8 @@ export class GameManager extends EventEmitter {
       }
     } catch (e: any) {
       console.error(`Rule Violation [${action?.type || 'UNKNOWN'}]: ${e.message}`);
-      // TODO: Return error to user?
-      // For now, just logging and not updating state (transactional-ish)
+      // Notify the user (and others?) about the error
+      this.emit('game_error', roomId, { message: e.message, userId: actorId });
       return null;
     }
 

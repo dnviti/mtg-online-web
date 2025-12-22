@@ -208,9 +208,26 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       socket.off('game_update', handleGameUpdate);
       socket.off('tournament_update', handleTournamentUpdate);
       socket.off('tournament_finished', handleTournamentFinished);
+      socket.off('tournament_finished', handleTournamentFinished);
       socket.off('match_start');
+      socket.off('game_error');
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Add a specific effect for game_error if avoiding the big dependency array is desired, 
+  // or just append to the existing effect content.
+  useEffect(() => {
+    const socket = socketService.socket;
+    const handleGameError = (data: { message: string, userId?: string }) => {
+      // Only show error if it's for me, or maybe generic "Action Failed"
+      if (data.userId && data.userId !== currentPlayerId) return; // Don't spam others errors?
+
+      showToast(data.message, 'error');
+    };
+
+    socket.on('game_error', handleGameError);
+    return () => { socket.off('game_error', handleGameError); };
+  }, [currentPlayerId, showToast]);
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
