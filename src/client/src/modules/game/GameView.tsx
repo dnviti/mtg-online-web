@@ -1016,16 +1016,20 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         </div>
         <DragOverlay dropAnimation={{ duration: 0, easing: 'linear' }}>
           {activeDragId ? (
-            <div className="w-32 h-48 pointer-events-none opacity-80 z-[1000]">
-              <img
-                src={(() => {
-                  const c = gameState.cards[activeDragId];
-                  return c?.image_uris?.normal ||
-                    (c?.definition?.set && c?.definition?.id ? `/cards/images/${c.definition.set}/full/${c.definition.id}.jpg` : c?.imageUrl);
-                })()}
-                alt="Drag Preview"
-                className="w-full h-full object-cover rounded-xl shadow-2xl"
-              />
+            <div className="w-24 h-24 pointer-events-none opacity-90 z-[1000] drop-shadow-2xl">
+              {(() => {
+                const c = gameState.cards[activeDragId];
+                if (!c) return null;
+                return (
+                  <CardComponent
+                    card={c}
+                    viewMode="cutout"
+                    onDragStart={() => { }}
+                    onClick={() => { }}
+                    className="w-full h-full rounded-lg shadow-2xl ring-2 ring-white/50"
+                  />
+                );
+              })()}
             </div>
           ) : null}
         </DragOverlay>
