@@ -672,8 +672,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     const allLands = myBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
                     const others = myBattlefield.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
 
-                    const untappedLands = allLands.filter(c => !c.tapped);
-                    const tappedLands = allLands.filter(c => c.tapped);
+
 
                     const renderCard = (card: CardInstance) => {
                       const isAttacking = proposedAttackers.has(card.instanceId);
@@ -792,35 +791,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                             </div>
                           )}
                         </div>
-                        <div className="min-h-[120px] flex content-start justify-center items-start p-2 gap-4 relative z-0 w-full">
+                        <div className="min-h-[120px] flex flex-wrap content-start justify-start items-start p-2 gap-1 relative z-0 w-full">
                           {allLands.length === 0 && (
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
                               <span className="text-white text-xs font-bold uppercase tracking-widest">Lands</span>
                             </div>
                           )}
-
-                          {/* Tapped Lands Stack */}
-                          {tappedLands.length > 0 && (
-                            <div className="relative min-w-[140px] h-32 flex items-center justify-center">
-                              {tappedLands.map((card, i) => (
-                                <div
-                                  key={card.instanceId}
-                                  className="absolute origin-center"
-                                  style={{
-                                    transform: `translate(${i * 3}px, ${i * -3}px)`,
-                                    zIndex: i,
-                                  }}
-                                >
-                                  {renderCard(card)}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Untapped Lands */}
-                          <div className="flex flex-wrap gap-1 content-start items-start justify-start">
-                            {untappedLands.map(renderCard)}
-                          </div>
+                          {allLands.map(renderCard)}
                         </div>
                       </>
                     );

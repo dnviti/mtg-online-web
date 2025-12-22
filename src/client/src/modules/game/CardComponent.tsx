@@ -59,11 +59,14 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       onMouseLeave={onMouseLeave}
       className={`
         relative rounded-lg shadow-md cursor-pointer transition-transform hover:scale-105 select-none
-        ${card.tapped ? 'rotate-45' : ''}
         ${card.zone === 'hand' ? 'w-32 h-44 -ml-12 first:ml-0 hover:z-10 hover:-translate-y-4' : (viewMode === 'cutout' ? 'w-24 h-24' : 'w-24 h-32')}
         ${className || ''}
       `}
-      style={style}
+      style={{
+        ...style,
+        transform: card.tapped ? 'rotate(10deg)' : style?.transform,
+        opacity: card.tapped ? 0.5 : style?.opacity ?? 1
+      }}
     >
       <div className="w-full h-full relative rounded-lg bg-slate-800 border-2 border-slate-700">
         <CardVisual
