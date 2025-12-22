@@ -10,6 +10,11 @@ import { EventEmitter } from 'events';
 export class GameManager extends EventEmitter {
   public games: Map<string, StrictGameState> = new Map();
 
+  // Helper to emit generic game notifications
+  public notify(roomId: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', targetId?: string) {
+    this.emit('game_notification', roomId, { message, type, targetId });
+  }
+
   createGame(gameId: string, players: { id: string; name: string; isBot?: boolean }[]): StrictGameState {
 
     // Convert array to map
@@ -199,6 +204,7 @@ export class GameManager extends EventEmitter {
       if (game.phase !== 'ending') {
         console.log(`[GameManager] Game Over. Winner: ${winner.name}`);
         this.emit('game_over', { gameId, winnerId: winner.id });
+        this.notify(gameId, `Game Over! ${winner.name} wins!`, 'success');
         game.phase = 'ending'; // Mark as ending so we don't double emit
       }
     }

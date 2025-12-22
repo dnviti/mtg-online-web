@@ -71,7 +71,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
         opacity: card.tapped ? 0.5 : style?.opacity ?? 1
       }}
     >
-      <div className="w-full h-full relative rounded-lg bg-slate-800 border-2 border-slate-700">
+      <div className={`w-full h-full relative rounded-lg bg-slate-800 border-2 border-slate-700 ${card.zone === 'battlefield' ? 'hover:border-slate-400' : ''}`}>
         <CardVisual
           card={card}
           viewMode={viewMode}

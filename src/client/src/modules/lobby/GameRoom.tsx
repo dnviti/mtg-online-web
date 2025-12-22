@@ -3,7 +3,7 @@ import { socketService } from '../../services/SocketService';
 import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers } from 'lucide-react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
-import { useToast } from '../../components/Toast';
+import { useGameToast, GameToastProvider } from '../../components/GameToast';
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
 import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
@@ -42,7 +42,7 @@ interface GameRoomProps {
   onExit: () => void;
 }
 
-export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId, initialGameState, initialDraftState, onExit }) => {
+const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPlayerId, initialGameState, initialDraftState, onExit }) => {
   // State
   const [room, setRoom] = useState<Room>(initialRoom);
   const [modalOpen, setModalOpen] = useState(false);
@@ -63,7 +63,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   });
 
   // Services
-  const { showToast } = useToast();
+  const { showGameToast } = useGameToast();
   const { confirm } = useConfirm();
 
   // Restored States
@@ -100,14 +100,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
     // 1. New Players
     curr.forEach(p => {
       if (!prev.find(old => old.id === p.id)) {
-        showToast(`${p.name} (${p.role}) joined the room.`, 'info');
+        showGameToast(`${p.name} (${p.role}) joined the room.`, 'info');
       }
     });
 
     // 2. Left Players
     prev.forEach(p => {
       if (!curr.find(newP => newP.id === p.id)) {
-        showToast(`${p.name} left the room.`, 'warning');
+        showGameToast(`${p.name} left the room.`, 'warning');
       }
     });
 
@@ -116,16 +116,16 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       const old = prev.find(o => o.id === p.id);
       if (old) {
         if (!old.isOffline && p.isOffline) {
-          showToast(`${p.name} lost connection.`, 'error');
+          showGameToast(`${p.name} lost connection.`, 'error');
         }
         if (old.isOffline && !p.isOffline) {
-          showToast(`${p.name} reconnected!`, 'success');
+          showGameToast(`${p.name} reconnected!`, 'success');
         }
       }
     });
 
     prevPlayersRef.current = curr;
-  }, [room.players, notificationsEnabled, showToast]);
+  }, [room.players, notificationsEnabled, showGameToast]);
 
   // Effects
   useEffect(() => {
@@ -189,7 +189,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
     // Also handle finish
     const handleTournamentFinished = (data: any) => {
-      showToast(`Tournament Winner: ${data.winner.name}!`, 'success');
+      showGameToast(`Tournament Winner: ${data.winner.name}!`, 'success');
     };
 
     socket.on('draft_update', handleDraftUpdate);
@@ -222,12 +222,22 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       // Only show error if it's for me, or maybe generic "Action Failed"
       if (data.userId && data.userId !== currentPlayerId) return; // Don't spam others errors?
 
-      showToast(data.message, 'error');
+      if (data.userId && data.userId !== currentPlayerId) return; // Don't spam others errors?
+
+      showGameToast(data.message, 'error');
+    };
+
+    const handleGameNotification = (data: { message: string, type?: 'info' | 'success' | 'warning' | 'error' }) => {
+      showGameToast(data.message, data.type || 'info');
     };
 
     socket.on('game_error', handleGameError);
-    return () => { socket.off('game_error', handleGameError); };
-  }, [currentPlayerId, showToast]);
+    socket.on('game_notification', handleGameNotification);
+    return () => {
+      socket.off('game_error', handleGameError);
+      socket.off('game_notification', handleGameNotification);
+    };
+  }, [currentPlayerId, showGameToast]);
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,7 +334,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           onSubmit={(deck) => {
             socketService.socket.emit('match_ready', { matchId: preparingMatchId, deck });
             setPreparingMatchId(null);
-            showToast("Deck ready! Waiting for game to start...", 'success');
+            showGameToast("Deck ready! Waiting for game to start...", 'success');
           }}
           submitLabel="Ready for Match"
         />;
@@ -659,5 +669,13 @@ export const GameRoom: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
         type={modalConfig.type}
       />
     </div>
+  );
+};
+
+export const GameRoom: React.FC<GameRoomProps> = (props) => {
+  return (
+    <GameToastProvider>
+      <GameRoomContent {...props} />
+    </GameToastProvider>
   );
 };
