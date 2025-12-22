@@ -672,6 +672,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                     const allLands = myBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
                     const others = myBattlefield.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
 
+                    const landGroups = allLands.reduce((acc, card) => {
+                      const key = card.name || 'Unknown Land';
+                      if (!acc[key]) acc[key] = [];
+                      acc[key].push(card);
+                      return acc;
+                    }, {} as Record<string, CardInstance[]>);
+
 
 
                     const renderCard = (card: CardInstance) => {
@@ -797,7 +804,29 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                               <span className="text-white text-xs font-bold uppercase tracking-widest">Lands</span>
                             </div>
                           )}
-                          {allLands.map(renderCard)}
+                          {Object.entries(landGroups).map(([name, group]) => (
+                            <div
+                              key={name}
+                              className="relative w-24 transition-all duration-300"
+                              style={{
+                                height: `${96 + (group.length - 1) * 25}px`, // 96px base + 25px offset per card
+                                marginBottom: '0.5rem'
+                              }}
+                            >
+                              {group.map((card, index) => (
+                                <div
+                                  key={card.instanceId}
+                                  className="absolute left-0 w-full"
+                                  style={{
+                                    top: `${index * 25}px`,
+                                    zIndex: index
+                                  }}
+                                >
+                                  {renderCard(card)}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
                         </div>
                       </>
                     );
