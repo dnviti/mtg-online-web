@@ -196,63 +196,21 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
             <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-56">
               <div className="bg-slate-900 border border-slate-700 rounded shadow-lg p-1">
                 <div className="px-3 py-1 font-bold text-xs text-slate-500 uppercase tracking-widest border-b border-slate-800 mb-1">
-                  Standard Tokens
+                  Game Tokens
                 </div>
+
                 <MenuItem
-                  label="1/1 Soldier"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Soldier', colors: ['W'], types: ['Creature'], subtypes: ['Soldier'], power: 1, toughness: 1, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
+                  label="Set Tokens..."
+                  onClick={() => handleAction('OPEN_TOKEN_PICKER')}
+                  className="text-emerald-400 font-bold"
                 />
-                <MenuItem
-                  label="2/2 Zombie"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Zombie', colors: ['B'], types: ['Creature'], subtypes: ['Zombie'], power: 2, toughness: 2, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
-                <MenuItem
-                  label="3/3 Beast"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Beast', colors: ['G'], types: ['Creature'], subtypes: ['Beast'], power: 3, toughness: 3, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
-                <MenuItem
-                  label="4/4 Angel"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Angel', colors: ['W'], types: ['Creature'], subtypes: ['Angel'], power: 4, toughness: 4, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
+
                 <div className="h-px bg-slate-800 my-1 mx-2"></div>
-                <MenuItem
-                  label="Treasure"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Treasure', colors: [], types: ['Artifact'], subtypes: ['Treasure'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
-                <MenuItem
-                  label="Food"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Food', colors: [], types: ['Artifact'], subtypes: ['Food'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
-                <MenuItem
-                  label="Clue"
-                  onClick={() => handleAction('CREATE_TOKEN', {
-                    definition: { name: 'Clue', colors: [], types: ['Artifact'], subtypes: ['Clue'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
-                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-                  })}
-                />
-                <div className="h-px bg-slate-800 my-1 mx-2"></div>
+
                 <MenuItem
                   label="Custom Token..."
                   onClick={() => handleAction('OPEN_CUSTOM_TOKEN_MODAL')}
-                  className="text-emerald-400 font-bold"
+                  className="text-slate-400"
                 />
               </div>
             </div>

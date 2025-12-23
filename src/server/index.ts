@@ -218,8 +218,25 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
     if (sourceMode === 'set' && selectedSets && Array.isArray(selectedSets)) {
       console.log(`[API] Fetching sets for generation: ${selectedSets.join(', ')}`);
       for (const code of selectedSets) {
+        // Fetch Main Cards (Metadata for Set + Tokens is handled inside, ensured by new logic)
         const setCards = await scryfallService.fetchSetCards(code);
         poolCards.push(...setCards);
+
+        // Fetch Tokens to Cache Their Images
+        // fetchSetCards ensures metadata is present. use getTokensForSet to retrieve them.
+        const setTokens = await scryfallService.getTokensForSet(code);
+        if (setTokens.length > 0) {
+          console.log(`[API] Caching images for ${setTokens.length} tokens in ${code}...`);
+          await cardService.cacheImages(setTokens).catch(e => console.error(`Failed to cache token images for ${code}`, e));
+        }
+
+        // Also cache images for the main set cards?
+        // Usually, the frontend might request them individually or bulk.
+        // But for generating packs, we probably want them ready.
+        // NOTE: This might slow down generation significantly if not cached.
+        if (setCards.length > 0) {
+          await cardService.cacheImages(setCards).catch(e => console.error(`Failed to cache set images for ${code}`, e));
+        }
       }
       // Force infinite card pool for Expansion mode
       if (settings) {
@@ -898,6 +915,21 @@ io.on('connection', (socket) => {
       }
     }
   });
+  socket.on('get_set_tokens', async ({ setCode }, callback) => {
+    try {
+      if (!setCode) {
+        callback({ success: false, message: "Missing setCode" });
+        return;
+      }
+
+      const tokens = await scryfallService.getTokensForSet(setCode);
+      callback({ success: true, tokens });
+    } catch (e: any) {
+      console.error("Error getting tokens", e);
+      callback({ success: false, message: e.message });
+    }
+  });
+
 });
 
 

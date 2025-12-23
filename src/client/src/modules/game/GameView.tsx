@@ -17,6 +17,7 @@ import { MulliganView } from './MulliganView';
 import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
 import { CreateTokenModal } from './CreateTokenModal'; // Import Modal
+import { TokenPickerModal } from './TokenPickerModal';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
 import { calculateAutoTap } from '../../utils/manaUtils';
 
@@ -88,6 +89,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
   // Custom Token Modal State
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
+  const [isTokenPickerOpen, setIsTokenPickerOpen] = useState(false);
   const [pendingTokenPosition, setPendingTokenPosition] = useState<{ x: number, y: number } | null>(null);
 
   // Auto-Pass Priority if Yielding
@@ -381,40 +383,20 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     }
 
     if (actionType === 'OPEN_CUSTOM_TOKEN_MODAL') {
-      // Current mouse position from context or just center? 
-      // Context Menu has request.x/y but we just closed it.
-      // But we can assume we want it roughly where the menu was.
-      // The context menu sets position relative to window.
-      // We can grab it from `contextMenu` state BEFORE we closed it? 
-      // Actually handleMenuAction calls setContextMenu(null) immediately at start.
-      // We should pass the coords in payload if needed, or defaults.
-      // Let's rely on payload if passed, or default.
-      // For now, let's just use center if not provided, but context menu should provide it if we want precision.
-      // Actually ContextMenu request state is gone.
-      // But we can reconstruct:
-      // In the context menu, we can pass `x, y` to this action.
-      // Or we can just default to center.
-      // Let's assume we want it relative to the VIEWPORT center for the modal, 
-      // but the TOKEN should spawn where?
-      // Ah, the user clicked "Custom Token" inside the menu.
-      // We want the token to spawn where the Right Click happened.
-
-      // Let's assume the previous contextMenu request coords are relevant.
-      // We need to capture them before setContextMenu(null).
-      // Wait, we call setContextMenu(null) at line 340.
-      // So custom action needs to happen BEFORE? 
-      // Or we make handleMenuAction smarter.
-
-      // Better: we won't fix line 340, we'll just check `contextMenu` state here; 
-      // React state updates are batched/async, so `contextMenu` *might* still be available 
-      // inside this function scope if we closed it just now?
-      // No, safest is to pass coordinates from the Menu Component.
-
       setPendingTokenPosition({
         x: (contextMenu?.x || window.innerWidth / 2) / window.innerWidth * 100,
         y: (contextMenu?.y || window.innerHeight / 2) / window.innerHeight * 100
       });
       setIsTokenModalOpen(true);
+      return;
+    }
+
+    if (actionType === 'OPEN_TOKEN_PICKER') {
+      setPendingTokenPosition({
+        x: (contextMenu?.x || window.innerWidth / 2) / window.innerWidth * 100,
+        y: (contextMenu?.y || window.innerHeight / 2) / window.innerHeight * 100
+      });
+      setIsTokenPickerOpen(true);
       return;
     }
 
@@ -699,6 +681,46 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           isOpen={isTokenModalOpen}
           onClose={() => setIsTokenModalOpen(false)}
           onCreate={handleCreateCustomToken}
+        />
+
+        <TokenPickerModal
+          isOpen={isTokenPickerOpen}
+          onClose={() => setIsTokenPickerOpen(false)}
+          setCode={gameState.cards?.[Object.keys(gameState.cards)[0]]?.setCode || 'woe'} // Basic guess or improve setCode detection
+          onSelect={(token) => {
+            setIsTokenPickerOpen(false);
+            if (pendingTokenPosition) {
+              // Determine placement zone based on token type
+              // Default is where clicked
+              // But we construct the definition here
+
+              // Logic to set types properly for Rules Engine to place it in correct row
+              const types = (token.type_line || "").split('—')[0].trim().split(' ');
+              const subtypes = (token.type_line.split('—')[1] || "").trim().split(' ');
+
+              const definition = {
+                name: token.name,
+                colors: token.colors || [],
+                types: types,
+                subtypes: subtypes,
+                power: token.power,
+                toughness: token.toughness,
+                imageUrl: token.image_uris?.normal || token.image_uris?.large || "",
+                // If no image, CardComponent will fallback. 
+                // But server token object might have caching?
+              };
+
+              socketService.socket.emit('game_strict_action', {
+                action: {
+                  type: 'CREATE_TOKEN',
+                  definition: definition,
+                  position: pendingTokenPosition,
+                  ownerId: currentPlayerId
+                }
+              });
+              setPendingTokenPosition(null);
+            }
+          }}
         />
 
         {/* Zoom Sidebar */}

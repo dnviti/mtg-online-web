@@ -214,10 +214,14 @@ export class ScryfallService {
   async fetchSetCards(setCode: string, relatedSets: string[] = []): Promise<ScryfallCard[]> {
     const setHash = setCode.toLowerCase();
     const setCachePath = path.join(SETS_DIR, `${setHash}.json`);
+    const tokensCachePath = path.join(SETS_DIR, `t${setHash}.json`);
 
     // Check Local Set Cache
-    if (fs.existsSync(setCachePath)) {
-      console.log(`[ScryfallService] Loading set ${setCode} from local cache...`);
+    const isSetCached = fs.existsSync(setCachePath);
+    const isTokensCached = fs.existsSync(tokensCachePath);
+
+    if (isSetCached && isTokensCached) {
+      console.log(`[ScryfallService] Loading set ${setCode} and tokens from local cache...`);
       try {
         const raw = fs.readFileSync(setCachePath, 'utf-8');
         const data = JSON.parse(raw);
@@ -228,59 +232,117 @@ export class ScryfallService {
       }
     }
 
-    console.log(`[ScryfallService] Fetching cards for set ${setCode} (related: ${relatedSets.join(',')}) from API...`);
+    console.log(`[ScryfallService] Fetching set ${setCode} (Set cached: ${isSetCached}, Tokens cached: ${isTokensCached})...`);
+
+    // ... continue to fetching
+    // We need to be careful: if set is cached but tokens are not, we don't want to re-fetch the set from Scryfall if we don't have to, 
+    // BUT the current logic below fetches BOTH or nothing given the structure.
+    // Refactoring to fetch independently or skip if cached.
+
     let allCards: ScryfallCard[] = [];
 
-    // Construct Composite Query: (e:main OR e:sub1 OR e:sub2) is:booster unique=prints
-    const setClause = `e:${setCode}` + relatedSets.map(s => ` OR e:${s}`).join('');
-    let url = `https://api.scryfall.com/cards/search?q=(${setClause}) unique=prints is:booster`;
-
     try {
-      while (url) {
-        console.log(`[ScryfallService] [API CALL] Requesting: ${url}`);
-        const resp = await fetch(url);
-        console.log(`[ScryfallService] [API RESPONSE] Status: ${resp.status}`);
+      // 1. Fetch Main Set Cards
+      if (isSetCached) {
+        const raw = fs.readFileSync(setCachePath, 'utf-8');
+        allCards = JSON.parse(raw);
+      } else {
+        // Construct Composite Query...
+        const setClause = `e:${setCode}` + relatedSets.map(s => ` OR e:${s}`).join('');
+        let url = `https://api.scryfall.com/cards/search?q=(${setClause}) unique=prints is:booster`;
 
-        if (!resp.ok) {
-          if (resp.status === 404) {
-            console.warn(`[ScryfallService] 404 Not Found for URL: ${url}. Assuming set has no cards.`);
-            break;
+        // ... fetching loop ...
+        try {
+          while (url) {
+            console.log(`[ScryfallService] [API CALL] Requesting: ${url}`);
+            const resp = await fetch(url);
+
+            if (!resp.ok) {
+              if (resp.status === 404) {
+                break;
+              }
+              const errBody = await resp.text();
+              throw new Error(`Failed to fetch set: ${resp.statusText} (${resp.status}) - ${errBody}`);
+            }
+
+            const d = await resp.json();
+            if (d.data) allCards.push(...d.data);
+
+            if (d.has_more && d.next_page) {
+              url = d.next_page;
+              await new Promise(res => setTimeout(res, 100));
+            } else {
+              url = '';
+            }
           }
-          const errBody = await resp.text();
-          console.error(`[ScryfallService] Error fetching ${url}: ${resp.status} ${resp.statusText}`, errBody);
-          throw new Error(`Failed to fetch set: ${resp.statusText} (${resp.status}) - ${errBody}`);
-        }
 
-        const d = await resp.json();
+          // Save Set Cache
+          if (allCards.length > 0) {
+            if (!fs.existsSync(path.dirname(setCachePath))) fs.mkdirSync(path.dirname(setCachePath), { recursive: true });
+            fs.writeFileSync(setCachePath, JSON.stringify(allCards, null, 2));
 
-        if (d.data) {
-          allCards.push(...d.data);
-        }
-
-        if (d.has_more && d.next_page) {
-          url = d.next_page;
-          await new Promise(res => setTimeout(res, 100)); // Respect rate limits
-        } else {
-          url = '';
+            // Smartly save individuals: only if missing from cache
+            let newCount = 0;
+            allCards.forEach(c => {
+              if (!this.getCachedCard(c.id)) {
+                this.saveCard(c);
+                newCount++;
+              }
+            });
+            console.log(`[ScryfallService] Saved set ${setCode}. New individual cards cached: ${newCount}/${allCards.length}`);
+          }
+        } catch (e) {
+          console.error("Error fetching set", e);
+          throw e;
         }
       }
 
-      // Save Set Cache
-      if (allCards.length > 0) {
-        if (!fs.existsSync(path.dirname(setCachePath))) {
-          fs.mkdirSync(path.dirname(setCachePath), { recursive: true });
-        }
-        fs.writeFileSync(setCachePath, JSON.stringify(allCards, null, 2));
+      // 2. Fetch Tokens (e:tCODE) - Only if not cached
+      if (!isTokensCached) {
+        const tokenSetCode = `t${setCode}`.toLowerCase();
+        console.log(`[ScryfallService] Fetching tokens for set (trying set:${tokenSetCode})...`);
 
-        // Smartly save individuals: only if missing from cache
-        let newCount = 0;
-        allCards.forEach(c => {
-          if (!this.getCachedCard(c.id)) {
-            this.saveCard(c);
-            newCount++;
+        let tokenUrl = `https://api.scryfall.com/cards/search?q=set:${tokenSetCode} unique=prints`;
+        let allTokens: ScryfallCard[] = [];
+
+        try {
+          while (tokenUrl) {
+            const tResp = await fetch(tokenUrl);
+            if (!tResp.ok) {
+              if (tResp.status === 404) break;
+              console.warn(`[ScryfallService] Token fetch warning: ${tResp.statusText}`);
+              break;
+            }
+
+            const td = await tResp.json();
+            if (td.data) allTokens.push(...td.data);
+
+            if (td.has_more && td.next_page) {
+              tokenUrl = td.next_page;
+              await new Promise(res => setTimeout(res, 100));
+            } else {
+              tokenUrl = '';
+            }
           }
-        });
-        console.log(`[ScryfallService] Saved set ${setCode}. New individual cards cached: ${newCount}/${allCards.length}`);
+        } catch (tokenErr) {
+          console.warn("[ScryfallService] Failed to fetch tokens (non-critical)", tokenErr);
+        }
+
+        console.log(`[ScryfallService] Found ${allTokens.length} tokens for ${setCode}.`);
+
+        // Save Token Cache
+        if (allTokens.length > 0 || !isTokensCached) { // Should we save empty token file if none found to prevent refetch? Yes.
+          if (!fs.existsSync(METADATA_DIR)) fs.mkdirSync(METADATA_DIR, { recursive: true });
+          fs.writeFileSync(tokensCachePath, JSON.stringify(allTokens, null, 2));
+
+          // Also cache individual tokens for metadata lookup
+          allTokens.forEach(c => {
+            // We might want to force save them even if cached to ensure we have them?
+            // Tokens often share IDs across reprints? No, Scryfall IDs are unique.
+            this.saveCard(c);
+          });
+          console.log(`[ScryfallService] Cached ${allTokens.length} tokens at ${tokensCachePath}`);
+        }
       }
 
       return allCards;
@@ -289,6 +351,25 @@ export class ScryfallService {
       console.error("Error fetching set", e);
       throw e;
     }
+  }
+
+  // New method to retrieve cached tokens
+  async getTokensForSet(setCode: string): Promise<ScryfallCard[]> {
+    const tokenSetCode = `t${setCode.toLowerCase()}`;
+    const tokensCachePath = path.join(SETS_DIR, `${tokenSetCode}.json`);
+
+    if (fs.existsSync(tokensCachePath)) {
+      try {
+        const raw = fs.readFileSync(tokensCachePath, 'utf-8');
+        return JSON.parse(raw);
+      } catch (e) {
+        console.error(`[ScryfallService] Error reading token cache for ${setCode}`, e);
+      }
+    }
+
+    // If not found, we could try to fetch on demand? 
+    // For now, return empty.
+    return [];
   }
 
   async fetchCollection(identifiers: { id?: string, name?: string }[]): Promise<ScryfallCard[]> {
