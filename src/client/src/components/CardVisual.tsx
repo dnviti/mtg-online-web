@@ -44,6 +44,7 @@ interface CardVisualProps {
   style?: React.CSSProperties;
   // Optional overlays
   showCounters?: boolean;
+  forceFaceUp?: boolean;
   children?: React.ReactNode;
 }
 
@@ -54,77 +55,32 @@ export const CardVisual: React.FC<CardVisualProps> = ({
   className,
   style,
   showCounters = true,
+  forceFaceUp = false,
   children
 }) => {
 
   const imageSrc = useMemo(() => {
     // Robustly resolve Image Source based on viewMode
-    let src = card.imageUrl || card.image;
+    // We prioritize Local Cache using Scryfall ID as per strict rules
 
     // Use top-level properties if available (common in DraftCard / Game Card objects)
-    let setCode = card.setCode || card.set || card.definition?.set;
-    let cardId = card.scryfallId || card.definition?.id;
-
-    // Fallback: Attempt to extract from Image URL if IDs are missing (Fix for legacy/active games)
-    if ((!setCode || !cardId) && (card.imageUrl || card.image)) {
-      const url = card.imageUrl || card.image;
-      if (typeof url === 'string' && url.includes('/cards/images/')) {
-        const parts = url.split('/cards/images/')[1].split('/');
-        // Expected formats: 
-        // 1. [set]/full/[id].jpg
-        // 2. [set]/crop/[id].jpg
-        if (parts.length >= 2) {
-          if (!setCode) setCode = parts[0];
-          if (!cardId) {
-            const filename = parts[parts.length - 1];
-            cardId = filename.replace(/\.(jpg|png)(\?.*)?$/, ''); // strip extension and query
-          }
-        }
-      }
-    }
+    const setCode = card.setCode || card.set || card.definition?.set;
+    const cardId = card.scryfallId || card.definition?.id;
 
     if (viewMode === 'cutout') {
-      // Priority 1: Local Cache (standard naming convention) - PREFERRED BY USER
       if (setCode && cardId) {
-        src = `/cards/images/${setCode}/crop/${cardId}.jpg`;
+        return `/cards/images/${setCode}/crop/${cardId}.jpg`;
       }
-      // Priority 2: Direct Image URIs (if available) - Fallback
-      else if (card.image_uris?.art_crop || card.image_uris?.crop) {
-        src = card.image_uris.art_crop || card.image_uris.crop!;
-      }
-      // Priority 3: Deep Definition Data
-      else if (card.definition?.image_uris?.art_crop) {
-        src = card.definition.image_uris.art_crop;
-      }
-      else if (card.definition?.card_faces?.[0]?.image_uris?.art_crop) {
-        src = card.definition.card_faces[0].image_uris.art_crop;
-      }
-      // Priority 4: Server-provided explicit property
-      else if (card.imageArtCrop) {
-        src = card.imageArtCrop;
-      }
-
-      // Fallback: If no crop found, src remains whatever it was (likely full)
+      // Fallback only if local ID missing (should not happen in correct flow)
+      return card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || card.imageUrl || '';
     } else {
       // Normal / Full View
-
-      // Priority 1: Local Cache (standard naming convention) - PREFERRED
       if (setCode && cardId) {
-        // Check if we want standard full image path
-        src = `/cards/images/${setCode}/full/${cardId}.jpg`;
+        return `/cards/images/${setCode}/full/${cardId}.jpg`;
       }
-      // Priority 2: Direct Image URIs
-      else if (card.image_uris?.normal) {
-        src = card.image_uris.normal;
-      }
-      else if (card.definition?.image_uris?.normal) {
-        src = card.definition.image_uris.normal;
-      }
-      else if (card.card_faces?.[0]?.image_uris?.normal) {
-        src = card.card_faces[0].image_uris.normal;
-      }
+      // Fallback
+      return card.image_uris?.normal || card.imageUrl || '';
     }
-    return src;
   }, [card, viewMode]);
 
   // Counters logic (only for Game cards usually)
@@ -138,7 +94,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       className={`relative overflow-hidden ${className || ''}`}
       style={style}
     >
-      {!card.faceDown ? (
+      {!card.faceDown || forceFaceUp ? (
         <img
           src={imageSrc}
           alt={card.name || 'Card'}
@@ -146,7 +102,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
           draggable={false}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-90 bg-[url('https://c1.scryfall.com/file/scryfall-card-backs/large/59/597b79b3-7d77-4261-871a-60dd17403388.jpg')] bg-cover">
+        <div className="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-90 bg-[url('/images/back.jpg')] bg-cover">
         </div>
       )}
 

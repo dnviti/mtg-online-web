@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal } from '../../components/Modal';
+import { ManaIcon } from '../../components/ManaIcon';
 
 interface TokenDefinition {
   name: string;
@@ -17,13 +18,15 @@ interface CreateTokenModalProps {
   onCreate: (definition: TokenDefinition) => void;
 }
 
+
+
 const COLORS = [
-  { id: 'W', label: 'White', bg: 'bg-yellow-100 text-yellow-900 border-yellow-300' },
-  { id: 'U', label: 'Blue', bg: 'bg-blue-100 text-blue-900 border-blue-300' },
-  { id: 'B', label: 'Black', bg: 'bg-slate-300 text-slate-900 border-slate-400' },
-  { id: 'R', label: 'Red', bg: 'bg-red-100 text-red-900 border-red-300' },
-  { id: 'G', label: 'Green', bg: 'bg-green-100 text-green-900 border-green-300' },
-  { id: 'C', label: 'Colorless', bg: 'bg-gray-100 text-gray-900 border-gray-300' },
+  { id: 'W', label: 'White' },
+  { id: 'U', label: 'Blue' },
+  { id: 'B', label: 'Black' },
+  { id: 'R', label: 'Red' },
+  { id: 'G', label: 'Green' },
+  { id: 'C', label: 'Colorless' },
 ];
 
 export const CreateTokenModal: React.FC<CreateTokenModalProps> = ({ isOpen, onClose, onCreate }) => {
@@ -115,20 +118,25 @@ export const CreateTokenModal: React.FC<CreateTokenModalProps> = ({ isOpen, onCl
         {/* Colors */}
         <div>
           <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Colors</label>
-          <div className="flex gap-2 flex-wrap">
-            {COLORS.map(c => (
-              <button
-                key={c.id}
-                onClick={() => toggleColor(c.id)}
-                className={`
-                  w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-all
-                  ${selectedColors.includes(c.id) ? c.bg + ' ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110' : 'bg-slate-800 border-slate-600 text-slate-500 hover:bg-slate-700'}
+          <div className="flex gap-4 flex-wrap justify-center">
+            {COLORS.map(c => {
+              const isSelected = selectedColors.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => toggleColor(c.id)}
+                  className={`
+                  transition-all duration-200 rounded-full flex items-center justify-center
+                  ${isSelected ? 'scale-110 opacity-100 saturate-100 ring-2 ring-white/50 ring-offset-2 ring-offset-slate-900' : 'opacity-40 saturate-0 hover:opacity-100 hover:saturate-100 hover:scale-105'}
                 `}
-                title={c.label}
-              >
-                {c.id}
-              </button>
-            ))}
+                  title={c.label}
+                >
+                  <div className="pointer-events-none flex items-center justify-center">
+                    <ManaIcon symbol={c.id.toLowerCase()} size="2x" shadow />
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -179,8 +187,13 @@ export const CreateTokenModal: React.FC<CreateTokenModalProps> = ({ isOpen, onCl
           </div>
           <div className="flex-1">
             <div className="font-bold text-white text-sm">{name} {power}/{toughness}</div>
-            <div className="text-xs text-slate-400">
-              {selectedColors.length > 0 ? selectedColors.join('/') : 'Colorless'} {types} {subtypes ? `— ${subtypes}` : ''}
+            <div className="text-xs text-slate-400 flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                {selectedColors.length > 0 ? selectedColors.map(c => (
+                  <ManaIcon key={c} symbol={c.toLowerCase()} size="sm" shadow />
+                )) : 'Colorless'}
+              </div>
+              <span>{types} {subtypes ? `— ${subtypes}` : ''}</span>
             </div>
           </div>
         </div>

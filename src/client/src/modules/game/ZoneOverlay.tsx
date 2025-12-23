@@ -1,5 +1,6 @@
 import React from 'react';
 import { CardInstance } from '../../types/game';
+import { CardVisual } from '../../components/CardVisual';
 
 interface ZoneOverlayProps {
   zoneName: string;
@@ -51,15 +52,11 @@ export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClo
                       }
                     }}
                   >
-                    <img
-                      src={(() => {
-                        if (card.definition?.set && card.definition?.id) {
-                          return `/cards/images/${card.definition.set}/full/${card.definition.id}.jpg`;
-                        }
-                        return card.imageUrl || 'https://via.placeholder.com/250x350';
-                      })()}
-                      alt={card.name}
-                      className="w-full h-full object-cover"
+                    <CardVisual
+                      card={card}
+                      viewMode="normal"
+                      className="w-full h-full"
+                      forceFaceUp={true}
                     />
                   </div>
                   <div className="mt-2 text-center">
