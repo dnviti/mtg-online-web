@@ -78,6 +78,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [hoveredCard, setHoveredCard] = useState<CardInstance | null>(null);
   const [dragAnimationMode, setDragAnimationMode] = useState<'start' | 'end'>('end');
   const [previewTappedIds, setPreviewTappedIds] = useState<Set<string>>(new Set());
+  const [stopRequested, setStopRequested] = useState(false);
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -162,7 +163,31 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
       // If I manually enable it, isBotTurn is false. We simply don't interfere.
       // This allows accurate Manual Yielding!
     }
-  }, [gameState.activePlayerId, gameState.step, isBotTurn]); // Removed isYielding dependency to avoid loops?
+  }, [gameState.activePlayerId, gameState.step, isBotTurn]);
+
+  // --- Smart Auto-Pass (Suspend Logic) ---
+  useEffect(() => {
+    setStopRequested(false);
+  }, [gameState.step, gameState.turn]);
+
+  useEffect(() => {
+    // Smart Auto-Pass Logic for NAP
+    if (!gameState.activePlayerId) return;
+    const amActivePlayer = gameState.activePlayerId === currentPlayerId;
+    const amPriorityPlayer = gameState.priorityPlayerId === currentPlayerId;
+
+    // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
+    // Logic: Auto-Pass.
+    if (!amActivePlayer && amPriorityPlayer && !stopRequested) {
+      if (gameState.step === 'declare_blockers') return; // Explicit wait for blockers
+
+      console.log("[Smart Auto-Pass] Auto-passing priority as NAP (No Suspend requested).");
+      const timer = setTimeout(() => {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [gameState.activePlayerId, gameState.priorityPlayerId, stopRequested, currentPlayerId, gameState.step]);
   // If I access `isYielding` inside `setIsYielding`, I don't need it in dependency.
   // But wait, the `if (['declare_...'].includes)` logic needs to potentially set it false.
   // setIsYielding(false) is fine.

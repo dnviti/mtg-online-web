@@ -10,6 +10,8 @@ interface PhaseStripProps {
   contextData?: any;
   isYielding?: boolean;
   onYieldToggle?: () => void;
+  stopRequested?: boolean;
+  onToggleSuspend?: () => void;
 }
 
 export const PhaseStrip: React.FC<PhaseStripProps> = ({
@@ -18,7 +20,9 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
   onAction,
   contextData,
   isYielding,
-  onYieldToggle
+  onYieldToggle,
+  stopRequested,
+  onToggleSuspend
 }) => {
   const currentPhase = gameState.phase as Phase;
   const currentStep = gameState.step as Step;
@@ -63,12 +67,6 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
         }
       }
     } else if (currentStep === 'declare_blockers') {
-      // If it's MY turn (Active Player), I should NEVER verify blocks myself?
-      // Actually Rules say AP gets priority after blocks.
-      // So if I have priority, it MUST mean blocks are done (or I'm waiting for them, but then I wouldn't have priority?)
-      // Wait, if I am AP, and I have priority in this step, it means blocks are implicitly done (flag should be true).
-      // Fallback: If I am Active Player, always show "To Damage".
-
       const showToDamage = gameState.blockersDeclared || isMyTurn; // UI Safety for AP
 
       if (showToDamage) {
@@ -88,19 +86,36 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
       else if (gameState.phase === 'main2') actionLabel = "End Turn";
       else actionLabel = "Pass";
     } else {
-      // Resolve
-      // const topItem = gameState.stack![gameState.stack!.length - 1]; // Unused
+      // Resolve Logic
       actionLabel = "Resolve";
       actionType = 'PASS_PRIORITY';
       ActionIcon = Zap;
       actionColor = "bg-amber-600 hover:bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.4)]";
     }
   } else {
-    // Waiting
-    actionLabel = "Waiting...";
-    ActionIcon = Hand;
-    actionColor = "bg-white/5 text-slate-500 cursor-not-allowed";
-    isActionEnabled = false;
+    // NOT PRIORITY (Waiting)
+    // Suspend Button Logic for NAP
+    if (!isMyTurn) {
+      isActionEnabled = true;
+
+      if (stopRequested) {
+        actionLabel = "Stop Set";
+        ActionIcon = Hand;
+        actionColor = "bg-red-600 hover:bg-red-500 animate-pulse font-bold border border-red-400";
+        actionType = 'TOGGLE_SUSPEND';
+      } else {
+        actionLabel = "Suspend";
+        ActionIcon = Hand;
+        actionColor = "bg-yellow-600/80 hover:bg-yellow-500 text-yellow-50 border border-yellow-500/50";
+        actionType = 'TOGGLE_SUSPEND';
+      }
+    } else {
+      // I am AP but don't have priority? (Maybe waiting for server?)
+      actionLabel = "Waiting...";
+      ActionIcon = Hourglass;
+      actionColor = "bg-white/5 text-slate-500 cursor-not-allowed";
+      isActionEnabled = false;
+    }
   }
 
   const handleAction = (e: React.MouseEvent) => {
