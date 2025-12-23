@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { CardVisual, VisualCard } from './CardVisual';
 import { Eye, ChevronLeft } from 'lucide-react';
 import { ManaIcon } from './ManaIcon';
 import { formatOracleText } from '../utils/textUtils';
+import { GameLogPanel } from './GameLogPanel';
 
 interface SidePanelPreviewProps {
   card: VisualCard | null;
@@ -10,23 +11,25 @@ interface SidePanelPreviewProps {
   isCollapsed: boolean;
   onToggleCollapse: (collapsed: boolean) => void;
   onResizeStart?: (e: React.MouseEvent | React.TouchEvent) => void;
-  className?: string; // For additional styling (positioning, z-index, etc)
+  className?: string;
   children?: React.ReactNode;
+  showLog?: boolean;
 }
 
-export const SidePanelPreview: React.FC<SidePanelPreviewProps> = ({
+export const SidePanelPreview = forwardRef<HTMLDivElement, SidePanelPreviewProps>(({
   card,
   width,
   isCollapsed,
   onToggleCollapse,
   onResizeStart,
   className,
-  children
-}) => {
+  children,
+  showLog = true,
+}, ref) => {
   // If collapsed, render the collapsed strip
   if (isCollapsed) {
     return (
-      <div className={`flex shrink-0 w-12 flex-col items-center py-4 bg-slate-900 border-r border-slate-800 z-30 gap-4 transition-all duration-300 ${className || ''}`}>
+      <div ref={ref} className={`flex shrink-0 w-12 flex-col items-center py-4 bg-slate-900 border-r border-slate-800 z-30 gap-4 transition-all duration-300 ${className || ''}`}>
         <button
           onClick={() => onToggleCollapse(false)}
           className="p-3 rounded-xl transition-all duration-200 group relative text-slate-500 hover:text-purple-400 hover:bg-slate-800"
@@ -44,6 +47,7 @@ export const SidePanelPreview: React.FC<SidePanelPreviewProps> = ({
   // Expanded View
   return (
     <div
+      ref={ref}
       className={`flex shrink-0 flex-col items-center justify-start pt-4 border-r border-slate-800 bg-slate-900 z-30 p-4 relative group/sidebar shadow-2xl ${className || ''}`}
       style={{ width: width }}
     >
@@ -144,6 +148,14 @@ export const SidePanelPreview: React.FC<SidePanelPreviewProps> = ({
           <div className="h-8 w-1 bg-slate-700/50 rounded-full group-hover:bg-emerald-400 transition-colors" />
         </div>
       )}
+
+
+      {/* Game Action Log - Fixed at bottom */}
+      {showLog && (
+        <GameLogPanel className="w-full shrink-0 border-t border-slate-800" maxHeight="30%" />
+      )}
     </div>
   );
-};
+});
+
+SidePanelPreview.displayName = 'SidePanelPreview';

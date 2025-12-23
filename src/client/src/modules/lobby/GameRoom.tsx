@@ -4,6 +4,7 @@ import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot,
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { useGameToast, GameToastProvider } from '../../components/GameToast';
+import { GameLogProvider, useGameLog } from '../../contexts/GameLogContext'; // Import Log Provider and Hook
 import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
 import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
@@ -64,6 +65,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
   // Services
   const { showGameToast } = useGameToast();
+  const { addLog } = useGameLog(); // Use Log Hook
   const { confirm } = useConfirm();
 
   // Restored States
@@ -222,13 +224,19 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       // Only show error if it's for me, or maybe generic "Action Failed"
       if (data.userId && data.userId !== currentPlayerId) return; // Don't spam others errors?
 
-      if (data.userId && data.userId !== currentPlayerId) return; // Don't spam others errors?
-
       showGameToast(data.message, 'error');
+      addLog(data.message, 'error', 'System'); // Add to log
     };
 
     const handleGameNotification = (data: { message: string, type?: 'info' | 'success' | 'warning' | 'error' }) => {
       showGameToast(data.message, data.type || 'info');
+
+      // Infer source from message content or default to System
+      // Ideally backend sends source, but for now we parse or default
+      let source = 'System';
+      if (data.message.includes('turn')) source = 'Game'; // Example heuristic
+
+      addLog(data.message, (data.type as any) || 'info', source);
     };
 
     socket.on('game_error', handleGameError);
@@ -675,7 +683,9 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 export const GameRoom: React.FC<GameRoomProps> = (props) => {
   return (
     <GameToastProvider>
-      <GameRoomContent {...props} />
+      <GameLogProvider>
+        <GameRoomContent {...props} />
+      </GameLogProvider>
     </GameToastProvider>
   );
 };

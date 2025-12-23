@@ -608,11 +608,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
         {/* Zoom Sidebar */}
         <SidePanelPreview
+          ref={sidebarRef}
           card={hoveredCard}
           width={sidebarWidth}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={setIsSidebarCollapsed}
           onResizeStart={handleResizeStart}
+          showLog={true}
         />
 
         {/* Main Game Area */}
