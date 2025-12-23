@@ -675,7 +675,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
             </div>
 
             {/* Opponent Battlefield */}
-            <div className="flex-1 w-full relative perspective-1000">
+            <div className="flex-1 w-full relative perspective-1000 z-0">
               <div
                 className="w-full h-full relative"
                 style={{
@@ -683,43 +683,73 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   transformOrigin: 'center bottom',
                 }}
               >
-                {oppBattlefield.map(card => {
-                  const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
-                  const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+                {(() => {
+                  // Organize Opponent Cards
+                  const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
+                  const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
 
                   return (
-                    <div
-                      key={card.instanceId}
-                      className="absolute transition-all duration-300 ease-out"
-                      style={{
-                        left: `${card.position?.x || 50}%`,
-                        top: `${card.position?.y || 50}%`,
-                        zIndex: Math.floor((card.position?.y || 0)),
-                        transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none' // Move towards me
-                      }}
-                    >
-                      <CardComponent
-                        card={card}
-                        viewMode="cutout"
-                        onDragStart={() => { }}
-                        onClick={() => { }}
-                        onMouseEnter={() => setHoveredCard(card)}
-                        onMouseLeave={() => setHoveredCard(null)}
-                        className={`
-                              w-24 h-24 rounded shadow-sm
-                              ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
-                              ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
-                            `}
-                      />
-                      <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg" />
-                      {isAttacking && (
-                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
-                          ATTACKING
-                        </div>
-                      )}
+                    <div className="w-full h-full flex flex-col justify-end pb-4">
+                      {/* Back Row: Lands (Top) */}
+                      <div className="flex justify-center items-end -space-x-8 mb-4 opacity-90 scale-90 origin-bottom">
+                        {oppLands.map((card, idx) => (
+                          <div key={card.instanceId} style={{ zIndex: idx }} className="pointer-events-auto">
+                            <CardComponent
+                              card={card}
+                              viewMode="cutout"
+                              className="w-20 h-20 rounded shadow-sm"
+                              onDragStart={() => { }}
+                              onClick={() => { }}
+                              onMouseEnter={() => setHoveredCard(card)}
+                              onMouseLeave={() => setHoveredCard(null)}
+                            />
+                          </div>
+                        ))}
+                        {oppLands.length === 0 && <div className="h-20" />}
+                      </div>
+
+                      {/* Front Row: Creatures (Bottom) */}
+                      <div className="flex justify-center items-end gap-2 flex-wrap px-8">
+                        {oppCreatures.map(card => {
+                          const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
+                          const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+
+                          return (
+                            <div
+                              key={card.instanceId}
+                              className="relative transition-all duration-300 ease-out pointer-events-auto"
+                              style={{
+                                transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none', // Attack moves "Forward" (Down)
+                                zIndex: 10
+                              }}
+                            >
+                              <CardComponent
+                                card={card}
+                                viewMode="cutout"
+                                onMouseEnter={() => setHoveredCard(card)}
+                                onMouseLeave={() => setHoveredCard(null)}
+                                onDragStart={() => { }}
+                                onClick={() => { }}
+                                className={`
+                                  w-24 h-24 rounded shadow-sm
+                                  ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
+                                  ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
+                                `}
+                              />
+                              <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg" />
+
+                              {isAttacking && (
+                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
+                                  ATTACKING
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
-                })}
+                })()}
               </div>
             </div>
           </div>
