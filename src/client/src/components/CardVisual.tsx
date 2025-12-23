@@ -62,8 +62,26 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     let src = card.imageUrl || card.image;
 
     // Use top-level properties if available (common in DraftCard / Game Card objects)
-    const setCode = card.setCode || card.set || card.definition?.set;
-    const cardId = card.scryfallId || card.definition?.id;
+    let setCode = card.setCode || card.set || card.definition?.set;
+    let cardId = card.scryfallId || card.definition?.id;
+
+    // Fallback: Attempt to extract from Image URL if IDs are missing (Fix for legacy/active games)
+    if ((!setCode || !cardId) && (card.imageUrl || card.image)) {
+      const url = card.imageUrl || card.image;
+      if (typeof url === 'string' && url.includes('/cards/images/')) {
+        const parts = url.split('/cards/images/')[1].split('/');
+        // Expected formats: 
+        // 1. [set]/full/[id].jpg
+        // 2. [set]/crop/[id].jpg
+        if (parts.length >= 2) {
+          if (!setCode) setCode = parts[0];
+          if (!cardId) {
+            const filename = parts[parts.length - 1];
+            cardId = filename.replace(/\.(jpg|png)(\?.*)?$/, ''); // strip extension and query
+          }
+        }
+      }
+    }
 
     if (viewMode === 'cutout') {
       // Priority 1: Local Cache (standard naming convention) - PREFERRED BY USER

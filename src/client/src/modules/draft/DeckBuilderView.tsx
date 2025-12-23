@@ -482,7 +482,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
         landCard = {
           id: `basic-source-${type}`,
           name: type,
-          image_uris: { normal: LAND_URL_MAP[type] },
+          image_uris: { normal: LAND_URL_MAP[type], art_crop: LAND_URL_MAP[type] },
           typeLine: "Basic Land",
           scryfallId: `generic-${type}`
         };
@@ -721,6 +721,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
       name: type,
       isLandSource: true,
       image: LAND_URL_MAP[type],
+      imageArtCrop: LAND_URL_MAP[type], // Explicitly add fallback crop
       typeLine: `Basic Land — ${type}`,
       rarity: 'common',
       cmc: 0,

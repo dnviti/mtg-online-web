@@ -56,6 +56,7 @@ export interface CardInstance {
     png?: string;
     border_crop?: string;
   };
+  imageArtCrop?: string;
 }
 
 export interface PlayerState {

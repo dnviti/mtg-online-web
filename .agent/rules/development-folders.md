@@ -12,14 +12,10 @@ The project follows a **Modular Monolith** pattern. All backend logic is structu
 ## Backend and Frontend Integration (The Monolith)
 The core server project (e.g., `./src/server` or `./src/app`) contains the entry point (`index.ts` or `main.ts`). Functionality is divided into **Modules**:
 
-* **Controllers:** `./src/modules/[ModuleName]/controllers/` (Handle HTTP requests).
-* **Routes:** `./src/modules/[ModuleName]/routes/` (Define express/fastify routes).
-* **DTOs:** `./src/modules/[ModuleName]/dtos/` (Data Transfer Objects for validation).
-* **Static Assets:** `./src/public/` (for module-specific assets if necessary).
+## Cards Images folder
+* **Cropped Art** `./src/server/public/cards/images/[set]/crop/
+* **Standard Art** `./src/server/public/cards/images/[set]/full/
 
-## Domain Layer
-Shared business logic and database entities reside in shared directories or within the modules themselves, designed to be importable:
-
-* **Entities:** `./src/modules/[ModuleName]/entities/` (ORM definitions, e.g., TypeORM/Prisma models).
-* **Services:** `./src/modules/[ModuleName]/services/` (Business logic implementation).
-* **Interfaces:** `./src/shared/interfaces/` or within the module (Type definitions).
+## Metadata folder
+* **Card Metadata** `./src/server/public/cards/metadata/[set]/
+* **Set Metadata** `./src/server/public/cards/sets/

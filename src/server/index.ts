@@ -674,16 +674,38 @@ io.on('connection', (socket) => {
       const game = gameManager.createGame(room.id, updatedRoom.players);
       if (decks) {
         Object.entries(decks).forEach(([pid, deck]: [string, any]) => {
+
           // @ts-ignore
           deck.forEach(card => {
+            // Robustly resolve setCode / scryfallId
+            let setCode = card.setCode || card.set || card.definition?.set;
+            let scryfallId = card.scryfallId || card.id || card.definition?.id;
+
+            // Fallback: Extract from Image URL if missing
+            if ((!setCode || !scryfallId) && card.imageUrl && card.imageUrl.includes('/cards/images/')) {
+              const parts = card.imageUrl.split('/cards/images/');
+              if (parts[1]) {
+                const pathParts = parts[1].split('/');
+                // Format: [setCode]/[full|crop]/[id].jpg OR [setCode]/[id].jpg
+                if (!setCode) setCode = pathParts[0];
+
+                if (!scryfallId) {
+                  const filename = pathParts[pathParts.length - 1]; // uuid.jpg
+                  scryfallId = filename.replace(/\.(jpg|png)$/, '');
+                }
+              }
+            }
+
             gameManager.addCardToGame(room.id, {
               ownerId: pid,
               controllerId: pid,
               oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
-              scryfallId: card.scryfallId || card.id || card.definition?.id,
-              setCode: card.setCode || card.set || card.definition?.set,
+              scryfallId: scryfallId,
+              setCode: setCode,
               name: card.name,
-              imageUrl: card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "",
+              // IMPORTANT: If we have setCode+scryfallId, we clear imageUrl so client uses local cache logic
+              imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
+              imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
               zone: 'library',
               typeLine: card.typeLine || card.type_line || '',
               oracleText: card.oracleText || card.oracle_text || '',
@@ -800,14 +822,33 @@ io.on('connection', (socket) => {
         [{ p: p1, d: deck1 }, { p: p2, d: deck2 }].forEach(({ p, d }) => {
           if (d) {
             d.forEach((card: any) => {
+              // Robustly resolve setCode / scryfallId
+              let setCode = card.setCode || card.set || card.definition?.set;
+              let scryfallId = card.scryfallId || card.id || card.definition?.id;
+
+              // Fallback: Extract from Image URL if missing
+              if ((!setCode || !scryfallId) && card.imageUrl && card.imageUrl.includes('/cards/images/')) {
+                const parts = card.imageUrl.split('/cards/images/');
+                if (parts[1]) {
+                  const pathParts = parts[1].split('/');
+                  if (!setCode) setCode = pathParts[0];
+                  if (!scryfallId) {
+                    const filename = pathParts[pathParts.length - 1]; // uuid.jpg
+                    scryfallId = filename.replace(/\.(jpg|png)$/, '');
+                  }
+                }
+              }
+
               gameManager.addCardToGame(matchId, {
                 ownerId: p.id,
                 controllerId: p.id,
                 oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
-                scryfallId: card.scryfallId || card.id || card.definition?.id,
-                setCode: card.setCode || card.set || card.definition?.set,
+                scryfallId: scryfallId,
+                setCode: setCode,
                 name: card.name,
-                imageUrl: "", // Optimisation: Client hydrates from cache
+                // IMPORTANT: If we have setCode+scryfallId, we clear imageUrl so client uses local cache logic
+                imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
+                imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
                 zone: 'library',
                 typeLine: card.typeLine || card.type_line || '',
                 oracleText: card.oracleText || card.oracle_text || '',

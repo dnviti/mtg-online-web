@@ -65,6 +65,7 @@ export interface CardObject {
   setCode?: string;
   controlledSinceTurn: number; // For Summoning Sickness check
   definition?: any;
+  imageArtCrop?: string;
 }
 
 export interface PlayerState {
