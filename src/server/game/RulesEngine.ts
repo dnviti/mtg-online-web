@@ -499,7 +499,7 @@ export class RulesEngine {
     toughness: number,
     keywords?: string[],
     imageUrl?: string
-  }) {
+  }, position?: { x: number, y: number }) {
     const token: any = { // Using any allowing partial CardObject construction
       instanceId: Math.random().toString(36).substring(7),
       oracleId: 'token-' + Math.random(),
@@ -523,7 +523,7 @@ export class RulesEngine {
       imageUrl: definition.imageUrl || '',
       damageMarked: 0,
       controlledSinceTurn: this.state.turnCount,
-      position: { x: Math.random() * 80, y: Math.random() * 80, z: ++this.state.maxZ }
+      position: position ? { ...position, z: ++this.state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++this.state.maxZ }
     };
 
     // Type-safe assignment

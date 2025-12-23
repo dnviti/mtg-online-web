@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { CardInstance } from '../../types/game';
 
 export interface ContextMenuRequest {
@@ -72,12 +73,14 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
             <MenuItem label={card.faceDown ? "Flip Face Up" : "Flip Face Down"} onClick={() => handleAction('FLIP_CARD', { cardId: card.instanceId })} />
 
             <div className="relative group">
-              <MenuItem label="Add Counter ▸" onClick={() => { }} />
-              <div className="absolute left-full top-0 ml-1 w-40 bg-slate-900 border border-slate-700 rounded shadow-lg hidden group-hover:block z-50">
-                <MenuItem label="+1/+1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: 1 })} />
-                <MenuItem label="-1/-1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '-1/-1', amount: 1 })} />
-                <MenuItem label="Loyalty Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: 'loyalty', amount: 1 })} />
-                <MenuItem label="Remove Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: -1 })} />
+              <MenuItem label="Add Counter" hasSubmenu />
+              <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-40">
+                <div className="bg-slate-900 border border-slate-700 rounded shadow-lg">
+                  <MenuItem label="+1/+1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: 1 })} />
+                  <MenuItem label="-1/-1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '-1/-1', amount: 1 })} />
+                  <MenuItem label="Loyalty Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: 'loyalty', amount: 1 })} />
+                  <MenuItem label="Remove Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: -1 })} />
+                </div>
               </div>
             </div>
 
@@ -179,71 +182,85 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
 
       {request.type === 'zone' && request.zone && renderZoneMenu(request.zone)}
 
+
       {request.type === 'background' && (
         <>
           <div className="px-3 py-1 font-bold text-xs text-slate-500 uppercase tracking-widest border-b border-slate-800 mb-1">
             Battlefield
           </div>
-          <MenuItem
-            label="Create Token (1/1 Soldier)"
-            onClick={() => handleAction('CREATE_TOKEN', {
-              definition: {
-                name: 'Soldier',
-                colors: ['W'],
-                types: ['Creature'],
-                subtypes: ['Soldier'],
-                power: 1,
-                toughness: 1,
-                imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' // Generic Soldier?
-              },
-              position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-            })}
-          />
-          <MenuItem
-            label="Create Token (2/2 Zombie)"
-            onClick={() => handleAction('CREATE_TOKEN', {
-              definition: {
-                name: 'Zombie',
-                colors: ['B'],
-                types: ['Creature'],
-                subtypes: ['Zombie'],
-                power: 2,
-                toughness: 2,
-                imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' // Re-use or find standard
-              },
-              position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-            })}
-          />
+
+          {/* Token Submenu */}
+          <div className="relative group">
+            <MenuItem label="Create Token" hasSubmenu />
+            {/* Wrapper for hover bridge */}
+            <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-56">
+              <div className="bg-slate-900 border border-slate-700 rounded shadow-lg p-1">
+                <div className="px-3 py-1 font-bold text-xs text-slate-500 uppercase tracking-widest border-b border-slate-800 mb-1">
+                  Standard Tokens
+                </div>
+                <MenuItem
+                  label="1/1 Soldier"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Soldier', colors: ['W'], types: ['Creature'], subtypes: ['Soldier'], power: 1, toughness: 1, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <MenuItem
+                  label="2/2 Zombie"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Zombie', colors: ['B'], types: ['Creature'], subtypes: ['Zombie'], power: 2, toughness: 2, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <MenuItem
+                  label="3/3 Beast"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Beast', colors: ['G'], types: ['Creature'], subtypes: ['Beast'], power: 3, toughness: 3, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <MenuItem
+                  label="4/4 Angel"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Angel', colors: ['W'], types: ['Creature'], subtypes: ['Angel'], power: 4, toughness: 4, imageUrl: 'https://cards.scryfall.io/large/front/b/d/bd4047a5-d14f-4d2d-9333-5c628dfca115.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <div className="h-px bg-slate-800 my-1 mx-2"></div>
+                <MenuItem
+                  label="Treasure"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Treasure', colors: [], types: ['Artifact'], subtypes: ['Treasure'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <MenuItem
+                  label="Food"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Food', colors: [], types: ['Artifact'], subtypes: ['Food'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <MenuItem
+                  label="Clue"
+                  onClick={() => handleAction('CREATE_TOKEN', {
+                    definition: { name: 'Clue', colors: [], types: ['Artifact'], subtypes: ['Clue'], power: 0, toughness: 0, imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg' },
+                    position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
+                  })}
+                />
+                <div className="h-px bg-slate-800 my-1 mx-2"></div>
+                <MenuItem
+                  label="Custom Token..."
+                  onClick={() => handleAction('OPEN_CUSTOM_TOKEN_MODAL')}
+                  className="text-emerald-400 font-bold"
+                />
+              </div>
+            </div>
+          </div>
+
           <MenuItem
             label="Add Mana..."
-            onClick={() => handleAction('MANA', { x: request.x, y: request.y })} // Adjusted to use request.x/y as MenuItem's onClick doesn't pass event
-          // icon={<Zap size={14} />} // Zap is not defined in this scope.
-          />
-          <MenuItem
-            label="Inspect Details"
-            onClick={() => handleAction('INSPECT', {})}
-          // icon={<Maximize size={14} />} // Maximize and RotateCw are not defined in this scope.
-          />
-          <MenuItem
-            label="Tap / Untap"
-            onClick={() => handleAction('TAP', {})}
-          // icon={<RotateCw size={14} />} // Maximize and RotateCw are not defined in this scope.
-          />
-          <MenuItem
-            label="Create Treasure"
-            onClick={() => handleAction('CREATE_TOKEN', {
-              definition: {
-                name: 'Treasure',
-                colors: [],
-                types: ['Artifact'],
-                subtypes: ['Treasure'],
-                power: 0,
-                toughness: 0,
-                keywords: [],
-                imageUrl: 'https://cards.scryfall.io/large/front/2/7/2776c5b9-1d22-4a00-9988-294747734185.jpg'
-              },
-              position: { x: (request.x / window.innerWidth) * 100, y: (request.y / window.innerHeight) * 100 }
-            })}
+            onClick={() => handleAction('MANA', { x: request.x, y: request.y })}
           />
           <div className="h-px bg-slate-800 my-1 mx-2"></div>
           <MenuItem label="Untap All My Permanents" onClick={() => handleAction('UNTAP_ALL')} />
@@ -253,12 +270,13 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
   );
 };
 
-const MenuItem: React.FC<{ label: string; onClick: () => void; className?: string; onMouseEnter?: () => void }> = ({ label, onClick, className = '', onMouseEnter }) => (
+const MenuItem: React.FC<{ label: string; onClick?: () => void; className?: string; onMouseEnter?: () => void; hasSubmenu?: boolean }> = ({ label, onClick, className = '', onMouseEnter, hasSubmenu }) => (
   <div
-    className={`px-4 py-2 hover:bg-emerald-600/20 hover:text-emerald-300 cursor-pointer transition-colors ${className}`}
+    className={`px-4 py-2 hover:bg-emerald-600/20 hover:text-emerald-300 cursor-pointer transition-colors flex justify-between items-center ${className}`}
     onClick={onClick}
     onMouseEnter={onMouseEnter}
   >
-    {label}
+    <span>{label}</span>
+    {hasSubmenu && <ChevronRight size={14} className="text-slate-500" />}
   </div>
 );

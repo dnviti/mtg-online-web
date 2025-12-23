@@ -157,7 +157,7 @@ export class GameManager extends EventEmitter {
           engine.declareBlockers(actorId, action.blockers);
           break;
         case 'CREATE_TOKEN':
-          engine.createToken(actorId, action.definition);
+          engine.createToken(actorId, action.definition, action.position);
           break;
         case 'MULLIGAN_DECISION':
           engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);

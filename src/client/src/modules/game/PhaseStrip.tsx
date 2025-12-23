@@ -120,6 +120,13 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
 
   const handleAction = (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    // Special Case: Suspend (No Priority Needed)
+    if (actionType === 'TOGGLE_SUSPEND') {
+      onToggleSuspend?.();
+      return;
+    }
+
     if (isYielding) {
       onYieldToggle?.();
       return;
