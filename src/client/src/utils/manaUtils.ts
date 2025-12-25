@@ -1,21 +1,42 @@
 
 import { CardInstance, PlayerState } from '../types/game';
 
-// Helper to determine land color identity from type line or name
-export const getLandColor = (card: CardInstance): string | null => {
-  const typeLine = card.typeLine || '';
-  const types = card.types || [];
+// Helper to determine ALL colors a card can produce (Universal)
+export const getAvailableManaColors = (card: CardInstance): string[] => {
+  // 0. Type Guard for Land (Auto-Tap usually restricts to lands)
+  if (!card.typeLine?.includes('Land') && !card.types?.includes('Land')) return [];
 
-  if (!typeLine.includes('Land') && !types.includes('Land')) return null;
+  // 1. Check Definition (Scryfall Data)
+  if (card.definition?.produced_mana && Array.isArray(card.definition.produced_mana)) {
+    return card.definition.produced_mana;
+  }
 
-  if (typeLine.includes('Plains')) return 'W';
-  if (typeLine.includes('Island')) return 'U';
-  if (typeLine.includes('Swamp')) return 'B';
-  if (typeLine.includes('Mountain')) return 'R';
-  if (typeLine.includes('Forest')) return 'G';
+  const symbols: Set<string> = new Set();
+  const lowerType = (card.typeLine || '').toLowerCase();
+  const lowerText = (card.definition?.oracle_text || card.oracleText || '').toLowerCase();
 
-  // TODO: Wastes
-  return null;
+  // 2. Basic Land Types
+  if (lowerType.includes('plains')) symbols.add('W');
+  if (lowerType.includes('island')) symbols.add('U');
+  if (lowerType.includes('swamp')) symbols.add('B');
+  if (lowerType.includes('mountain')) symbols.add('R');
+  if (lowerType.includes('forest')) symbols.add('G');
+  if (lowerType.includes('waste')) symbols.add('C');
+
+  // 3. Oracle Text Fallback
+  if (symbols.size === 0) {
+    if (lowerText.includes('{w}')) symbols.add('W');
+    if (lowerText.includes('{u}')) symbols.add('U');
+    if (lowerText.includes('{b}')) symbols.add('B');
+    if (lowerText.includes('{r}')) symbols.add('R');
+    if (lowerText.includes('{g}')) symbols.add('G');
+    if (lowerText.includes('{c}')) symbols.add('C');
+    if (lowerText.includes('any color')) {
+      ['W', 'U', 'B', 'R', 'G'].forEach(c => symbols.add(c));
+    }
+  }
+
+  return Array.from(symbols);
 };
 
 export const parseManaCost = (manaCost: string): { generic: number, colors: Record<string, number>, hybrids: string[][] } => {
@@ -41,7 +62,12 @@ export const parseManaCost = (manaCost: string): { generic: number, colors: Reco
     }
     else {
       if (['W', 'U', 'B', 'R', 'G', 'C'].includes(content)) {
-        cost.colors[content]++;
+        cost.colors[content]; // Bug in original: logic was accessing but not incrementing?
+        // Wait, original file had: cost.colors[content]++;
+        // I must match that.
+        if (cost.colors[content] !== undefined) {
+          cost.colors[content]++;
+        }
       }
     }
   });
@@ -64,7 +90,6 @@ export const calculateAutoTap = (
   if (!pool.R) pool.R = 0; if (!pool.G) pool.G = 0; if (!pool.C) pool.C = 0;
 
   // Filter usable lands (untapped)
-  // We only consider lands that haven't been marked for tap yet (initially none)
   const availableLands = myLands.filter(l => !l.tapped);
 
   // 1. Pay Colored Costs
@@ -83,7 +108,9 @@ export const calculateAutoTap = (
 
     // Lands
     if (required > 0) {
-      const producers = availableLands.filter(l => !landsToTap.has(l.instanceId) && getLandColor(l) === color);
+      // Find producers using Universal Logic
+      const producers = availableLands.filter(l => !landsToTap.has(l.instanceId) && getAvailableManaColors(l).includes(color));
+
       if (producers.length >= required) {
         for (let i = 0; i < required; i++) {
           landsToTap.add(producers[i].instanceId);
@@ -105,15 +132,13 @@ export const calculateAutoTap = (
         paid = true;
         break;
       }
-      const land = availableLands.find(l => !landsToTap.has(l.instanceId) && getLandColor(l) === color);
+      const land = availableLands.find(l => !landsToTap.has(l.instanceId) && getAvailableManaColors(l).includes(color));
       if (land) {
         landsToTap.add(land.instanceId);
         paid = true;
         break;
       }
     }
-    // If greedy fail, we might fail overall. 
-    // Real auto-tapper might backtrack, but for preview/MVP we match server greedy logic.
     if (!paid) return new Set();
   }
 
@@ -132,7 +157,9 @@ export const calculateAutoTap = (
     }
     // Lands
     if (genericRequired > 0) {
-      const unusedLands = availableLands.filter(l => !landsToTap.has(l.instanceId) && getLandColor(l) !== null);
+      // Filter lands not yet marked for tap that produce ANY valid mana color
+      const unusedLands = availableLands.filter(l => !landsToTap.has(l.instanceId) && getAvailableManaColors(l).length > 0);
+
       if (unusedLands.length >= genericRequired) {
         for (let i = 0; i < genericRequired; i++) {
           landsToTap.add(unusedLands[i].instanceId);
