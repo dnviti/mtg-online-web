@@ -89,20 +89,29 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     return card.counters.map((c: any) => c.count).reduce((a: number, b: number) => a + b, 0);
   }, [card.counters]);
 
-  const getLandManaSymbol = (typeLine: string = ''): string | null => {
-    const lowerType = typeLine.toLowerCase();
-    if (lowerType.includes('plains')) return 'w';
-    if (lowerType.includes('island')) return 'u';
-    if (lowerType.includes('swamp')) return 'b';
-    if (lowerType.includes('mountain')) return 'r';
-    if (lowerType.includes('forest')) return 'g';
-    if (lowerType.includes('waste')) return 'c';
-    return null;
+  const getLandManaSymbols = (card: VisualCard): string[] => {
+    // 1. Try to use explicit produced_mana from Scryfall definition if available
+    if (card.definition?.produced_mana && Array.isArray(card.definition.produced_mana)) {
+      return card.definition.produced_mana;
+    }
+
+    // 2. Fallback: Parse Type Line for Basic Types (Common for simple lands)
+    const symbols: string[] = [];
+    const lowerType = (card.type_line || card.typeLine || '').toLowerCase();
+
+    if (lowerType.includes('plains')) symbols.push('W');
+    if (lowerType.includes('island')) symbols.push('U');
+    if (lowerType.includes('swamp')) symbols.push('B');
+    if (lowerType.includes('mountain')) symbols.push('R');
+    if (lowerType.includes('forest')) symbols.push('G');
+    if (lowerType.includes('waste')) symbols.push('C');
+
+    return symbols;
   };
 
   const isCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
   const isLand = (card.type_line || card.typeLine || '').toLowerCase().includes('land');
-  const landSymbol = isLand ? getLandManaSymbol(card.type_line || card.typeLine) : null;
+  const landSymbols = isLand ? getLandManaSymbols(card) : [];
 
   return (
     <div
@@ -145,11 +154,13 @@ export const CardVisual: React.FC<CardVisualProps> = ({
             </div>
           )}
 
-          {!isCreature && isLand && landSymbol && (
-            <div className="absolute bottom-1 inset-x-0 flex justify-center z-10 pointer-events-none">
-              <div className="bg-black/60 rounded-full p-0.5 backdrop-blur-sm shadow-lg border border-white/10">
-                <ManaIcon symbol={landSymbol} size="md" shadow />
-              </div>
+          {!isCreature && isLand && landSymbols.length > 0 && (
+            <div className="absolute bottom-1 inset-x-0 flex justify-center items-end z-10 pointer-events-none gap-0.5">
+              {landSymbols.map((symbol, idx) => (
+                <div key={`${symbol}-${idx}`} className="bg-black/60 rounded-full w-6 h-6 flex items-center justify-center backdrop-blur-sm border border-white/20">
+                  <ManaIcon symbol={symbol} size="md" className="translate-y-[1px]" />
+                </div>
+              ))}
             </div>
           )}
 
