@@ -45,6 +45,7 @@ interface CardVisualProps {
   // Optional overlays
   showCounters?: boolean;
   forceFaceUp?: boolean;
+  currentTurn?: number; // Added for Summoning Sickness check
   children?: React.ReactNode;
 }
 
@@ -56,6 +57,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
   style,
   showCounters = true,
   forceFaceUp = false,
+  currentTurn,
   children
 }) => {
 
@@ -185,6 +187,29 @@ export const CardVisual: React.FC<CardVisualProps> = ({
               ))}
             </div>
           )}
+
+          {/* Summoning Sickness Overlay */}
+          {(() => {
+            const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+              card.oracleText?.toLowerCase().includes('haste');
+
+            const isSick = isCreature &&
+              currentTurn !== undefined &&
+              card.controlledSinceTurn === currentTurn &&
+              !hasHaste;
+
+            if (isSick) {
+              return (
+                <div className="absolute top-10 right-1 z-20 animate-pulse pointer-events-none">
+                  <div className="bg-slate-900/80 rounded-full w-6 h-6 flex items-center justify-center border border-slate-600 shadow-md">
+                    <span className="text-blue-300 font-bold text-xs italic">Zzz</span>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* Inner Border/Frame for definition */}
           <div className="absolute inset-0 border border-black/20 pointer-events-none rounded-lg shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>

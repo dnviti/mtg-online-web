@@ -18,9 +18,10 @@ interface CardComponentProps {
   className?: string;
   viewMode?: 'normal' | 'cutout' | 'large';
   ignoreZoneLayout?: boolean;
+  currentTurn?: number;
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal', ignoreZoneLayout = false }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal', ignoreZoneLayout = false, currentTurn }) => {
   const { registerCard, unregisterCard } = useGesture();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +77,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
           card={card}
           viewMode={viewMode}
           className="w-full h-full rounded-lg"
+          currentTurn={currentTurn}
         />
 
 

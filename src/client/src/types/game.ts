@@ -57,6 +57,8 @@ export interface CardInstance {
     border_crop?: string;
   };
   imageArtCrop?: string;
+  controlledSinceTurn?: number;
+  keywords?: string[];
 }
 
 export interface PlayerState {
@@ -79,6 +81,7 @@ export interface GameState {
   cards: Record<string, CardInstance>; // Keyed by instanceId
   order: string[]; // Turn order (player IDs)
   turn: number;
+  turnCount?: number; // Match server-side StrictGameState
   // Strict Mode Extension
   phase: string | Phase;
   step?: Step;

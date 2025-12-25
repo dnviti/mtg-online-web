@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { RotateCcw } from 'lucide-react';
+import { useGameToast } from '../../components/GameToast';
 import { ManaIcon } from '../../components/ManaIcon';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -435,15 +436,37 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     // Combat Logic
     if (gameState.step === 'declare_attackers') {
       const newSet = new Set(proposedAttackers);
+
+      const isSick = (card: CardInstance) => {
+        const hasHaste = card.keywords?.some(k => k.toLowerCase() === 'haste') ||
+          card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+          card.oracleText?.toLowerCase().includes('haste');
+        const currentT = gameState.turnCount ?? gameState.turn;
+        return card.types?.includes('Creature') &&
+          card.controlledSinceTurn === currentT &&
+          !hasHaste;
+      };
+
       if (type === 'ATTACK') {
-        cardIds.forEach(id => newSet.add(id));
+        cardIds.forEach(id => {
+          const card = gameState.cards[id];
+          if (card && !isSick(card)) {
+            newSet.add(id);
+          } else if (card && isSick(card)) {
+            // Ideally show toast here, but for batch gesture we just ignore
+            console.warn(`Cannot attack with ${card.name}: Summoning Sickness`);
+          }
+        });
       } else if (type === 'CANCEL') {
         cardIds.forEach(id => newSet.delete(id));
       } else if (type === 'TAP') {
         // In declare attackers, Tap/Slash might mean "Toggle Attack"
         cardIds.forEach(id => {
+          const card = gameState.cards[id];
           if (newSet.has(id)) newSet.delete(id);
-          else newSet.add(id);
+          else {
+            if (card && !isSick(card)) newSet.add(id);
+          }
         });
       }
       setProposedAttackers(newSet);
@@ -477,7 +500,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   };
 
   // --- Hooks & Services ---
-  // const { showToast } = useToast(); // Assuming useToast is defined elsewhere if needed
+  //  const { showToast } = useToast();
+  const { showGameToast } = useGameToast();
   const { confirm } = useConfirm();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -706,7 +730,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 power: token.power,
                 toughness: token.toughness,
                 imageUrl: token.image_uris?.normal || token.image_uris?.large || "",
-                // If no image, CardComponent will fallback. 
+                // If no image, CardComponent will fallback.
                 // But server token object might have caching?
               };
 
@@ -927,7 +951,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                     />
                                     {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
                                     {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
-                                                Ideally, we define DraggableCardWrapper around THIS too? 
+                                                Ideally, we define DraggableCardWrapper around THIS too?
                                                 GameView dnd uses ID. If we use DraggableCardWrapper here, it should work.
                                             */}
                                   </div>
@@ -938,6 +962,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                             <CardComponent
                               card={card}
                               viewMode="cutout"
+                              currentTurn={gameState.turnCount ?? gameState.turn}
                               onDragStart={() => { }}
                               onClick={(id) => {
                                 if (gameState.step === 'declare_attackers') {
@@ -949,6 +974,20 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                   const types = card.types || [];
                                   const typeLine = card.typeLine || '';
                                   if (!types.includes('Creature') && !typeLine.includes('Creature')) {
+                                    return;
+                                  }
+
+                                  const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+                                    card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+                                    card.oracleText?.toLowerCase().includes('haste');
+
+                                  const currentT = gameState.turnCount ?? gameState.turn;
+                                  const isSick = card.controlledSinceTurn === currentT && !hasHaste;
+
+                                  if (isSick) {
+                                    // TODO: Toast or Alert
+                                    // alert(`${card.name} has Summoning Sickness!`);
+                                    showGameToast(`${card.name} has Summoning Sickness!`, 'warning');
                                     return;
                                   }
 
