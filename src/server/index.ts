@@ -300,9 +300,11 @@ const draftInterval = setInterval(() => {
           if (dp.isBot && dp.deck && dp.deck.length > 0) {
             const roomPlayer = room.players.find(rp => rp.id === dp.id);
             // Sync if not ready
-            if (roomPlayer && !roomPlayer.ready) {
+            if (roomPlayer && (!roomPlayer.ready || !roomPlayer.deck || roomPlayer.deck.length === 0)) {
+              // Mark Bot Ready!
               const updated = roomManager.setPlayerReady(roomId, dp.id, dp.deck);
               if (updated) roomUpdated = true;
+              console.log(`[Sync] Bot ${dp.id} synced deck (${dp.deck.length} cards).`);
             }
           }
         });
@@ -619,7 +621,7 @@ io.on('connection', (socket) => {
           Object.values(draft.players).forEach(draftPlayer => {
             if (draftPlayer.isBot && draftPlayer.deck) {
               const roomPlayer = currentRoom.players.find(rp => rp.id === draftPlayer.id);
-              if (roomPlayer && !roomPlayer.ready) {
+              if (roomPlayer && (!roomPlayer.ready || !roomPlayer.deck || roomPlayer.deck.length === 0)) {
                 // Mark Bot Ready!
                 const updatedRoom = roomManager.setPlayerReady(room.id, draftPlayer.id, draftPlayer.deck);
                 if (updatedRoom) {
@@ -689,11 +691,20 @@ io.on('connection', (socket) => {
     if (updatedRoom) {
       io.to(room.id).emit('room_update', updatedRoom);
       const game = gameManager.createGame(room.id, updatedRoom.players);
-      if (decks) {
-        Object.entries(decks).forEach(([pid, deck]: [string, any]) => {
 
-          // @ts-ignore
-          deck.forEach(card => {
+      // Iterate over ALL players in the room to ensure everyone gets their deck loaded
+      updatedRoom.players.forEach(p => {
+        // Preference order: 
+        // 1. Deck sent from Client (payload) - if trustworthy? (Maybe strictly leverage server state?)
+        // 2. Server-side stored deck (p.deck)
+
+        // Note: For bots, decks[p.id] is likely undefined/empty, so we fallback to p.deck.
+        let finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
+
+        if (finalDeck && Array.isArray(finalDeck)) {
+          console.log(`[GameStart] Loading deck for ${p.name} (${p.id}): ${finalDeck.length} cards.`);
+
+          finalDeck.forEach((card: any) => {
             // Robustly resolve setCode / scryfallId
             let setCode = card.setCode || card.set || card.definition?.set;
             let scryfallId = card.scryfallId || card.id || card.definition?.id;
@@ -714,8 +725,8 @@ io.on('connection', (socket) => {
             }
 
             gameManager.addCardToGame(room.id, {
-              ownerId: pid,
-              controllerId: pid,
+              ownerId: p.id,
+              controllerId: p.id,
               oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
               scryfallId: scryfallId,
               setCode: setCode,
@@ -734,8 +745,10 @@ io.on('connection', (socket) => {
               controlledSinceTurn: 0
             });
           });
-        });
-      }
+        } else {
+          console.warn(`[GameStart] ⚠️ No deck found for player ${p.name} (${p.id})! IsBot=${p.isBot}`);
+        }
+      });
 
       // Initialize Game State (Draw Hands)
       const engine = new RulesEngine(game);
@@ -836,8 +849,14 @@ io.on('connection', (socket) => {
         ]);
 
         // Populate Decks
-        [{ p: p1, d: deck1 }, { p: p2, d: deck2 }].forEach(({ p, d }) => {
-          if (d) {
+        // FALLBACK: If deck is not in readyState (e.g. Bot didn't emit match_ready), try to find it in p.deck
+        // Bots don't emit match_ready, so they rely on auto-readying.
+        const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
+        const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);
+
+        [{ p: p1, d: d1 }, { p: p2, d: d2 }].forEach(({ p, d }) => {
+          if (d && d.length > 0) {
+            console.log(`[GameStart] Match ${matchId}: Loading deck for ${p.name}: ${d.length} cards.`);
             d.forEach((card: any) => {
               // Robustly resolve setCode / scryfallId
               let setCode = card.setCode || card.set || card.definition?.set;
@@ -877,6 +896,8 @@ io.on('connection', (socket) => {
                 controlledSinceTurn: 0
               });
             });
+          } else {
+            console.warn(`[GameStart] ⚠️ Match ${matchId}: No deck found for ${p.name} (IsBot: ${p.isBot})`);
           }
         });
 

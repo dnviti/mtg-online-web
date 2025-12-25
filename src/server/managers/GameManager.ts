@@ -256,16 +256,26 @@ export class GameManager extends EventEmitter {
     // 3. Play Spell (Main Phase, empty stack)
     if ((game.phase === 'main1' || game.phase === 'main2') && game.stack.length === 0) {
       const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
-      const spell = hand.find(c => !c.typeLine?.includes('Land') && !c.types.includes('Land'));
 
-      if (spell) {
+      // Filter candidates (non-lands)
+      const spells = hand.filter(c => !c.typeLine?.includes('Land') && !c.types.includes('Land'));
+
+      // Sort by CMC descending (Try to play biggest threat first)
+      // Note: c.manaCost might be string, need parsing or use c.cmc if available. 
+      // For now, heuristic: just try all of them.
+
+      for (const spell of spells) {
         // Only cast creatures for now to be safe with targets
         if (spell.types.includes('Creature')) {
-          console.log(`[Bot AI] ${bot.name} casts creature ${spell.name}`);
           try {
+            console.log(`[Bot AI] ${bot.name} attempting to cast ${spell.name}`);
             engine.castSpell(botId, spell.instanceId, []);
+            // If successful, return immediately (Action taken)
             return;
-          } catch (e) { console.warn("Bot failed to cast spell:", e); }
+          } catch (e: any) {
+            // Failed (likely mana). Continue to next card.
+            // console.warn(`[Bot AI] Failed to cast ${spell.name}: ${e.message}`);
+          }
         }
       }
     }
@@ -290,7 +300,12 @@ export class GameManager extends EventEmitter {
         // For MVP: Aggro Bot - always attacks.
         const declaration = attackers.map(c => ({ attackerId: c.instanceId, targetId }));
         console.log(`[Bot AI] ${bot.name} attacks with ${attackers.length} creatures.`);
-        try { engine.declareAttackers(botId, declaration); } catch (e) { }
+        try {
+          engine.declareAttackers(botId, declaration);
+        } catch (e) {
+          console.warn(`[Bot AI] Attack failed: ${e}. Fallback to Skip Combat.`);
+          try { engine.declareAttackers(botId, []); } catch (e2) { }
+        }
         return;
       } else {
         console.log(`[Bot AI] ${bot.name} skips combat.`);

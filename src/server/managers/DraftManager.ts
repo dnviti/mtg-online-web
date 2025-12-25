@@ -156,12 +156,14 @@ export class DraftManager extends EventEmitter {
 
       const neighborId = draft.seats[nextSeatIndex];
       draft.players[neighborId].queue.push(passedPack);
+      console.log(`[DraftManager] 📦 Passed pack (len: ${passedPack.cards.length}) from ${playerId} to ${neighborId}`);
 
       // Try to assign active pack for neighbor if they are empty
       this.processQueue(draft, neighborId);
     } else {
       // Pack is empty/exhausted
       playerState.isWaiting = true;
+      console.log(`[DraftManager] 🏁 Pack exhausted for ${playerId}. Waiting for next round.`);
       this.checkRoundCompletion(draft);
     }
 
@@ -175,6 +177,7 @@ export class DraftManager extends EventEmitter {
     const p = draft.players[playerId];
     if (!p.activePack && p.queue.length > 0) {
       p.activePack = p.queue.shift()!;
+      console.log(`[DraftManager] 📥 Player ${playerId} opened new pack from queue. Cards: ${p.activePack.cards.length}`);
       p.pickedInCurrentStep = 0; // Reset for new pack
       p.pickExpiresAt = Date.now() + 60000; // Reset timer for new pack
     }
@@ -194,12 +197,19 @@ export class DraftManager extends EventEmitter {
           const playerState = draft.players[playerId];
           // Check if player is thinking (has active pack) and time expired
           // OR if player is a BOT (Auto-Pick immediately)
+          // OR if player is a BOT (Auto-Pick immediately)
           if (playerState.activePack) {
-            if (playerState.isBot || now > playerState.pickExpiresAt) {
+            if (playerState.isBot) {
+              // Force auto-pick
               const result = this.autoPick(roomId, playerId);
               if (result) {
                 draftUpdated = true;
+              } else {
+                console.warn(`[DraftManager] ⚠️ Bot ${playerId} has active pack but autoPick returned null! Pack len: ${playerState.activePack.cards.length}`);
               }
+            } else if (now > playerState.pickExpiresAt) {
+              const result = this.autoPick(roomId, playerId);
+              if (result) draftUpdated = true;
             }
           }
         }
@@ -275,10 +285,30 @@ export class DraftManager extends EventEmitter {
     scoredCards.sort((a, b) => b.score - a.score);
 
     // Pick top card
+
+    // Pick top card
     const card = scoredCards[0].card;
 
+    // Log intent
+    // console.log(`[DraftManager] 🤖 Bot ${playerId} picking ${card.name} (${card.id})`);
+
     // Reuse existing logic
-    return this.pickCard(roomId, playerId, card.id);
+    const result = this.pickCard(roomId, playerId, card.id);
+    if (!result) {
+      console.error(`[DraftManager] ❌ Bot ${playerId} failed to pick ${card.name} (pickCard returned null)`);
+    }
+    return result;
+  }
+
+  // Debug helper
+  public logDraftState(roomId: string) {
+    const draft = this.drafts.get(roomId);
+    if (!draft) return;
+    console.log(`--- Draft State ${roomId} ---`);
+    Object.values(draft.players).forEach(p => {
+      console.log(`Player ${p.id} (Bot: ${p.isBot}): Active=${p.activePack?.id || 'None'} (${p.activePack?.cards.length || 0}), Queue=${p.queue.length}, Waiting=${p.isWaiting}`);
+    });
+    console.log(`-----------------------------`);
   }
 
   private checkRoundCompletion(draft: DraftState) {
@@ -306,9 +336,11 @@ export class DraftManager extends EventEmitter {
         Object.values(draft.players).forEach(p => {
           if (p.isBot) {
             // Build deck
+
             const lands = draft.basicLands || [];
             const deck = this.botBuilder.buildDeck(p.pool, lands);
             p.deck = deck;
+            console.log(`[DraftManager] 🤖 Bot ${p.id} deck built with ${deck.length} cards.`);
           }
         });
       }
