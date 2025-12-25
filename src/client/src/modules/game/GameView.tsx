@@ -856,7 +856,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                 <div
                   className="w-full h-full relative flex flex-col overflow-visible"
                   style={{
-                    transform: 'rotateX(25deg)',
+                    transform: 'rotateX(5deg)',
                     transformOrigin: 'center 40%',
                   }}
                 >
