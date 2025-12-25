@@ -217,20 +217,7 @@ export class RulesEngine {
     return cost;
   }
 
-  private getLandColor(card: any): string | null {
-    if (!card.typeLine?.includes('Land') && !card.types.includes('Land')) return null;
 
-    // Basic heuristic based on type line names
-    if (card.typeLine.includes('Plains')) return 'W';
-    if (card.typeLine.includes('Island')) return 'U';
-    if (card.typeLine.includes('Swamp')) return 'B';
-    if (card.typeLine.includes('Mountain')) return 'R';
-    if (card.typeLine.includes('Forest')) return 'G';
-
-    // Fallback: Wastes or special lands? 
-    // For MVP, we assume typed basic lands or nothing.
-    return null;
-  }
 
   private payManaCost(playerId: string, manaCostStr: string) {
     const player = this.state.players[playerId];
@@ -264,7 +251,7 @@ export class RulesEngine {
       // b. Pay from Lands
       if (required > 0) {
         // Find lands producing this color
-        const producers = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) === color);
+        const producers = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getAvailableManaColors(l).includes(color));
 
         if (producers.length >= required) {
           // Mark first N as used
@@ -295,7 +282,7 @@ export class RulesEngine {
         }
         // Check Lands
         // Find a land that produces this color and is UNUSED
-        const land = lands.find(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) === color);
+        const land = lands.find(l => !landsToTap.includes(l.instanceId) && this.getAvailableManaColors(l).includes(color));
         if (land) {
           landsToTap.push(land.instanceId);
           paid = true;
@@ -312,7 +299,7 @@ export class RulesEngine {
     let genericRequired = cost.generic;
 
     if (genericRequired > 0) {
-      // a. Consume any remaining pools (greedy, order doesn't matter for generic usually, but maybe keep 'better' colors? No, random for now)
+      // a. Consume any remaining pools (greedy)
       for (const color of Object.keys(pool)) {
         if (genericRequired <= 0) break;
         const available = pool[color];
@@ -325,8 +312,9 @@ export class RulesEngine {
 
       // b. Tap remaining unused lands
       if (genericRequired > 0) {
-        // Filter lands not yet marked for tap
-        const unusedLands = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getLandColor(l) !== null);
+        // Filter lands not yet marked for tap. 
+        // Logic: Any land that can produce ANY color (length > 0) is a candidate for generic.
+        const unusedLands = lands.filter(l => !landsToTap.includes(l.instanceId) && this.getAvailableManaColors(l).length > 0);
 
         if (unusedLands.length >= genericRequired) {
           for (let i = 0; i < genericRequired; i++) {
@@ -349,6 +337,44 @@ export class RulesEngine {
       console.log(`Auto-tapped ${land.name} for mana.`);
     });
     console.log(`Paid mana cost ${manaCostStr}. Remaining Pool:`, pool);
+  }
+
+  // Helper: Get ALL colors a card can produce
+  public getAvailableManaColors(card: any): string[] {
+    // 0. Type Guard for Land (Auto-Tap usually restricts to lands)
+    if (!card.typeLine?.includes('Land') && !card.types.includes('Land')) return [];
+
+    // 1. Check Definition (Scryfall Data)
+    if (card.definition?.produced_mana && Array.isArray(card.definition.produced_mana)) {
+      return card.definition.produced_mana;
+    }
+
+    const symbols: Set<string> = new Set();
+    const lowerType = (card.typeLine || '').toLowerCase();
+    const lowerText = (card.definition?.oracle_text || card.oracleText || '').toLowerCase();
+
+    // 2. Basic Land Types
+    if (lowerType.includes('plains')) symbols.add('W');
+    if (lowerType.includes('island')) symbols.add('U');
+    if (lowerType.includes('swamp')) symbols.add('B');
+    if (lowerType.includes('mountain')) symbols.add('R');
+    if (lowerType.includes('forest')) symbols.add('G');
+    if (lowerType.includes('waste')) symbols.add('C');
+
+    // 3. Oracle Text Fallback
+    if (symbols.size === 0) {
+      if (lowerText.includes('{w}')) symbols.add('W');
+      if (lowerText.includes('{u}')) symbols.add('U');
+      if (lowerText.includes('{b}')) symbols.add('B');
+      if (lowerText.includes('{r}')) symbols.add('R');
+      if (lowerText.includes('{g}')) symbols.add('G');
+      if (lowerText.includes('{c}')) symbols.add('C');
+      if (lowerText.includes('any color')) {
+        ['W', 'U', 'B', 'R', 'G'].forEach(c => symbols.add(c));
+      }
+    }
+
+    return Array.from(symbols);
   }
 
   public addMana(playerId: string, mana: { color: string, amount: number }) {

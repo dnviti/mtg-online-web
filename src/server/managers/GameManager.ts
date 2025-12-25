@@ -436,16 +436,17 @@ export class GameManager extends EventEmitter {
       card.tapped = !card.tapped;
 
       // Auto-Add Mana for Basic Lands if we just tapped it
-      if (wuzUntapped && card.tapped && card.typeLine?.includes('Land')) {
-        const engine = new RulesEngine(game); // Re-instantiate engine just for this helper
-        // Infer color from type or oracle text or name? 
-        // Simple: Basic Land Types
-        if (card.typeLine.includes('Plains')) engine.addMana(actorId, { color: 'W', amount: 1 });
-        else if (card.typeLine.includes('Island')) engine.addMana(actorId, { color: 'U', amount: 1 });
-        else if (card.typeLine.includes('Swamp')) engine.addMana(actorId, { color: 'B', amount: 1 });
-        else if (card.typeLine.includes('Mountain')) engine.addMana(actorId, { color: 'R', amount: 1 });
-        else if (card.typeLine.includes('Forest')) engine.addMana(actorId, { color: 'G', amount: 1 });
-        // TODO: Non-basic lands?
+      // Auto-Add Mana for Lands (Universal Support)
+      if (wuzUntapped && card.tapped) {
+        const engine = new RulesEngine(game);
+        // Use shared logic to find production capability
+        const colors = engine.getAvailableManaColors(card);
+
+        if (colors.length > 0) {
+          // Heuristic: If multiple colors (e.g. Command Tower), just return the first one for manual tap.
+          // This is a QoL feature. Ideally, UI asks user. But for speed, default is better than nothing.
+          engine.addMana(actorId, { color: colors[0], amount: 1 });
+        }
       }
     }
   }
