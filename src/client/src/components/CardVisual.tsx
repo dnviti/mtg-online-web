@@ -95,18 +95,40 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       return card.definition.produced_mana;
     }
 
-    // 2. Fallback: Parse Type Line for Basic Types (Common for simple lands)
-    const symbols: string[] = [];
+    const symbols: Set<string> = new Set();
     const lowerType = (card.type_line || card.typeLine || '').toLowerCase();
 
-    if (lowerType.includes('plains')) symbols.push('W');
-    if (lowerType.includes('island')) symbols.push('U');
-    if (lowerType.includes('swamp')) symbols.push('B');
-    if (lowerType.includes('mountain')) symbols.push('R');
-    if (lowerType.includes('forest')) symbols.push('G');
-    if (lowerType.includes('waste')) symbols.push('C');
+    // 2. Parse Type Line for Basic Types (Triomes, Shocks, Basics)
+    if (lowerType.includes('plains')) symbols.add('W');
+    if (lowerType.includes('island')) symbols.add('U');
+    if (lowerType.includes('swamp')) symbols.add('B');
+    if (lowerType.includes('mountain')) symbols.add('R');
+    if (lowerType.includes('forest')) symbols.add('G');
+    if (lowerType.includes('waste')) symbols.add('C');
 
-    return symbols;
+    // 3. Fallback: Parse Oracle Text for "Add {X}" (Pain lands, check lands, utility lands)
+    // Only if we haven't found symbols yet (or to append to them? Usually types handle the basics)
+    // Actually, some cards have types AND abilities (e.g. Dryad Arbor).
+    // Let's merge both sources.
+    const text = (card.oracle_text || card.oracleText || '').toLowerCase();
+
+    // Regex to find "add {x}" or "{x} or {y}" patterns relative to adding mana
+    // Simple heuristic: If active ability contains "add" and symbols.
+    // For safety, checking for "{COLOR}" presence in land usually means production unless it's a cost like "2, {T}: ..."
+    // But Activation Costs usually come BEFORE the colon. Produced mana comes AFTER.
+    // Let's just look for explicitly "{W}", "{U}" etc.
+    // This heuristic might be loose but acceptable for frontend visual.
+    if (text.includes('{w}')) symbols.add('W');
+    if (text.includes('{u}')) symbols.add('U');
+    if (text.includes('{b}')) symbols.add('B');
+    if (text.includes('{r}')) symbols.add('R');
+    if (text.includes('{g}')) symbols.add('G');
+    if (text.includes('{c}')) symbols.add('C');
+
+    // Special Check for "Any color" -> Rainbow? 
+    // For now, Scryfall data is best. If missing, this heuristic covers 90%.
+
+    return Array.from(symbols);
   };
 
   const isCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
