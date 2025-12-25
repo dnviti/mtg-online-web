@@ -67,17 +67,26 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
         }
       }
     } else if (currentStep === 'declare_blockers') {
-      const showToDamage = gameState.blockersDeclared || isMyTurn; // UI Safety for AP
+      const isDefendingPlayer = !isMyTurn; // If I have priority in blocking step, and it's NOT my turn, I am defender.
 
-      if (showToDamage) {
+      if (isDefendingPlayer && !gameState.blockersDeclared) {
+        const count = contextData?.blockers?.length || 0;
+        if (count > 0) {
+          actionLabel = "Confirm Blocks";
+          actionType = 'DECLARE_BLOCKERS';
+          ActionIcon = Shield;
+          actionColor = "bg-blue-600 hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]";
+        } else {
+          actionLabel = "Skip Block";
+          actionType = 'DECLARE_BLOCKERS'; // Empty payload = Skip
+          ActionIcon = ChevronRight;
+          actionColor = "bg-slate-600 hover:bg-slate-500";
+        }
+      } else {
+        // I am AP (My Turn) OR I am Defender having already declared blocks
         actionLabel = "To Damage";
         actionType = 'PASS_PRIORITY';
         ActionIcon = Swords;
-      } else {
-        actionLabel = "Confirm Blocks";
-        actionType = 'DECLARE_BLOCKERS';
-        ActionIcon = Shield;
-        actionColor = "bg-blue-600 hover:bg-blue-500 shadow-[0_0_10px_rgba(37,99,235,0.4)]";
       }
     } else if (isStackEmpty) {
       // Standard Pass

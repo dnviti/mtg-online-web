@@ -760,6 +760,10 @@ export class RulesEngine {
     // Rule 500.4: Mana empties at end of each step and phase
     this.emptyManaPools();
 
+    // Reset Priority State
+    this.state.passedPriorityCount = 0;
+    Object.values(this.state.players).forEach(p => p.hasPassed = false);
+
     this.state.phase = nextPhase;
     this.state.step = nextStep!;
 

@@ -191,11 +191,19 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
     // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
     // Logic: Auto-Pass.
+    // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
+    // Logic: Auto-Pass.
     if (!amActivePlayer && amPriorityPlayer && !stopRequested) {
-      if (gameState.step === 'declare_blockers') return; // Explicit wait for blockers
+      if (gameState.step === 'declare_blockers') {
+        console.log("[Smart Auto-Pass] Skipped: Enforce manual blocking declaration.");
+        return; // Explicit wait for blockers
+      }
 
-      console.log("[Smart Auto-Pass] Auto-passing priority as NAP (No Suspend requested).");
+      console.log("[Smart Auto-Pass] Auto-passing priority as NAP (No Suspend requested).Step:", gameState.step);
       const timer = setTimeout(() => {
+        // Double check state hasn't changed in the timeout window
+        if (gameState.step === 'declare_blockers') return;
+
         socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
       }, 800);
       return () => clearTimeout(timer);
@@ -247,6 +255,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   // This solves flickering definitively too.
 
   // Final Plan: Use the logic block above, remove isYielding from deps.
+
+
 
   // --- Combat State ---
   const [proposedAttackers, setProposedAttackers] = useState<Set<string>>(new Set());
@@ -507,6 +517,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
   );
+
+  // --- Blocker Notification ---
+  useEffect(() => {
+    if (gameState.step === 'declare_blockers' && hasPriority) {
+      showGameToast("Your Turn to Block!", 'info');
+    }
+  }, [gameState.step, hasPriority, showGameToast]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const cardId = event.active.id as string;
