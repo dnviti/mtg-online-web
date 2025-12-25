@@ -264,6 +264,42 @@ app.post('/api/packs/generate', async (req: Request, res: Response) => {
 
     const { pools, sets } = packGeneratorService.processCards(poolCards, activeFilters, setsMetadata);
 
+    // LAND FALLBACK LOGIC
+    if (pools.lands.length === 0) {
+      console.log('[PackGenerator] No basic lands found in source. Fetching Fallback (J25)...');
+      const fallbackLands = await scryfallService.getFoundationLands();
+
+      if (fallbackLands.length > 0) {
+        // Cache images for fallback lands
+        await cardService.cacheImages(fallbackLands).catch(e => console.error('Failed to cache fallback land images', e));
+
+        // Process them to get DraftCard objects
+        // We use a temporary generator call or manual mapping? 
+        // Better to reuse processCards logic, but we need to merge it into existing pools/sets.
+        // FORCE ignoreBasicLands: false because we specifically fetched these for fallback
+        const fallbackResult = packGeneratorService.processCards(fallbackLands, { ...activeFilters, ignoreBasicLands: false });
+
+        // Merge into main pools
+        pools.lands.push(...fallbackResult.pools.lands);
+
+        // Also ensure they are in the "Sets" map if we are doing "by_set" generation? 
+        // If "by_set", we usually only generate from selected sets. 
+        // If the selected set has no lands, we might want to inject these lands INTO that set's land pool?
+        // Or just having them in the global 'pools.lands' is enough for "mixed" mode?
+        // For "by_set" mode, PackGenerator uses `sets[code].lands`. 
+        // So we should inject these lands into ALL active sets if they are empty?
+
+        // Strategy: Inject fallback lands into specific sets if they are missing lands.
+        Object.values(sets).forEach(setObj => {
+          if (setObj.lands.length === 0) {
+            setObj.lands.push(...fallbackResult.pools.lands); // Allow cross-set contamination for lands (it's fallback)
+          }
+        });
+
+        console.log(`[PackGenerator] Injected ${fallbackResult.pools.lands.length} basic lands into active pools.`);
+      }
+    }
+
     // Extract available basic lands for deck building
     const basicLands = pools.lands.filter(c => c.typeLine?.includes('Basic'));
     // Deduplicate by Scryfall ID to get unique arts

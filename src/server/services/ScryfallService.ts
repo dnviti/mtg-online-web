@@ -248,8 +248,9 @@ export class ScryfallService {
         allCards = JSON.parse(raw);
       } else {
         // Construct Composite Query...
-        const setClause = `e:${setCode}` + relatedSets.map(s => ` OR e:${s}`).join('');
-        let url = `https://api.scryfall.com/cards/search?q=(${setClause}) unique=prints is:booster`;
+        const setsToFetch = [setCode, ...relatedSets];
+        const setQuery = setsToFetch.map(s => `(set:${s} (is:booster or (type:land type:basic)))`).join(' or ');
+        let url = `https://api.scryfall.com/cards/search?q=(${setQuery}) unique=prints`;
 
         // ... fetching loop ...
         try {
@@ -431,5 +432,50 @@ export class ScryfallService {
     }
 
     return results;
+  }
+
+  async getFoundationLands(): Promise<ScryfallCard[]> {
+    const setCode = 'j25';
+    const landsCachePath = path.join(SETS_DIR, `${setCode}_lands.json`);
+
+    // 1. Check Cache
+    if (fs.existsSync(landsCachePath)) {
+      try {
+        const raw = fs.readFileSync(landsCachePath, 'utf-8');
+        const cards = JSON.parse(raw);
+        console.log(`[ScryfallService] Loaded ${cards.length} Foundation lands from cache.`);
+        return cards;
+      } catch (e) {
+        console.error(`[ScryfallService] Error reading Foundation lands cache`, e);
+      }
+    }
+
+    // 2. Fetch from API
+    console.log('[ScryfallService] Fetching Foundation (J25) lands for fallback...');
+    const url = `https://api.scryfall.com/cards/search?q=e:${setCode}+type:land+type:basic+unique:prints&order=set`;
+
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Scryfall API error: ${resp.statusText}`);
+
+      const data = await resp.json();
+      const cards = data.data || [];
+
+      if (cards.length > 0) {
+        // Save Cache
+        if (!fs.existsSync(SETS_DIR)) fs.mkdirSync(SETS_DIR, { recursive: true });
+        fs.writeFileSync(landsCachePath, JSON.stringify(cards, null, 2));
+
+        // Also cache individual cards
+        cards.forEach((c: ScryfallCard) => this.saveCard(c));
+
+        console.log(`[ScryfallService] Cached ${cards.length} Foundation lands.`);
+      }
+
+      return cards;
+    } catch (e) {
+      console.error('[ScryfallService] Failed to fetch Foundation lands', e);
+      return [];
+    }
   }
 }
