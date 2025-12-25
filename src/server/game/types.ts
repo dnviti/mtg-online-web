@@ -80,6 +80,7 @@ export interface PlayerState {
   mulliganCount?: number;
   manaPool: Record<string, number>; // { W: 0, U: 1, ... }
   isBot?: boolean;
+  stopRequested?: boolean; // Server-side stop/suspend state
 }
 
 export interface StackObject {

@@ -73,6 +73,7 @@ export interface PlayerState {
   handKept?: boolean;
   mulliganCount?: number;
   isBot?: boolean;
+  stopRequested?: boolean; // Server-side stop/suspend state
 }
 
 export interface GameState {

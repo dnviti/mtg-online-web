@@ -81,12 +81,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [hoveredCard, setHoveredCard] = useState<CardInstance | null>(null);
   const [dragAnimationMode, setDragAnimationMode] = useState<'start' | 'end'>('end');
   const [previewTappedIds, setPreviewTappedIds] = useState<Set<string>>(new Set());
-  const [stopRequested, setStopRequested] = useState(false);
+  // const [stopRequested, setStopRequested] = useState(false);  <-- REMOVED (Migrated to Server)
 
-  const onToggleSuspend = () => {
-    setStopRequested(prev => !prev);
-  };
-
+  // onToggleSuspend migrated below to use socket emit instead of local set state
 
   // Custom Token Modal State
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
@@ -136,52 +133,21 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
       if (['declare_attackers', 'declare_blockers'].includes(gameState.step || '')) {
         // Must pause yield for decisions
         setIsYielding(false);
-        // Note: We don't check !isYielding here because if it was true, we want false. 
-        // If it was false, we keep false. 
-        // But we can't condtionally call setIsYielding based on isYielding inside effect IF the effect has isYielding dependency...
-        // Wait, if I set it to false, isYielding changes -> effect runs again.
-        // It enters here. isYielding is false. checks... checks...
-        // It hit this block. We want it false. It is false. No-op. Stable.
       } else {
-        // Standard Bot Phase -> Yield
-        // However, we must be careful not to infinite loop if we already set it.
-        // BUT, we just set it to false above if turn changed! 
-        // So for Bot Turn start: 
-        // 1. Turn Change detected -> isYielding = false.
-        // 2. isBotTurn is true.
-        // 3. We enter here. We want isYielding = true.
-        // 4. setIsYielding(true).
-        // 5. Render. Effect runs again.
-        // 6. Turn Change NOT detected. matches.
-        // 7. isBotTurn true.
-        // 8. checks isYielding (true). No-op. Stable.
-
-        // One issue: if I manually "Stop Yielding" during bot turn (e.g. to inspect), 
-        // this logic will FORCE it back on.
-        // That is acceptable for "Auto-Yield vs Bot". Bot turn = You don't play.
-        // If you want to Inspect, inspecting doesn't require priority.
-        // If you want to STOP the game to do something... well, you don't have priority anyway.
-        // So forcing Yield on Bot turn is correct per requirements.
-
-        // Only verify we don't set it if it's already true
         setIsYielding(prev => {
           if (prev) return prev; // already true
           return true;
         });
       }
-    } else {
-      // Human Turn
-      // We do NOTHING here?
-      // If we reset on turn change, then it starts false.
-      // If I manually enable it, isBotTurn is false. We simply don't interfere.
-      // This allows accurate Manual Yielding!
     }
   }, [gameState.activePlayerId, gameState.step, isBotTurn]);
 
-  // --- Smart Auto-Pass (Suspend Logic) ---
-  useEffect(() => {
-    setStopRequested(false);
-  }, [gameState.step, gameState.turn]);
+  // Server-Side Stop State
+  const stopRequested = gameState.players[currentPlayerId]?.stopRequested || false;
+
+  const onToggleSuspend = () => {
+    socketService.socket.emit('game_strict_action', { action: { type: 'TOGGLE_STOP' } });
+  };
 
   useEffect(() => {
     // Smart Auto-Pass Logic for NAP
@@ -189,8 +155,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     const amActivePlayer = gameState.activePlayerId === currentPlayerId;
     const amPriorityPlayer = gameState.priorityPlayerId === currentPlayerId;
 
-    // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
-    // Logic: Auto-Pass.
     // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
     // Logic: Auto-Pass.
     if (!amActivePlayer && amPriorityPlayer && !stopRequested) {
@@ -203,6 +167,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
       const timer = setTimeout(() => {
         // Double check state hasn't changed in the timeout window
         if (gameState.step === 'declare_blockers') return;
+        // Also check if we suddenly requested stop/suspend during timeout
+        // (Since effect re-runs on stopRequested change, this timeout will be cleared anyway, but safe check)
 
         socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
       }, 800);

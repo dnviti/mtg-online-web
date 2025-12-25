@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ManaIcon } from './ManaIcon';
+import { Feather } from 'lucide-react';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
@@ -208,6 +209,22 @@ export const CardVisual: React.FC<CardVisualProps> = ({
                 </div>
               );
             }
+
+            // Flying Icon
+            const hasFlying = card.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
+              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
+              card.oracleText?.toLowerCase().includes('flying');
+
+            if (hasFlying && isCreature) {
+              return (
+                <div className="absolute top-10 left-1 z-20 pointer-events-none">
+                  <div className="bg-slate-900/80 rounded-full w-6 h-6 flex items-center justify-center border border-slate-600 shadow-md text-sky-300">
+                    <Feather size={14} strokeWidth={2.5} />
+                  </div>
+                </div>
+              );
+            }
+
             return null;
           })()}
 

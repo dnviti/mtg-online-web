@@ -136,6 +136,9 @@ export class GameManager extends EventEmitter {
         case 'PASS_PRIORITY':
           engine.passPriority(actorId);
           break;
+        case 'TOGGLE_STOP':
+          engine.toggleStop(actorId);
+          break;
         case 'PLAY_LAND':
           engine.playLand(actorId, action.cardId, action.position);
           break;

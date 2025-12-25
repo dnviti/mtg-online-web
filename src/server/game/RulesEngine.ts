@@ -19,6 +19,31 @@ export class RulesEngine {
 
     const totalPlayers = this.state.turnOrder.length;
 
+    // Check if any OTHER player has requested a stop
+    const opponentId = Object.keys(this.state.players).find(id => id !== playerId);
+    if (opponentId && this.state.players[opponentId].stopRequested) {
+      console.log(`Cannot auto-pass phase: Opponent ${this.state.players[opponentId].name} has Stop set.`);
+      // We still "pass priority" to them?
+      // If I pass, and they have stop... they get priority.
+      // If I am AP and I pass... priority goes to NAP.
+      // NAP has stop set. They get priority. They can now act.
+      // So technically `passPriorityToNext` handles this correctly as long as we don't *skip* them.
+      // But we must ensure we don't `advanceStep` if they just wanted to stop?
+      // Wait, `passPriority` logic says: if (passedCount >= totalPlayers).
+      // If I pass, passedCount++.
+      // If Opponent hasn't passed, passedCount is 1. Not >= 2.
+      // So priority goes to Opponent.
+      // Opponent must explicitly PASS to advance.
+      // If Opponent has "Stop" set, they presumably WON'T auto-pass in their client.
+      // So simply storing the state is enough IF the client respects it.
+      // BUT if the client *was* auto-passing because of some logic, we need to ensure server stops it?
+      // No, `stopRequested` is primarily for Client UI to know "Don't Auto-Yield".
+      // But if the user request was "active player can force pass", that implies the AP clicked pass, and the NAP *automatically* passed back because they didn't have a stop set (on client)?
+      // Server-side: if 'stopRequested' is true, we don't need to change `passPriority`.
+      // The issue is likely Client-side auto-yield.
+      // However, making it Server-Side authoritative allows us to check it in CLIENT logic robustly.
+    }
+
     // Check if all players passed in a row
     if (this.state.passedPriorityCount >= totalPlayers) {
       // 1. If Stack is NOT empty, Resolve Top
@@ -762,7 +787,10 @@ export class RulesEngine {
 
     // Reset Priority State
     this.state.passedPriorityCount = 0;
-    Object.values(this.state.players).forEach(p => p.hasPassed = false);
+    Object.values(this.state.players).forEach(p => {
+      p.hasPassed = false;
+      p.stopRequested = false; // Reset stops on new step
+    });
 
     this.state.phase = nextPhase;
     this.state.step = nextStep!;
@@ -770,6 +798,14 @@ export class RulesEngine {
     console.log(`Advancing to ${this.state.phase} - ${this.state.step}`);
 
     this.performTurnBasedActions();
+  }
+
+  public toggleStop(playerId: string) {
+    const player = this.state.players[playerId];
+    if (player) {
+      player.stopRequested = !player.stopRequested;
+      console.log(`Player ${player.name} toggled stop: ${player.stopRequested}`);
+    }
   }
 
   private advanceTurn() {
