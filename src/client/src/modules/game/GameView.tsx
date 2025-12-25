@@ -828,7 +828,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                   ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
                                 `}
                               />
-                              <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg" />
+                              <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
 
                               {isAttacking && (
                                 <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
