@@ -561,6 +561,23 @@ export class RulesEngine {
         // Reset X position?
         card.position = { x: 0, y: 0, z: ++this.state.maxZ };
       }
+
+      // Rule 400.7: New object with no memory
+      if (toZone !== 'battlefield') {
+        card.attacking = undefined;
+        card.blocking = [];
+        card.damageMarked = 0;
+        card.counters = []; // Counters usually removed unless specific ability
+        card.attachedTo = undefined; // Detach
+        // Also detach anything attached TO this
+        Object.values(this.state.cards).forEach(other => {
+          if (other.attachedTo === cardId) {
+            // If Equipment/Aura, Unattach
+            other.attachedTo = undefined;
+            // SBA will clean up Aura next check
+          }
+        });
+      }
     }
   }
 
@@ -848,11 +865,18 @@ export class RulesEngine {
     if (step === 'declare_blockers') {
       // WAITING for declareBlockers() from Client (Defending Player)
       // 509.1. Defending Player gets priority to declare blockers.
-      // In 1v1, this is the non-active player.
+
       const defendingPlayerId = this.state.turnOrder.find(id => id !== activePlayerId);
       if (defendingPlayerId) {
+        // Ensure Defending Player has priority
         if (this.state.priorityPlayerId !== defendingPlayerId) {
-          this.resetPriority(defendingPlayerId);
+          console.log(`[RulesEngine] Setting priority to Defender ${defendingPlayerId} for blocking.`);
+          this.state.priorityPlayerId = defendingPlayerId;
+          // Do NOT call resetPriority() here because it might advance state if we are not careful? 
+          // resetPriority checks for pass flags. Here we just want to GIVE control.
+          // Reset pass flags for safety.
+          Object.values(this.state.players).forEach(p => p.hasPassed = false);
+          this.state.passedPriorityCount = 0;
         }
       }
       return;
@@ -943,6 +967,8 @@ export class RulesEngine {
     console.log(`Cleanup execution.`);
     Object.values(this.state.cards).forEach(c => {
       c.damageMarked = 0;
+      c.attacking = undefined; // Clear Combat Status
+      c.blocking = [];         // Clear Combat Status
       if (c.modifiers) {
         c.modifiers = c.modifiers.filter(m => !m.untilEndOfTurn);
       }
