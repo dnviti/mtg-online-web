@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-
+import { ManaIcon } from './ManaIcon';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
@@ -89,6 +89,21 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     return card.counters.map((c: any) => c.count).reduce((a: number, b: number) => a + b, 0);
   }, [card.counters]);
 
+  const getLandManaSymbol = (typeLine: string = ''): string | null => {
+    const lowerType = typeLine.toLowerCase();
+    if (lowerType.includes('plains')) return 'w';
+    if (lowerType.includes('island')) return 'u';
+    if (lowerType.includes('swamp')) return 'b';
+    if (lowerType.includes('mountain')) return 'r';
+    if (lowerType.includes('forest')) return 'g';
+    if (lowerType.includes('waste')) return 'c';
+    return null;
+  };
+
+  const isCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
+  const isLand = (card.type_line || card.typeLine || '').toLowerCase().includes('land');
+  const landSymbol = isLand ? getLandManaSymbol(card.type_line || card.typeLine) : null;
+
   return (
     <div
       className={`relative overflow-hidden ${className || ''}`}
@@ -104,6 +119,43 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-90 bg-[url('/images/back.jpg')] bg-cover">
         </div>
+      )}
+
+      {/* Arena-style Crop Overlay */}
+      {viewMode === 'cutout' && !card.faceDown && (
+        <>
+          {/* Top Name Bar */}
+          <div className="absolute top-0 inset-x-0 h-10 bg-gradient-to-b from-black/90 via-black/60 to-transparent z-10 p-1 flex justify-between items-start pointer-events-none">
+            <span className="text-white text-[10px] font-bold tracking-wide drop-shadow-md shadow-black truncate pr-1" style={{ textShadow: '0 1px 2px black' }}>
+              {card.name}
+            </span>
+            {card.mana_cost && (
+              <span className="text-[10px] text-slate-200 font-serif tracking-tighter opacity-90 drop-shadow-md" style={{ textShadow: '0 1px 2px black' }}>
+                {card.mana_cost.replace(/[{}]/g, '')}
+              </span>
+            )}
+          </div>
+
+          {/* Bottom Overlays based on Type */}
+          {isCreature && (card.power != null && card.toughness != null) && (
+            <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
+              <span>{card.power}</span>
+              <span className="text-slate-400">/</span>
+              <span>{card.toughness}</span>
+            </div>
+          )}
+
+          {!isCreature && isLand && landSymbol && (
+            <div className="absolute bottom-1 inset-x-0 flex justify-center z-10 pointer-events-none">
+              <div className="bg-black/60 rounded-full p-0.5 backdrop-blur-sm shadow-lg border border-white/10">
+                <ManaIcon symbol={landSymbol} size="md" shadow />
+              </div>
+            </div>
+          )}
+
+          {/* Inner Border/Frame for definition */}
+          <div className="absolute inset-0 border border-black/20 pointer-events-none rounded-lg shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
+        </>
       )}
 
       {/* Foil Overlay */}
