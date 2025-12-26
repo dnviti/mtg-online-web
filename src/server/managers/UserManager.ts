@@ -103,7 +103,7 @@ export class UserManager {
     }
 
     // Changed to Async
-    async saveDeck(userId: string, deckName: string, cards: any[]): Promise<SavedDeck> {
+    async saveDeck(userId: string, deckName: string, cards: any[], format?: string): Promise<SavedDeck> {
 
         // Validate cards are JSON serializable
         const cardsJson = JSON.stringify(cards);
@@ -112,7 +112,29 @@ export class UserManager {
             data: {
                 name: deckName,
                 cards: cardsJson,
-                userId
+                userId,
+                format: format || 'Standard'
+            }
+        });
+    }
+
+    async updateDeck(userId: string, deckId: string, deckName: string, cards: any[], format?: string): Promise<SavedDeck> {
+        const deck = await this.prisma.savedDeck.findUnique({
+            where: { id: deckId }
+        });
+
+        if (!deck || deck.userId !== userId) {
+            throw new Error("Deck not found or unauthorized");
+        }
+
+        const cardsJson = JSON.stringify(cards);
+
+        return this.prisma.savedDeck.update({
+            where: { id: deckId },
+            data: {
+                name: deckName,
+                cards: cardsJson,
+                format: format
             }
         });
     }

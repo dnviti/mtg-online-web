@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Layers, Box, Trophy, Users, Play } from 'lucide-react';
 import { CubeManager } from './modules/cube/CubeManager';
 import { LobbyManager } from './modules/lobby/LobbyManager';
-import { DeckTester } from './modules/tester/DeckTester';
+
 import { Pack } from './services/PackGeneratorService';
 import { ToastProvider } from './components/Toast';
 import { GameToastProvider } from './components/GameToast';
@@ -15,9 +15,9 @@ import { AuthModule } from './modules/auth/AuthModule';
 import { ProfileModule } from './modules/profile/ProfileModule';
 
 const MainLayout: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'tester' | 'profile'>(() => {
+  const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'profile'>(() => {
     const saved = localStorage.getItem('activeTab');
-    return (saved as 'draft' | 'bracket' | 'lobby' | 'tester' | 'profile') || 'draft';
+    return (saved as 'draft' | 'bracket' | 'lobby' | 'profile') || 'draft';
   });
 
   const { user } = useUser();
@@ -104,12 +104,6 @@ const MainLayout: React.FC = () => {
               <Users className="w-4 h-4" /> <span className="hidden md:inline">Online Lobby</span>
             </button>
             <button
-              onClick={() => setActiveTab('tester')}
-              className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'tester' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}
-            >
-              <Play className="w-4 h-4" /> <span className="hidden md:inline">Deck Tester</span>
-            </button>
-            <button
               onClick={() => setActiveTab('profile')}
               className={`px-3 md:px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-all ${activeTab === 'profile' ? 'bg-pink-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
@@ -134,7 +128,7 @@ const MainLayout: React.FC = () => {
           />
         )}
         {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
-        {activeTab === 'tester' && <DeckTester />}
+
         {activeTab === 'profile' && (
           user ? <ProfileModule /> : <AuthModule onSuccess={() => { }} />
           // onSuccess could redirect to profile or just stay, state update will handle re-render

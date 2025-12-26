@@ -8,7 +8,7 @@ interface User {
     createdAt: number;
 }
 
-interface SavedDeck {
+export interface SavedDeck {
     id: string;
     name: string;
     cards: any[];
@@ -22,7 +22,8 @@ interface UserContextType {
     login: (username: string, password: string) => Promise<void>;
     register: (username: string, password: string) => Promise<void>;
     logout: () => void;
-    saveDeck: (deck: any) => Promise<void>;
+    saveDeck: (deck: any, format?: string) => Promise<void>;
+    updateDeck: (deckId: string, deckData: any, format?: string) => Promise<void>;
     deleteDeck: (deckId: string) => Promise<void>;
     refreshUser: () => Promise<void>;
 }
@@ -91,7 +92,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('authToken');
     };
 
-    const saveDeck = async (deck: any) => {
+    const saveDeck = async (deck: any, format?: string) => {
         if (!token) throw new Error("Not logged in");
         const res = await fetch('/api/user/decks', {
             method: 'POST',
@@ -99,9 +100,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(deck)
+            body: JSON.stringify({ ...deck, format })
         });
         if (!res.ok) throw new Error("Failed to save deck");
+        await refreshUser();
+    };
+
+    const updateDeck = async (deckId: string, deckData: any, format?: string) => {
+        if (!token) throw new Error("Not logged in");
+        const res = await fetch(`/api/user/decks/${deckId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ ...deckData, format })
+        });
+        if (!res.ok) throw new Error("Failed to update deck");
         await refreshUser();
     };
 
@@ -118,7 +133,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return (
-        <UserContext.Provider value={{ user, token, login, register, logout, saveDeck, deleteDeck, refreshUser }}>
+        <UserContext.Provider value={{ user, token, login, register, logout, saveDeck, updateDeck, deleteDeck, refreshUser }}>
             {children}
         </UserContext.Provider>
     );

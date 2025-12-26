@@ -2,12 +2,34 @@ import React from 'react';
 import { useUser } from '../../contexts/UserContext';
 import { LogOut, Trash2, Calendar, Layers, Clock } from 'lucide-react';
 import { useToast } from '../../components/Toast';
+import { DeckEditor } from './DeckEditor';
 
 export const ProfileModule: React.FC = () => {
     const { user, logout, deleteDeck } = useUser();
     const { showToast } = useToast();
 
+    const [editingDeck, setEditingDeck] = React.useState<any>(null);
+    const [isCreating, setIsCreating] = React.useState(false);
+
     if (!user) return null;
+
+    if (editingDeck || isCreating) {
+        return (
+            <div className="p-6 max-w-4xl mx-auto h-full overflow-y-auto">
+                <DeckEditor
+                    existingDeck={editingDeck}
+                    onSave={() => {
+                        setEditingDeck(null);
+                        setIsCreating(false);
+                    }}
+                    onCancel={() => {
+                        setEditingDeck(null);
+                        setIsCreating(false);
+                    }}
+                />
+            </div>
+        );
+    }
 
     const handleDelete = async (id: string) => {
         if (confirm('Are you sure you want to delete this deck?')) {
@@ -34,12 +56,20 @@ export const ProfileModule: React.FC = () => {
                         <Clock className="w-4 h-4" /> Member since {new Date(user.createdAt).toLocaleDateString()}
                     </p>
                 </div>
-                <button
-                    onClick={logout}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-600"
-                >
-                    <LogOut className="w-4 h-4" /> Sign Out
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setIsCreating(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors shadow-lg"
+                    >
+                        <Layers className="w-4 h-4" /> New Deck
+                    </button>
+                    <button
+                        onClick={logout}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-600"
+                    >
+                        <LogOut className="w-4 h-4" /> Sign Out
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -53,14 +83,14 @@ export const ProfileModule: React.FC = () => {
                         <div className="text-center py-10 text-slate-500 bg-slate-800/30 rounded-lg">
                             <Layers className="w-12 h-12 mx-auto mb-2 opacity-20" />
                             <p>No saved decks yet.</p>
-                            <p className="text-sm mt-1">Decks you build in Tester or Drafts will appear here.</p>
+                            <p className="text-sm mt-1">Create a new deck to get started.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
                             {(user.decks || []).map(deck => (
                                 <div key={deck.id} className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex justify-between items-center group hover:border-purple-500/50 transition-colors">
-                                    <div>
-                                        <h4 className="font-bold text-slate-200">{deck.name}</h4>
+                                    <div className="cursor-pointer flex-1" onClick={() => setEditingDeck(deck)}>
+                                        <h4 className="font-bold text-slate-200 group-hover:text-purple-400 transition-colors">{deck.name}</h4>
                                         <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
                                             <span>{deck.cards.length} Cards</span>
                                             <span>•</span>
