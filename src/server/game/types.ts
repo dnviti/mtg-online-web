@@ -101,6 +101,7 @@ export interface StackObject {
 
 export interface StrictGameState {
   roomId: string;
+  format?: string; // e.g., 'commander' | 'standard'
   players: Record<string, PlayerState>;
   cards: Record<string, CardObject>;
   stack: StackObject[];

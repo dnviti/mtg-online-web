@@ -551,8 +551,8 @@ io.on('connection', (socket) => {
   // Timer management
   // Timer management removed (Global loop handled)
 
-  socket.on('create_room', ({ hostId, hostName, packs, basicLands }, callback) => {
-    const room = roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id);
+  socket.on('create_room', ({ hostId, hostName, packs, basicLands, format }, callback) => {
+    const room = roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id, format);
     socket.join(room.id);
     console.log(`Room created: ${room.id} by ${hostName}`);
     callback({ success: true, room });
@@ -747,11 +747,17 @@ io.on('connection', (socket) => {
         // return; 
       }
 
-      const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
-      room.status = 'drafting';
+      if (room.format === 'draft') {
+        const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
+        room.status = 'drafting';
 
-      io.to(room.id).emit('room_update', room);
-      io.to(room.id).emit('draft_update', draft);
+        io.to(room.id).emit('room_update', room);
+        io.to(room.id).emit('draft_update', draft);
+      } else {
+        // For constructed formats (Commander, Standard), skip draft and go to deck building
+        room.status = 'deck_building';
+        io.to(room.id).emit('room_update', room);
+      }
     }
   });
 
@@ -845,7 +851,7 @@ io.on('connection', (socket) => {
     const updatedRoom = roomManager.startGame(room.id);
     if (updatedRoom) {
       io.to(room.id).emit('room_update', updatedRoom);
-      const game = gameManager.createGame(room.id, updatedRoom.players);
+      const game = gameManager.createGame(room.id, updatedRoom.players, updatedRoom.format);
 
       // Iterate over ALL players in the room to ensure everyone gets their deck loaded
       updatedRoom.players.forEach(p => {

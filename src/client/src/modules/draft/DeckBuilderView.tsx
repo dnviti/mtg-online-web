@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { socketService } from '../../services/SocketService';
 import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2 } from 'lucide-react';
 import { StackView } from '../../components/StackView';
@@ -25,7 +25,11 @@ interface DeckBuilderViewProps {
   submitLabel?: string;
 }
 
-const ManaCurve = ({ deck }: { deck: any[] }) => {
+const MIN_CARD_WIDTH = 60;
+const MAX_CARD_WIDTH = 200;
+const FULL_ART_THRESHOLD = (MIN_CARD_WIDTH + MAX_CARD_WIDTH) / 2; // 130
+
+const ManaCurve = React.memo(({ deck }: { deck: any[] }) => {
   const counts = new Array(8).fill(0);
   let max = 0;
 
@@ -71,12 +75,12 @@ const ManaCurve = ({ deck }: { deck: any[] }) => {
       })}
     </div>
   );
-};
+});
 
 // Internal Helper to normalize card data for visuals
 const normalizeCard = (c: any): DraftCard => {
   const targetId = c.scryfallId || c.id;
-  const setCode = c.setCode || c.set;
+  const setCode = c.setCode || c.set || c.definition?.set;
   const localImage = (targetId && setCode)
     ? `/cards/images/${setCode}/full/${targetId}.jpg`
     : null;
@@ -89,24 +93,25 @@ const normalizeCard = (c: any): DraftCard => {
     finish: c.finish || 'nonfoil',
     typeLine: c.typeLine || c.type_line,
     // Ensure image is top-level for components that expect it
+    // Prioritize local cache
     image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
     imageArtCrop: localCrop || c.imageArtCrop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
   };
 };
 
-const LAND_URL_MAP: Record<string, string> = {
-  Plains: "https://cards.scryfall.io/normal/front/d/1/d1ea1858-ad25-4d13-9860-25c898b02c42.jpg",
-  Island: "https://cards.scryfall.io/normal/front/2/f/2f3069b3-c15c-4399-ab99-c88c0379435b.jpg",
-  Swamp: "https://cards.scryfall.io/normal/front/1/7/17d0571f-df6c-4b53-912f-9cb4d5a9d224.jpg",
-  Mountain: "https://cards.scryfall.io/normal/front/f/5/f5383569-42b7-4c07-b67f-2736bc88bd37.jpg",
-  Forest: "https://cards.scryfall.io/normal/front/1/f/1fa688da-901d-4876-be11-884d6b677271.jpg"
+const LAND_DEFAULTS: Record<string, { name: string, set: string, id: string, image: string }> = {
+  Plains: { name: 'Plains', set: 'unh', id: '1d7dba1c-a702-43c0-8fca-e47bbad4a009', image: 'https://cards.scryfall.io/normal/front/1/d/1d7dba1c-a702-43c0-8fca-e47bbad4a009.jpg' },
+  Island: { name: 'Island', set: 'unh', id: '0c4a301b-16f5-41c8-a920-d38513206d11', image: 'https://cards.scryfall.io/normal/front/0/c/0c4a301b-16f5-41c8-a920-d38513206d11.jpg' },
+  Swamp: { name: 'Swamp', set: 'unh', id: '8bc6ec60-0d72-488b-9dd2-b895697a3a5e', image: 'https://cards.scryfall.io/normal/front/8/b/8bc6ec60-0d72-488b-9dd2-b895697a3a5e.jpg' },
+  Mountain: { name: 'Mountain', set: 'unh', id: '409796e8-d003-4674-8395-927d6928e34c', image: 'https://cards.scryfall.io/normal/front/4/0/409796e8-d003-4674-8395-927d6928e34c.jpg' },
+  Forest: { name: 'Forest', set: 'unh', id: '5f8221b7-a359-42b7-876b-95204680e9be', image: 'https://cards.scryfall.io/normal/front/5/f/5f8221b7-a359-42b7-876b-95204680e9be.jpg' },
 };
 
 // Universal Wrapper handling both Pool Cards (Move) and Land Sources (Copy/Ghost)
-const UniversalCardWrapper = ({ children, card, source, disabled }: any) => {
+const UniversalCardWrapper = React.memo(({ children, card, source, disabled }: any) => {
   const isLand = card.isLandSource;
   const dndId = isLand ? `land-source-${card.name}` : card.id;
-  const dndData = isLand ? { card, type: 'land' } : { card, source };
+  const dndData = useMemo(() => isLand ? { card, type: 'land' } : { card, source }, [card, source, isLand]);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: dndId,
@@ -125,7 +130,9 @@ const UniversalCardWrapper = ({ children, card, source, disabled }: any) => {
       {children}
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.card?.id === next.card?.id && prev.disabled === next.disabled && prev.source === next.source;
+});
 
 // Droppable Zone
 const DroppableZone = ({ id, children, className }: any) => {
@@ -138,7 +145,7 @@ const DroppableZone = ({ id, children, className }: any) => {
 };
 
 // Reusable List Item Component
-const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: any) => void }> = ({ card, onClick, onHover }) => {
+const ListItem = React.memo(({ card, onClick, onHover }: { card: DraftCard; onClick?: () => void; onHover?: (c: any) => void }) => {
   const isFoil = (card: DraftCard) => card.finish === 'foil';
 
   const getRarityColorClass = (rarity: string) => {
@@ -183,9 +190,9 @@ const ListItem: React.FC<{ card: DraftCard; onClick?: () => void; onHover?: (c: 
       </div>
     </div>
   );
-};
+});
 
-const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
+const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
   const displayImage = useArtCrop ? card.imageArtCrop : card.image;
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
     if (window.matchMedia('(pointer: coarse)').matches) {
@@ -217,7 +224,9 @@ const DeckCardItem = ({ card, useArtCrop, isFoil, onCardClick, onHover }: any) =
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.card.id === next.card.id && prev.card.image === next.card.image && prev.isFoil === next.isFoil && prev.useArtCrop === next.useArtCrop;
+});
 
 // Extracted Component to avoid re-mounting issues
 const CardsDisplay: React.FC<{
@@ -229,7 +238,9 @@ const CardsDisplay: React.FC<{
   emptyMessage: string;
   source: 'pool' | 'deck';
   groupBy?: 'type' | 'color' | 'cmc' | 'rarity';
-}> = ({ cards, viewMode, cardWidth, onCardClick, onHover, emptyMessage, source, groupBy = 'color' }) => {
+}> = React.memo(({ cards, viewMode, cardWidth, onCardClick, onHover, emptyMessage, source, groupBy = 'color' }) => {
+  const normalizedCards = useMemo(() => cards.map(normalizeCard), [cards]);
+
   if (cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50 p-8 border-2 border-dashed border-slate-700/50 rounded-lg">
@@ -241,7 +252,7 @@ const CardsDisplay: React.FC<{
 
   // Use CSS var for grid
   if (viewMode === 'list') {
-    const sorted = [...cards].sort((a, b) => {
+    const sorted = [...normalizedCards].sort((a, b) => {
       // Lands always first
       if (a.isLandSource && !b.isLandSource) return -1;
       if (!a.isLandSource && b.isLandSource) return 1;
@@ -253,7 +264,7 @@ const CardsDisplay: React.FC<{
       <div className="flex flex-col gap-1 w-full">
         {sorted.map(c => (
           <UniversalCardWrapper key={c.id || c.name} card={c} source={source}>
-            <ListItem card={normalizeCard(c)} onClick={() => onCardClick(c)} onHover={onHover} />
+            <ListItem card={c} onClick={() => onCardClick(c)} onHover={onHover} />
           </UniversalCardWrapper>
         ))}
       </div>
@@ -262,9 +273,9 @@ const CardsDisplay: React.FC<{
 
   if (viewMode === 'stack') {
     return (
-      <div className="h-full min-w-full w-max">
+      <div className="min-h-full min-w-full w-max">
         <StackView
-          cards={cards.map(normalizeCard)}
+          cards={normalizedCards}
           cardWidth={cardWidth}
           onCardClick={(c) => {
             if (window.matchMedia('(pointer: coarse)').matches) {
@@ -276,6 +287,7 @@ const CardsDisplay: React.FC<{
           onHover={(c) => onHover(c)}
           disableHoverPreview={true}
           groupBy={groupBy}
+          useArtCrop={cardWidth < FULL_ART_THRESHOLD}
           renderWrapper={(card, children) => (
             <UniversalCardWrapper key={card.id || card.name} card={card} source={source}>
               {children}
@@ -294,10 +306,8 @@ const CardsDisplay: React.FC<{
         gridTemplateColumns: `repeat(auto-fill, minmax(var(--card-width, ${cardWidth}px), 1fr))`
       }}
     >
-      {cards.map(c => {
-        const card = normalizeCard(c);
-        const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
-
+      {normalizedCards.map(card => {
+        const useArtCrop = cardWidth < FULL_ART_THRESHOLD && !!card.imageArtCrop;
         const isFoil = card.finish === 'foil';
 
         return (
@@ -314,7 +324,7 @@ const CardsDisplay: React.FC<{
       })}
     </div>
   )
-};
+});
 
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   roomId,
@@ -347,7 +357,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   });
   const [cardWidth, setCardWidth] = useState(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_cardWidth') : null;
-    return saved ? parseInt(saved, 10) : 60;
+    return saved ? parseInt(saved, 10) : MIN_CARD_WIDTH;
   });
   // Local state for smooth slider
   const [localCardWidth, setLocalCardWidth] = useState(cardWidth);
@@ -431,6 +441,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Sync initialDeck prop changes
+  useEffect(() => {
+    if (initialDeck && initialDeck.length > 0) {
+      setDeck(initialDeck);
+      // We might need to filter pool if relevant, but for built decks usually pool is separate or irrelevant here.
+    }
+  }, [initialDeck]);
 
   React.useEffect(() => {
     if (hoveredCard) {
@@ -553,67 +571,121 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     return suggestion;
   }, [deck]);
 
-  const applySuggestion = () => {
+  const applySuggestion = useCallback(() => {
     if (!landSuggestion) return;
 
     const newLands: any[] = [];
+    const landsToCache: any[] = [];
+
     Object.entries(landSuggestion).forEach(([type, count]) => {
       if ((count as number) <= 0) return;
 
-      // Find real land from cube or create generic
+      // Find real land from cube or use Default Unhinged Land with valid set/ID for caching
       let landCard = availableBasicLands && availableBasicLands.length > 0
         ? (availableBasicLands.find(l => l.name === type) || availableBasicLands.find(l => l.name.includes(type)))
         : null;
 
       if (!landCard) {
-        landCard = {
-          id: `basic-source-${type}`,
-          name: type,
-          image_uris: { normal: LAND_URL_MAP[type], art_crop: LAND_URL_MAP[type] },
-          typeLine: "Basic Land",
-          scryfallId: `generic-${type}`
-        };
+        // Use default basic land with valid Set/ID
+        const defaultLand = LAND_DEFAULTS[type];
+        if (defaultLand) {
+          landCard = {
+            id: `basic-source-${type}`,
+            name: defaultLand.name,
+            set: defaultLand.set,
+            setCode: defaultLand.set,
+            scryfallId: defaultLand.id,
+            image_uris: { normal: defaultLand.image, art_crop: defaultLand.image },
+            image: defaultLand.image,
+            typeLine: `Basic Land — ${defaultLand.name}`,
+          };
+          // Track for caching
+          landsToCache.push(landCard);
+        } else {
+          // Fallback legacy (should not happen for basic types)
+          landCard = {
+            id: `basic-source-${type}`,
+            name: type,
+            image_uris: { normal: '', art_crop: '' },
+            typeLine: "Basic Land",
+            scryfallId: `generic-${type}`
+          };
+        }
       }
 
       for (let i = 0; i < (count as number); i++) {
         const newLand = {
           ...landCard,
           id: `land-${type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`,
-          image_uris: landCard.image_uris || { normal: landCard.image || LAND_URL_MAP[type] },
+          image_uris: landCard.image_uris || { normal: landCard.image },
           typeLine: landCard.typeLine || "Basic Land"
         };
         newLands.push(newLand);
       }
     });
 
+    // Trigger background cache download for these lands so normalizeCard can pick them up locally
+    if (landsToCache.length > 0) {
+      fetch('/api/cards/cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards: landsToCache })
+      }).catch(e => console.warn("Failed to cache basic lands", e));
+    }
+
     if (newLands.length > 0) setDeck(prev => [...prev, ...newLands]);
-  };
+  }, [landSuggestion, availableBasicLands]);
 
   // --- Actions ---
   const formatTime = (seconds: number | string) => seconds;
 
-  const addToDeck = (card: any) => {
+  const addToDeck = useCallback((card: any) => {
     setPool(prev => prev.filter(c => c.id !== card.id));
     setDeck(prev => [...prev, card]);
-  };
+  }, []);
 
-  const addLandToDeck = (land: any) => {
+  const addLandToDeck = useCallback((land: any) => {
+    // If we're adding from the generic source, ensure it's the right data
+    let baseLand = land;
+
+    // If it's a generic source key, look up our default to be sure we get the set info
+    if (land.id && land.id.startsWith('land-source-')) {
+      const type = land.name;
+      const defaultLand = LAND_DEFAULTS[type];
+      if (defaultLand && !land.setCode) {
+        // Enrich
+        baseLand = {
+          ...land,
+          set: defaultLand.set,
+          setCode: defaultLand.set,
+          scryfallId: defaultLand.id,
+          image: defaultLand.image
+        };
+        // Trigger cache on manual add too
+        fetch('/api/cards/cache', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards: [baseLand] })
+        }).catch(() => { });
+      }
+    }
+
     const newLand = {
-      ...land,
-      id: `land-${land.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      image_uris: land.image_uris || { normal: land.image },
-      image: land.image, // Propagate resolved image
-      imageArtCrop: land.imageArtCrop
+      ...baseLand,
+      id: `land-${baseLand.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      image_uris: baseLand.image_uris || { normal: baseLand.image },
+      image: baseLand.image, // Propagate resolved image
+      imageArtCrop: baseLand.imageArtCrop
     };
     setDeck(prev => [...prev, newLand]);
-  };
+  }, []);
 
-  const removeFromDeck = (card: any) => {
+  const removeFromDeck = useCallback((card: any) => {
     setDeck(prev => prev.filter(c => c.id !== card.id));
     if (!card.id.startsWith('land-')) {
       setPool(prev => [...prev, card]);
     }
-  };
+  }, []);
 
   const submitDeck = () => {
     // Normalize deck images to use local cache before submitting
@@ -971,18 +1043,24 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
     // Otherwise generate generic basics
     const types = ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'];
-    return types.map(type => ({
-      id: `basic-source-${type}`,
-      name: type,
-      isLandSource: true,
-      image: LAND_URL_MAP[type],
-      imageArtCrop: LAND_URL_MAP[type], // Explicitly add fallback crop
-      typeLine: `Basic Land — ${type}`,
-      rarity: 'common',
-      cmc: 0,
-      set: 'LEA', // Dummy set for visuals
-      colors: type === 'Plains' ? ['W'] : type === 'Island' ? ['U'] : type === 'Swamp' ? ['B'] : type === 'Mountain' ? ['R'] : ['G']
-    }));
+    return types.map(type => {
+      const def = LAND_DEFAULTS[type];
+      return {
+        id: `basic-source-${type}`,
+        name: type,
+        isLandSource: true, // @ts-ignore
+        scryfallId: def?.id,
+        set: def?.set,
+        setCode: def?.set,
+        image: def?.image,
+        image_uris: { normal: def?.image },
+        imageArtCrop: def?.image, // Explicitly add fallback crop
+        typeLine: `Basic Land — ${type}`,
+        rarity: 'common',
+        cmc: 0,
+        colors: type === 'Plains' ? ['W'] : type === 'Island' ? ['U'] : type === 'Swamp' ? ['B'] : type === 'Mountain' ? ['R'] : ['G']
+      };
+    });
   }, [availableBasicLands]);
 
   // Removed displayPool memo to keep them separate
@@ -1151,8 +1229,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
               <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
               <input
                 type="range"
-                min="60"
-                max="200"
+                min={MIN_CARD_WIDTH}
+                max={MAX_CARD_WIDTH}
                 step="1"
                 value={localCardWidth}
                 onChange={(e) => {
@@ -1435,7 +1513,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
         <DragOverlay dropAnimation={null}>
           {draggedCard ? (() => {
-            const useArtCrop = localCardWidth < 130 && !!draggedCard.imageArtCrop;
+            const useArtCrop = localCardWidth < FULL_ART_THRESHOLD && !!draggedCard.imageArtCrop;
             const displayImage = useArtCrop ? draggedCard.imageArtCrop : (draggedCard.image || draggedCard.image_uris?.normal);
             // Default to square for crop, standard ratio otherwise
             const aspectRatio = useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]';

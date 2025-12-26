@@ -5,6 +5,7 @@ import { GameRoom } from './GameRoom';
 import { Pack } from '../../services/PackGeneratorService';
 import { Users, PlusCircle, LogIn, AlertCircle, Loader2, Package, Check } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { useUser } from '../../contexts/UserContext';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
@@ -12,8 +13,13 @@ interface LobbyManagerProps {
 }
 
 export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, availableLands = [] }) => {
+  const { user } = useUser(); // Get user from context
   const [activeRoom, setActiveRoom] = useState<any>(null);
-  const [playerName, setPlayerName] = useState(() => localStorage.getItem('player_name') || '');
+  const [playerName, setPlayerName] = useState(() => {
+    if (user && user.username) return user.username;
+    return localStorage.getItem('player_name') || '';
+  });
+  const [selectedFormat, setSelectedFormat] = useState('commander'); // Default to Commander
   const [joinRoomId, setJoinRoomId] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,10 +34,14 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     return newId;
   });
 
-  // Persist player name
+  // Persist player name (only if guest)
   React.useEffect(() => {
-    localStorage.setItem('player_name', playerName);
-  }, [playerName]);
+    if (user?.username) {
+      setPlayerName(user.username);
+    } else {
+      localStorage.setItem('player_name', playerName);
+    }
+  }, [playerName, user]);
 
   const [showBoxSelection, setShowBoxSelection] = useState(false);
   const [availableBoxes, setAvailableBoxes] = useState<{ id: string, title: string, packs: Pack[], setCode: string, packCount: number }[]>([]);
@@ -98,7 +108,8 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         hostId: playerId,
         hostName: playerName,
         packs: updatedPacks,
-        basicLands: updatedBasicLands
+        basicLands: updatedBasicLands,
+        format: selectedFormat
       });
 
       if (response.success) {
@@ -120,7 +131,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       setError('Please enter your name');
       return;
     }
-    if (generatedPacks.length === 0) {
+    if (selectedFormat === 'draft' && generatedPacks.length === 0) {
       setError('No packs generated! Please go to Draft Management and generate packs first.');
       return;
     }
@@ -334,14 +345,32 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
         <div className="space-y-6">
           <div>
+            <label className="block text-sm font-bold text-slate-300 mb-2">Game Format</label>
+            <select
+              value={selectedFormat}
+              onChange={(e) => setSelectedFormat(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 outline-none text-lg mb-4"
+            >
+              <option value="commander">Commander (EDH)</option>
+              <option value="draft">Draft Mode</option>
+              <option value="standard">Standard / Limited (No Commander)</option>
+            </select>
+
             <label className="block text-sm font-bold text-slate-300 mb-2">Your Name</label>
-            <input
-              type="text"
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter your nickname..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 outline-none text-lg"
-            />
+            {user ? (
+              <div className="w-full bg-slate-800 border border-slate-700/50 rounded-xl p-4 text-emerald-400 font-bold text-lg flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Playing as: {user.username}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder="Enter your nickname..."
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 outline-none text-lg"
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-700">
@@ -349,48 +378,57 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
             <div className={`space-y-4 ${generatedPacks.length === 0 ? 'opacity-50' : ''}`}>
               <div className="flex justify-between items-start">
                 <h3 className="text-xl font-bold text-white">Create Room</h3>
-                <div className="group relative">
-                  <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
-                  <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
-                    <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules (3 packs/player)</strong>
-                    <ul className="space-y-1">
-                      <li className={generatedPacks.length < 12 ? 'text-red-400' : 'text-slate-500'}>
-                        • &lt; 12 Packs: Not enough for draft
-                      </li>
-                      <li className={(generatedPacks.length >= 12 && generatedPacks.length < 18) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                        • 12-17 Packs: 4 Players
-                      </li>
-                      <li className={(generatedPacks.length >= 18 && generatedPacks.length < 24) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                        • 18-23 Packs: 4 or 6 Players
-                      </li>
-                      <li className={generatedPacks.length >= 24 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                        • 24+ Packs: 4, 6 or 8 Players
-                      </li>
-                    </ul>
+                <h3 className="text-xl font-bold text-white">Create Room</h3>
+                {selectedFormat === 'draft' && (
+                  <div className="group relative">
+                    <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
+                    <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
+                      <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules (3 packs/player)</strong>
+                      <ul className="space-y-1">
+                        <li className={generatedPacks.length < 12 ? 'text-red-400' : 'text-slate-500'}>
+                          • &lt; 12 Packs: Not enough for draft
+                        </li>
+                        <li className={(generatedPacks.length >= 12 && generatedPacks.length < 18) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                          • 12-17 Packs: 4 Players
+                        </li>
+                        <li className={(generatedPacks.length >= 18 && generatedPacks.length < 24) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                          • 18-23 Packs: 4 or 6 Players
+                        </li>
+                        <li className={generatedPacks.length >= 24 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
+                          • 24+ Packs: 4, 6 or 8 Players
+                        </li>
+                      </ul>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
               <div className="text-sm text-slate-400">
-                Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.
-                <div className="mt-1 text-xs">
-                  Supported Players: {' '}
-                  {generatedPacks.length < 12 && <span className="text-red-400 font-bold">None (Generate more packs)</span>}
-                  {generatedPacks.length >= 12 && generatedPacks.length < 18 && <span className="text-emerald-400 font-bold">4 Only</span>}
-                  {generatedPacks.length >= 18 && generatedPacks.length < 24 && <span className="text-emerald-400 font-bold">4 or 6</span>}
-                  {generatedPacks.length >= 24 && <span className="text-emerald-400 font-bold">4, 6 or 8</span>}
-                </div>
+                {selectedFormat === 'draft' ? (
+                  <>
+                    Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.
+                    <div className="mt-1 text-xs">
+                      Supported Players: {' '}
+                      {generatedPacks.length < 12 && <span className="text-red-400 font-bold">None (Generate more packs)</span>}
+                      {generatedPacks.length >= 12 && generatedPacks.length < 18 && <span className="text-emerald-400 font-bold">4 Only</span>}
+                      {generatedPacks.length >= 18 && generatedPacks.length < 24 && <span className="text-emerald-400 font-bold">4 or 6</span>}
+                      {generatedPacks.length >= 24 && <span className="text-emerald-400 font-bold">4, 6 or 8</span>}
+                    </div>
+                  </>
+                ) : (
+                  <>Create a lobby for Constructed play. No packs required.</>
+                )}
               </div>
 
               <button
                 onClick={handleCreateRoom}
-                disabled={loading || generatedPacks.length === 0}
+                disabled={loading || (selectedFormat === 'draft' && generatedPacks.length === 0)}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-lg transform transition hover:scale-[1.02] flex justify-center items-center gap-2 disabled:cursor-not-allowed disabled:grayscale"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
                 {loading ? 'Creating...' : 'Create Private Room'}
               </button>
-              {generatedPacks.length === 0 && (
+              {selectedFormat === 'draft' && generatedPacks.length === 0 && (
                 <p className="text-xs text-amber-500 text-center font-bold">Requires packs from Draft Management tab.</p>
               )}
             </div>

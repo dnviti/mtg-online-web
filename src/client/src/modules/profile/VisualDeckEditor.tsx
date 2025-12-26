@@ -6,11 +6,13 @@ import { GameLogProvider } from '../../contexts/GameLogContext';
 
 interface VisualDeckEditorProps {
     existingDeck?: SavedDeck;
+    initialName?: string;
+    initialFormat?: string;
     onSave: () => void;
     onCancel: () => void;
 }
 
-export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck, onSave, onCancel }) => {
+export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck, initialName, initialFormat, onSave, onCancel }) => {
     const { saveDeck, updateDeck, user } = useUser();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
@@ -57,8 +59,8 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
         setLoading(true);
 
         try {
-            const deckName = existingDeck?.name || `${user.username}'s Deck`;
-            const format = existingDeck?.format || 'Standard';
+            const deckName = existingDeck?.name || initialName || `${user.username}'s Deck`;
+            const format = existingDeck?.format || initialFormat || 'Standard';
 
             // Clean up cards for saving (remove temporary specific view IDs if needed, but for now exact state is fine)
             // Actually DeckBuilderView assigns ephemeral IDs like `land-Island-...`.
@@ -91,7 +93,7 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
             <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
                 {/* Header Overlay for Cancel/Context */}
                 <div className="bg-slate-900 border-b border-slate-800 p-2 flex justify-between items-center shrink-0">
-                    <h2 className="text-white font-bold ml-4">{existingDeck?.name || 'New Deck'}</h2>
+                    <h2 className="text-white font-bold ml-4">{existingDeck?.name || initialName || 'New Deck'}</h2>
                     <button onClick={onCancel} className="text-slate-400 hover:text-white px-4 py-2">
                         Close
                     </button>
@@ -105,7 +107,7 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
                         initialDeck={initialDeck}
                         availableBasicLands={basicLands}
                         isConstructed={true}
-                        format={existingDeck?.format || 'Standard'}
+                        format={existingDeck?.format || initialFormat || 'Standard'}
                         onSubmit={handleDeckSubmit}
                         submitLabel={loading ? "Saving..." : "Save Changes"}
                     />

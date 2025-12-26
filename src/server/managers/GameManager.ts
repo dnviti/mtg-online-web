@@ -15,7 +15,7 @@ export class GameManager extends EventEmitter {
     this.emit('game_notification', roomId, { message, type, targetId });
   }
 
-  createGame(gameId: string, players: { id: string; name: string; isBot?: boolean }[]): StrictGameState {
+  createGame(gameId: string, players: { id: string; name: string; isBot?: boolean }[], format: string = 'standard'): StrictGameState {
 
     // Convert array to map
     const playerRecord: Record<string, PlayerState> = {};
@@ -24,7 +24,7 @@ export class GameManager extends EventEmitter {
         id: p.id,
         name: p.name,
         isBot: p.isBot,
-        life: 20,
+        life: format === 'commander' ? 40 : 20,
         poison: 0,
         energy: 0,
         isActive: false,
@@ -40,6 +40,7 @@ export class GameManager extends EventEmitter {
       players: playerRecord,
       cards: {}, // Populated later
       stack: [],
+      format, // Store format
 
       turnCount: 1,
       turnOrder: players.map(p => p.id),
@@ -147,7 +148,7 @@ export class GameManager extends EventEmitter {
           break;
         case 'CAST_SPELL':
           const c = engine.state.cards[action.cardId];
-          console.log(`[DEBUG] CAST_SPELL: Name=${c?.name} DFC=${c?.isDoubleFaced} Faces=${c?.card_faces?.length} DefFaces=${c?.definition?.card_faces?.length} FaceIdx=${action.faceIndex}`);
+          console.log(`[DEBUG] CAST_SPELL: Name=${c?.name} DFC=${c?.isDoubleFaced} Faces=${(c as any)?.card_faces?.length} DefFaces=${(c.definition as any)?.card_faces?.length} FaceIdx=${action.faceIndex}`);
           engine.castSpell(actorId, action.cardId, action.targets, action.position, action.faceIndex);
           break;
         case 'DECLARE_ATTACKERS':
@@ -495,7 +496,7 @@ export class GameManager extends EventEmitter {
       setCode: cardData.setCode || '',
       name: '',
       ...cardData,
-      isDoubleFaced: (cardData.definition?.card_faces?.length || 0) > 1 || (cardData.name || '').includes('//'),
+      isDoubleFaced: ((cardData.definition as any)?.card_faces?.length || 0) > 1 || (cardData.name || '').includes('//'),
       damageMarked: 0,
       controlledSinceTurn: 0, // Will be updated on draw/play
       definition: cardData.definition // Ensure definition is passed

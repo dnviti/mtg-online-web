@@ -14,6 +14,7 @@ interface StackViewProps {
   disableHoverPreview?: boolean;
   groupBy?: GroupMode;
   renderWrapper?: (card: DraftCard, children: React.ReactNode) => React.ReactNode;
+  useArtCrop?: boolean;
 }
 
 const GROUPS: Record<GroupMode, string[]> = {
@@ -72,7 +73,7 @@ const getCardGroup = (card: DraftCard, mode: GroupMode): string => {
 };
 
 
-export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false, groupBy = 'color', renderWrapper }) => {
+export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, onCardClick, onHover, disableHoverPreview = false, groupBy = 'color', renderWrapper, useArtCrop: forceArtCrop }) => {
 
   const categorizedCards = useMemo(() => {
     const categories: Record<string, DraftCard[]> = {};
@@ -126,7 +127,9 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                 // Margin calculation: Negative margin to pull up next cards. 
                 // To show a "strip" of say 35px at the top of each card.
                 const isLast = index === catCards.length - 1;
-                const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
+                // Use prop if provided, otherwise fallback to width check (legacy/default behavior)
+                const shouldCrop = forceArtCrop !== undefined ? forceArtCrop : (cardWidth < 130);
+                const useArtCrop = shouldCrop && !!card.imageArtCrop;
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
                 return (
@@ -165,7 +168,7 @@ const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHo
       onTouchEnd={onTouchEnd}
       onTouchMove={onTouchMove}
     >
-      <CardHoverWrapper card={card} preventPreview={disableHoverPreview || cardWidth >= 130}>
+      <CardHoverWrapper card={card} preventPreview={disableHoverPreview || (useArtCrop === false)}>
         <div
           className={`relative w-full rounded-lg bg-slate-800 shadow-md border border-slate-950 overflow-hidden cursor-pointer group-hover:ring-2 group-hover:ring-purple-400`}
           style={{

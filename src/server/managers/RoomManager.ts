@@ -31,6 +31,7 @@ interface Room {
   maxPlayers: number;
   lastActive: number; // For persistence cleanup
   tournament?: Tournament | null;
+  format?: string;
 }
 
 export class RoomManager {
@@ -41,7 +42,7 @@ export class RoomManager {
     setInterval(() => this.cleanupRooms(), 5 * 60 * 1000);
   }
 
-  createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string): Room {
+  createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string, format: string = 'standard'): Room {
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const room: Room = {
       id: roomId,
@@ -49,6 +50,7 @@ export class RoomManager {
       players: [{ id: hostId, name: hostName, isHost: true, role: 'player', ready: false, socketId, isOffline: false }],
       packs,
       basicLands,
+      format,
       status: 'waiting',
       messages: [],
       maxPlayers: hostId.startsWith('SOLO_') ? 1 : 8, // Little hack for solo testing, though 8 is fine
@@ -165,7 +167,15 @@ export class RoomManager {
   startGame(roomId: string): Room | null {
     const room = this.rooms.get(roomId);
     if (!room) return null;
-    room.status = 'drafting';
+
+    // Logic Branch based on Format
+    if (room.format === 'draft') {
+      room.status = 'drafting';
+    } else {
+      // Commander, Standard, etc. skip drafting and go to deck building
+      room.status = 'deck_building';
+    }
+
     room.lastActive = Date.now();
     return room;
   }

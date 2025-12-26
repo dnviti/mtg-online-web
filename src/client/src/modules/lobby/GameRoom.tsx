@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords } from 'lucide-react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { useGameToast, GameToastProvider } from '../../components/GameToast';
@@ -9,6 +9,7 @@ import { GameView } from '../game/GameView';
 import { DraftView } from '../draft/DraftView';
 import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
+import { DeckSelectionModal } from './DeckSelectionModal';
 
 interface Player {
   id: string;
@@ -33,6 +34,7 @@ interface Room {
   basicLands?: any[];
   status: string;
   messages: ChatMessage[];
+  format?: string;
 }
 
 interface GameRoomProps {
@@ -77,6 +79,22 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   const [tournamentState, setTournamentState] = useState<any>((initialRoom as any).tournament || null);
   const [preparingMatchId, setPreparingMatchId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game'); // Keep for mobile
+
+  // Deck Selection Modal State
+  const [isDeckSelectionOpen, setIsDeckSelectionOpen] = useState(false);
+  const [selectedDeckCards, setSelectedDeckCards] = useState<any[]>([]);
+
+  // Open deck selection automatically if constructed and just started
+  useEffect(() => {
+    if (room.status === 'deck_building' && room.format !== 'draft') {
+      // If we haven't selected a deck yet and we are not ready
+      const me = room.players.find(p => p.id === currentPlayerId);
+      if (me && !(me as any).ready && selectedDeckCards.length === 0) {
+        setIsDeckSelectionOpen(true);
+      }
+    }
+  }, [room.status, room.format, currentPlayerId, room.players, selectedDeckCards.length]); // Dependencies need to be stable
+
 
   // Derived State
   const host = room.players.find(p => p.isHost);
@@ -295,7 +313,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
       return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} onExit={onExit} />;
     }
 
-    if (room.status === 'deck_building' && draftState) {
+    if (room.status === 'deck_building') {
       const me = room.players.find(p => p.id === currentPlayerId) as any;
       if (me?.ready) {
         return (
@@ -323,8 +341,16 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
         );
       }
 
-      const myPool = draftState.players[currentPlayerId]?.pool || [];
-      return <DeckBuilderView roomId={room.id} currentPlayerId={currentPlayerId} initialPool={myPool} availableBasicLands={room.basicLands} />;
+      const myPool = draftState?.players[currentPlayerId]?.pool || [];
+      return <DeckBuilderView
+        roomId={room.id}
+        currentPlayerId={currentPlayerId}
+        initialPool={myPool}
+        availableBasicLands={room.basicLands}
+
+        isConstructed={room.format !== 'draft'}
+        initialDeck={selectedDeckCards} // Pass selected deck
+      />;
     }
 
     if (room.status === 'tournament' && tournamentState) {
@@ -352,7 +378,14 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
     return (
       <div className="flex-1 bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center">
-        <h2 className="text-3xl font-bold text-white mb-4">Waiting for Players...</h2>
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <h2 className="text-3xl font-bold text-white">Waiting for Players...</h2>
+          {room.format && (
+            <div className="px-3 py-1 bg-slate-700 border border-slate-600 rounded-full text-xs font-bold text-slate-300 uppercase tracking-widest">
+              Format: <span className="text-emerald-400">{room.format}</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4 bg-slate-900 px-6 py-3 rounded-xl border border-slate-700">
           <span className="text-slate-400 uppercase text-xs font-bold tracking-wider">Room Code</span>
           <code className="text-2xl font-mono text-emerald-400 font-bold tracking-widest">{room.id}</code>
@@ -378,7 +411,8 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
               disabled={room.status !== 'waiting'}
               className="px-8 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-purple-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Layers className="w-5 h-5" /> Start Draft
+              {room.format === 'draft' ? <Layers className="w-5 h-5" /> : <Swords className="w-5 h-5" />}
+              {room.format === 'draft' ? 'Start Draft' : 'Start Game'}
             </button>
             <button
               onClick={() => socketService.socket.emit('add_bot', { roomId: room.id })}
@@ -675,6 +709,19 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
         title={modalConfig.title}
         message={modalConfig.message}
         type={modalConfig.type}
+      />
+
+
+      {/* Deck Selection Modal */}
+      <DeckSelectionModal
+        isOpen={isDeckSelectionOpen}
+        onClose={() => setIsDeckSelectionOpen(false)}
+        format={room.format}
+        onSelect={(deck) => {
+          setSelectedDeckCards(deck.cards);
+          setIsDeckSelectionOpen(false);
+          showGameToast(`Loaded deck: ${deck.name}`, 'success');
+        }}
       />
     </div>
   );

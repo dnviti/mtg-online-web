@@ -3,6 +3,7 @@ import { useUser } from '../../contexts/UserContext';
 import { LogOut, Trash2, Calendar, Layers, Clock } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 import { VisualDeckEditor } from './VisualDeckEditor';
+import { CreateDeckModal } from './CreateDeckModal';
 
 export const ProfileModule: React.FC = () => {
     const { user, logout, deleteDeck } = useUser();
@@ -10,21 +11,40 @@ export const ProfileModule: React.FC = () => {
 
     const [editingDeck, setEditingDeck] = React.useState<any>(null);
     const [isCreating, setIsCreating] = React.useState(false);
+    const [isNaming, setIsNaming] = React.useState(false);
+    const [newDeckDetails, setNewDeckDetails] = React.useState<{ name: string, format: string } | null>(null);
 
     if (!user) return null;
+
+    if (isNaming) {
+        return (
+            <CreateDeckModal
+                onConfirm={(name, format) => {
+                    setNewDeckDetails({ name, format });
+                    setIsNaming(false);
+                    setIsCreating(true);
+                }}
+                onCancel={() => setIsNaming(false)}
+            />
+        );
+    }
 
     if (editingDeck || isCreating) {
         return (
             <div className="fixed inset-0 z-50 bg-slate-950">
                 <VisualDeckEditor
                     existingDeck={editingDeck}
+                    initialName={newDeckDetails?.name}
+                    initialFormat={newDeckDetails?.format}
                     onSave={() => {
                         setEditingDeck(null);
                         setIsCreating(false);
+                        setNewDeckDetails(null);
                     }}
                     onCancel={() => {
                         setEditingDeck(null);
                         setIsCreating(false);
+                        setNewDeckDetails(null);
                     }}
                 />
             </div>
@@ -58,7 +78,7 @@ export const ProfileModule: React.FC = () => {
                 </div>
                 <div className="flex gap-3">
                     <button
-                        onClick={() => setIsCreating(true)}
+                        onClick={() => setIsNaming(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors shadow-lg"
                     >
                         <Layers className="w-4 h-4" /> New Deck
