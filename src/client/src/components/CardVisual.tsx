@@ -70,19 +70,44 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     const setCode = card.setCode || card.set || card.definition?.set;
     const cardId = card.scryfallId || card.definition?.id;
 
+    // Detect Face
+    // If activeFaceIndex is present, we try to use it.
+    // However, Scryfall data structure for faces is: card.card_faces[i].image_uris
+    // Some cards have card_faces but share image_uris (e.g. Adventure), but Transform cards have separate image_uris.
+    // If definition exists, use it.
+    const faces = card.definition?.card_faces || card.card_faces;
+    const faceIndex = card.activeFaceIndex ?? 0;
+
+    // Check if we have specific face images
+    const activeFace = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
+    const faceImageUris = activeFace?.image_uris;
+
     if (viewMode === 'cutout') {
       if (setCode && cardId) {
+        // If back face, usually we don't have a simple cache path for back face crop unless we specifically index it.
+        // But our crop logic (server) might not support back faces yet.
+        // Fallback to scryfall 'art_crop' if faceIndex > 0
+        if (faceIndex > 0 && faceImageUris?.art_crop) {
+          return faceImageUris.art_crop;
+        }
         return `/cards/images/${setCode}/crop/${cardId}.jpg`;
       }
-      // Fallback only if local ID missing (should not happen in correct flow)
-      return card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || card.imageUrl || '';
+      return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || card.imageUrl || '';
     } else {
       // Normal / Full View
       if (setCode && cardId) {
+        // If back face, standard filename might be different or suffixed? 
+        // Standard cache typically only has front face?
+        // If it's a DFC, Scryfall usually provides `card_faces` array.
+        // If we want the back face, we should probably use the remote URL if we haven't cached activeFaceIndex locally.
+        // For now, prioritize the specific face URI if faceIndex > 0
+        if (faceIndex > 0 && faceImageUris?.normal) {
+          return faceImageUris.normal;
+        }
         return `/cards/images/${setCode}/full/${cardId}.jpg`;
       }
       // Fallback
-      return card.image_uris?.normal || card.imageUrl || '';
+      return faceImageUris?.normal || card.image_uris?.normal || card.imageUrl || '';
     }
   }, [card, viewMode]);
 
@@ -157,13 +182,24 @@ export const CardVisual: React.FC<CardVisualProps> = ({
           {/* Top Name Bar */}
           <div className="absolute top-0 inset-x-0 h-10 bg-gradient-to-b from-black/90 via-black/60 to-transparent z-10 p-1 flex justify-between items-start pointer-events-none">
             <span className="text-white text-[10px] font-bold tracking-wide drop-shadow-md shadow-black truncate pr-1" style={{ textShadow: '0 1px 2px black' }}>
-              {card.name}
+              {(card.activeFaceIndex !== undefined && card.definition?.card_faces?.[card.activeFaceIndex])
+                ? card.definition.card_faces[card.activeFaceIndex].name
+                : card.name}
             </span>
-            {card.mana_cost && (
-              <span className="text-[10px] text-slate-200 font-serif tracking-tighter opacity-90 drop-shadow-md" style={{ textShadow: '0 1px 2px black' }}>
-                {card.mana_cost.replace(/[{}]/g, '')}
-              </span>
-            )}
+            {(() => {
+              // Resolve Mana Cost
+              const faceIndex = card.activeFaceIndex || 0;
+              const faces = card.definition?.card_faces || card.card_faces;
+              const activeCost = (faces && faces[faceIndex]) ? faces[faceIndex].mana_cost : (card.mana_cost || card.manaCost);
+
+              if (!activeCost) return null;
+
+              return (
+                <span className="text-[10px] text-slate-200 font-serif tracking-tighter opacity-90 drop-shadow-md" style={{ textShadow: '0 1px 2px black' }}>
+                  {activeCost.replace(/[{}]/g, '')}
+                </span>
+              );
+            })()}
           </div>
 
           {/* Bottom Overlays based on Type */}

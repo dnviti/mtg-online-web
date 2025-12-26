@@ -16,6 +16,7 @@ export interface StackObject {
   name: string;
   text: string;
   targets: string[];
+  faceIndex?: number;
 }
 
 export interface CardInstance {
@@ -30,6 +31,8 @@ export interface CardInstance {
   zone: 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile' | 'command' | 'stack';
   tapped: boolean;
   faceDown: boolean;
+  activeFaceIndex?: number; // For Double-Faced Cards (0 = Front, 1 = Back)
+  isDoubleFaced?: boolean; // Metadata flag
   attacking?: string; // Player/Planeswalker ID
   blocking?: string[]; // List of attacker IDs blocked by this card
   attachedTo?: string; // ID of card/player this aura/equipment is attached to
@@ -59,6 +62,7 @@ export interface CardInstance {
   imageArtCrop?: string;
   controlledSinceTurn?: number;
   keywords?: string[];
+  card_faces?: any[];
 }
 
 export interface PlayerState {

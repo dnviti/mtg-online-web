@@ -61,7 +61,7 @@ export class RulesEngine {
     return true;
   }
 
-  public playLand(playerId: string, cardId: string, position?: { x: number, y: number }): boolean {
+  public playLand(playerId: string, cardId: string, position?: { x: number, y: number }, faceIndex?: number): boolean {
     // 1. Check Priority
     if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
@@ -78,10 +78,22 @@ export class RulesEngine {
     const card = this.state.cards[cardId];
     if (!card || card.controllerId !== playerId || card.zone !== 'hand') throw new Error("Invalid card.");
 
-    // Verify it IS a land
-    if (!card.typeLine?.includes('Land') && !card.types.includes('Land')) throw new Error("Not a land card.");
+    // Resolve Face and Checks
+    let typeLine = card.typeLine || "";
+    let types = card.types || [];
 
-    this.moveCardToZone(card.instanceId, 'battlefield', false, position);
+    if (faceIndex !== undefined) {
+      const faces = card.definition?.card_faces; // Use definition
+      if (faces && faces[faceIndex]) {
+        typeLine = faces[faceIndex].type_line || "";
+        types = typeLine.split('—')[0].trim().split(' '); // Rough parse if types array missing on face
+      }
+    }
+
+    // Verify it IS a land (Front or Selected Face)
+    if (!typeLine.includes('Land') && !types.includes('Land')) throw new Error("Not a land card.");
+
+    this.moveCardToZone(card.instanceId, 'battlefield', false, position, faceIndex);
     this.state.landsPlayedThisTurn++;
 
     // Playing a land does NOT use the stack, but priority remains with AP?
@@ -100,23 +112,44 @@ export class RulesEngine {
     this.performTurnBasedActions();
   }
 
-  public castSpell(playerId: string, cardId: string, targets: string[] = [], position?: { x: number, y: number }) {
+  public castSpell(playerId: string, cardId: string, targets: string[] = [], position?: { x: number, y: number }, faceIndex?: number) {
     if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
     const card = this.state.cards[cardId];
     if (!card || card.zone !== 'hand') throw new Error("Invalid card.");
 
-    // Validate Status (Aura needs target)
-    if (this.isAura(card)) {
-      if (targets.length === 0) throw new Error("Aura requires a target.");
-      // Note: We don't strictly validate target legality here for "Casting", 
-      // but usually you can't cast if no legal target exists.
-      // We'll trust the input for now, but `resolveTopStack` will verify correctness.
+    // Resolve Face if applicable
+    let name = card.name;
+    let text = card.oracleText || "";
+
+    if (faceIndex !== undefined) {
+      const faces = card.definition?.card_faces;
+      if (faces && faces[faceIndex]) {
+        name = faces[faceIndex].name;
+        text = faces[faceIndex].oracle_text || "";
+        const manaCost = faces[faceIndex].mana_cost;
+
+        // Validate Mana Cost of specific face
+        if (manaCost) {
+          this.payManaCost(playerId, manaCost);
+        }
+      } else {
+        // Fallback if index invalid (shouldn't happen)
+        if (card.manaCost) this.payManaCost(playerId, card.manaCost);
+      }
+    } else {
+      // Validate Mana Cost (Front)
+      if (card.manaCost) {
+        this.payManaCost(playerId, card.manaCost);
+      }
     }
 
-    // Validate Mana Cost
-    if (card.manaCost) {
-      this.payManaCost(playerId, card.manaCost);
+
+    // Validate Status (Aura needs target)
+    // Note: IsAura check should also respect face, but helper might rely on card props.
+    // For now we rely on base check or assume Modal handled targeting prompt correctly.
+    if (this.isAura(card)) {
+      if (targets.length === 0) throw new Error("Aura requires a target.");
     }
 
     // Move to Stack
@@ -127,11 +160,12 @@ export class RulesEngine {
       sourceId: cardId,
       controllerId: playerId,
       type: 'spell', // or permanent-spell
-      name: card.name,
-      text: card.oracleText || "",
+      name: name,
+      text: text,
       targets,
-      resolutionPosition: position
-    });
+      resolutionPosition: position,
+      faceIndex: faceIndex // Store face choice
+    } as any); // cast as any to bypass Strict interface for now if faceIndex missing
 
     // Reset priority to caster (Rule 117.3c)
     this.resetPriority(playerId);
@@ -603,7 +637,7 @@ export class RulesEngine {
     this.state.priorityPlayerId = this.state.turnOrder[nextIndex];
   }
 
-  public moveCardToZone(cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }) {
+  public moveCardToZone(cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }, faceIndex?: number) {
     const card = this.state.cards[cardId];
     if (card) {
 
@@ -629,10 +663,36 @@ export class RulesEngine {
         card.damageMarked = 0;
         card.counters = []; // Counters usually removed unless specific ability
         card.modifiers = []; // Rule 400.7: Clear modifiers
+        card.activeFaceIndex = undefined; // Reset face selection on zone change
+        card.isDoubleFaced = (card.definition?.card_faces?.length || 0) > 1;
 
-        // Reset P/T to base immediately
-        card.power = card.basePower;
-        card.toughness = card.baseToughness;
+        // Reset P/T to base immediately (Front Face)
+        // If we leave zone, we reset to original characteristics.
+        // We should re-apply initial definition if we mutated it?
+        // Ideally we have `baseCard` data. 
+        // For MVP, we assume `card` has original props in top-level fields OR we need to restore them?
+        // Actually, `activeFaceIndex` being undefined will cause CardVisual to use defaults.
+        // But backend `power` / `toughness` might be stuck if we overwrote them?
+        // Yes, if we overwrote `basePower`, we should restore it.
+        // BUT we don't store "Original Base Power".
+        // This is a risk.
+        // Ideally: `getCardStats(card)` helper resolves current stats based on Definition + ActiveFace.
+        // `card.power` shouldn't be the source of truth for Base?
+        // For now, let's reset to Definition values.
+        if (card.definition) {
+          card.name = card.definition.name;
+          card.power = parseFloat(card.definition.power || '0');
+          card.toughness = parseFloat(card.definition.toughness || '0');
+          card.basePower = card.power;
+          card.baseToughness = card.toughness;
+          card.types = card.definition.types;
+          card.subtypes = card.definition.subtypes;
+          card.colors = card.definition.colors;
+          card.manaCost = card.definition.mana_cost;
+          card.typeLine = card.definition.type_line;
+          card.oracleText = card.definition.oracle_text;
+        }
+
 
         card.attachedTo = undefined; // Detach
         // Also detach anything attached TO this
@@ -643,6 +703,35 @@ export class RulesEngine {
             // SBA will clean up Aura next check
           }
         });
+      } else {
+        // Entering Battlefield
+        if (faceIndex !== undefined) {
+          card.activeFaceIndex = faceIndex;
+          const faces = card.definition?.card_faces;
+          if (faces && faces[faceIndex]) {
+            const face = faces[faceIndex];
+            card.name = face.name;
+            card.typeLine = face.type_line;
+            // Parse types/subtypes again?
+            const typeLine = face.type_line || "";
+            const parts = typeLine.split('—');
+            card.types = parts[0].trim().split(' ');
+            card.subtypes = parts[1] ? parts[1].trim().split(' ') : [];
+
+            card.colors = face.colors || card.definition.colors; // Some faces don't list colors if same? Scryfall usually explicit.
+            card.manaCost = face.mana_cost;
+            card.oracleText = face.oracle_text;
+
+            if (face.power !== undefined) {
+              card.basePower = parseFloat(face.power);
+              card.power = card.basePower; // Initialize
+            }
+            if (face.toughness !== undefined) {
+              card.baseToughness = parseFloat(face.toughness);
+              card.toughness = card.baseToughness;
+            }
+          }
+        }
       }
     }
   }
@@ -678,7 +767,9 @@ export class RulesEngine {
             }
           } else {
             // Normal Permanent
-            this.moveCardToZone(card.instanceId, 'battlefield', false, item.resolutionPosition);
+            // Check for Face Selection in Item
+            const faceIndex = (item as any).faceIndex;
+            this.moveCardToZone(card.instanceId, 'battlefield', false, item.resolutionPosition, faceIndex);
           }
         } else {
           // Instant / Sorcery

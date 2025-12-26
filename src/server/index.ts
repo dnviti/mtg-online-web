@@ -408,7 +408,8 @@ const draftInterval = setInterval(() => {
                 manaCost: card.manaCost || card.mana_cost || '',
                 keywords: card.keywords || [],
                 damageMarked: 0,
-                controlledSinceTurn: 0
+                controlledSinceTurn: 0,
+                definition: card.definition // Pass definition for DFC support
               });
             });
           }
@@ -778,7 +779,8 @@ io.on('connection', (socket) => {
               power: card.power,
               toughness: card.toughness,
               damageMarked: 0,
-              controlledSinceTurn: 0
+              controlledSinceTurn: 0,
+              definition: card.definition // Pass definition for DFC support
             });
           });
         } else {

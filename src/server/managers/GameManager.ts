@@ -140,13 +140,15 @@ export class GameManager extends EventEmitter {
           engine.toggleStop(actorId);
           break;
         case 'PLAY_LAND':
-          engine.playLand(actorId, action.cardId, action.position);
+          engine.playLand(actorId, action.cardId, action.position, action.faceIndex);
           break;
         case 'ADD_MANA':
           engine.addMana(actorId, action.mana); // action.mana = { color: 'R', amount: 1 }
           break;
         case 'CAST_SPELL':
-          engine.castSpell(actorId, action.cardId, action.targets, action.position);
+          const c = engine.state.cards[action.cardId];
+          console.log(`[DEBUG] CAST_SPELL: Name=${c?.name} DFC=${c?.isDoubleFaced} Faces=${c?.card_faces?.length} DefFaces=${c?.definition?.card_faces?.length} FaceIdx=${action.faceIndex}`);
+          engine.castSpell(actorId, action.cardId, action.targets, action.position, action.faceIndex);
           break;
         case 'DECLARE_ATTACKERS':
           try {
@@ -492,6 +494,7 @@ export class GameManager extends EventEmitter {
       setCode: cardData.setCode || '',
       name: '',
       ...cardData,
+      isDoubleFaced: (cardData.definition?.card_faces?.length || 0) > 1 || (cardData.name || '').includes('//'),
       damageMarked: 0,
       controlledSinceTurn: 0, // Will be updated on draw/play
       definition: cardData.definition // Ensure definition is passed

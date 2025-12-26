@@ -25,6 +25,8 @@ export interface CardObject {
   // State
   tapped: boolean;
   faceDown: boolean;
+  activeFaceIndex?: number; // For Double-Faced Cards (0 = Front, 1 = Back)
+  isDoubleFaced?: boolean; // Metadata flag
   attacking?: string; // Player/Planeswalker ID
   blocking?: string[]; // List of attacker IDs blocked by this car
   attachedTo?: string; // ID of card/player this aura/equipment is attached to
@@ -94,6 +96,7 @@ export interface StackObject {
   modes?: number[]; // Selected modes
   costPaid?: boolean;
   resolutionPosition?: { x: number, y: number };
+  faceIndex?: number; // DFC Support
 }
 
 export interface StrictGameState {

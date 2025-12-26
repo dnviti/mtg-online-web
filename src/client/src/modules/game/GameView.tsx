@@ -19,6 +19,7 @@ import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
 import { CreateTokenModal } from './CreateTokenModal'; // Import Modal
 import { TokenPickerModal } from './TokenPickerModal';
+import { DoubleFacedCardModal } from './DoubleFacedCardModal';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
 import { calculateAutoTap } from '../../utils/manaUtils';
 
@@ -90,6 +91,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [isTokenPickerOpen, setIsTokenPickerOpen] = useState(false);
   const [pendingTokenPosition, setPendingTokenPosition] = useState<{ x: number, y: number } | null>(null);
   const [handScrollOffset, setHandScrollOffset] = useState(0);
+
+  // Double-Faced Card State
+  const [pendingPlayCard, setPendingPlayCard] = useState<{ cardId: string, targets?: string[] } | null>(null);
+  const [isDFCModalOpen, setIsDFCModalOpen] = useState(false);
+
+  const myPlayer = gameState.players[currentPlayerId];
+  const opponentId = Object.keys(gameState.players).find(id => id !== currentPlayerId);
+  const opponent = opponentId ? gameState.players[opponentId] : null;
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -476,7 +485,33 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
     setPendingTokenPosition(null);
   };
 
-  // --- Hooks & Services ---
+  const handleDFCSelect = (faceIndex: number) => {
+    setIsDFCModalOpen(false);
+    if (!pendingPlayCard) return;
+
+    const { cardId, targets } = pendingPlayCard;
+    const card = gameState.cards[cardId];
+    if (!card) return;
+
+    // Determine Action based on selected face
+    const faces = card.definition?.card_faces || card.card_faces;
+    const face = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
+
+    if (!face) {
+      console.error("Selected invalid face index");
+      return;
+    }
+
+    const typeLine = face.type_line || face.typeLine || "";
+    // If Land, Play Land. Else Cast Spell.
+    if (typeLine.toLowerCase().includes('land')) {
+      socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId, faceIndex } });
+    } else {
+      socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: targets || [], faceIndex } });
+    }
+
+    setPendingPlayCard(null);
+  };
   //  const { showToast } = useToast();
   const { showGameToast } = useGameToast();
   const { confirm } = useConfirm();
@@ -545,12 +580,16 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
       if (zoneName === 'battlefield') {
         // Handle Battlefield Drop (Play Land / Cast)
-        // Note: dnd-kit doesn't give precise coordinates relative to the container as easily as native events
-        // unless we calculate it from `event.delta` or `active.rect`.
-        // For now, we will drop to "center" or default position if we don't calculate relative %.
-        // Let's rely on standard logic:
 
-        if (card.typeLine?.includes('Land')) {
+        // Use flag from server + data availability check
+        const faces = card.definition?.card_faces || card.card_faces;
+        if (card.isDoubleFaced && faces && faces.length > 1) {
+          setPendingPlayCard({ cardId });
+          setIsDFCModalOpen(true);
+          return;
+        }
+
+        if (card.typeLine?.includes('Land') || card.types?.includes('Land')) {
           socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId } });
         } else {
           socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: [] } });
@@ -591,16 +630,20 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
       // Default Cast with Target
       if (card.zone === 'hand') {
+        // DFC Check for targeted cast
+        const faces = card.definition?.card_faces || card.card_faces;
+        if (card.isDoubleFaced && faces && faces.length > 1) {
+          setPendingPlayCard({ cardId, targets: [targetId] });
+          setIsDFCModalOpen(true);
+          return;
+        }
+
         socketService.socket.emit('game_strict_action', {
           action: { type: 'CAST_SPELL', cardId, targets: [targetId] }
         });
       }
     }
   };
-
-  const myPlayer = gameState.players[currentPlayerId];
-  const opponentId = Object.keys(gameState.players).find(id => id !== currentPlayerId);
-  const opponent = opponentId ? gameState.players[opponentId] : null;
 
   const getCards = (ownerId: string | undefined, zone: string) => {
     if (!ownerId) return [];
@@ -689,6 +732,13 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           isOpen={isTokenModalOpen}
           onClose={() => setIsTokenModalOpen(false)}
           onCreate={handleCreateCustomToken}
+        />
+
+        <DoubleFacedCardModal
+          isOpen={isDFCModalOpen}
+          card={pendingPlayCard ? gameState.cards[pendingPlayCard.cardId] : null}
+          onClose={() => { setIsDFCModalOpen(false); setPendingPlayCard(null); }}
+          onSelectFace={handleDFCSelect}
         />
 
         <TokenPickerModal
