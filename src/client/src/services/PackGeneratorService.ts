@@ -27,6 +27,7 @@ export interface DraftCard {
   booster?: boolean;
   promo?: boolean;
   reprint?: boolean;
+  isLandSource?: boolean;
 
   // New Metadata
   legalities?: { [key: string]: string };

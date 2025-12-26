@@ -108,7 +108,7 @@ const LAND_DEFAULTS: Record<string, { name: string, set: string, id: string, ima
 };
 
 // Universal Wrapper handling both Pool Cards (Move) and Land Sources (Copy/Ghost)
-const UniversalCardWrapper = React.memo(({ children, card, source, disabled, mode }: any) => {
+const UniversalCardWrapper = React.memo(({ children, card, source, disabled, mode: _mode }: any) => {
   const isLand = card.isLandSource;
   const dndId = isLand ? `land-source-${card.name}` : card.id;
   const dndData = useMemo(() => isLand ? { card, type: 'land' } : { card, source }, [card, source, isLand]);
@@ -300,25 +300,22 @@ const CardsDisplay: React.FC<{
 
   // Grid View
   return (
-    <div
-      className="grid gap-4 pb-20 content-start"
-      style={{
-        gridTemplateColumns: `repeat(auto-fill, minmax(var(--card-width, ${cardWidth}px), 1fr))`
-      }}
-    >
+    <div className="flex flex-wrap gap-4 pb-20 content-start">
       {normalizedCards.map(card => {
         const useArtCrop = cardWidth < FULL_ART_THRESHOLD && !!card.imageArtCrop;
         const isFoil = card.finish === 'foil';
 
         return (
           <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="grid">
-            <DeckCardItem
-              card={card}
-              useArtCrop={useArtCrop}
-              isFoil={isFoil}
-              onCardClick={onCardClick}
-              onHover={onHover}
-            />
+            <div style={{ width: 'var(--card-width)' }} className="shrink-0">
+              <DeckCardItem
+                card={card}
+                useArtCrop={useArtCrop}
+                isFoil={isFoil}
+                onCardClick={onCardClick}
+                onHover={onHover}
+              />
+            </div>
           </UniversalCardWrapper>
         );
       })}
@@ -327,8 +324,8 @@ const CardsDisplay: React.FC<{
 });
 
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
-  roomId,
-  currentPlayerId,
+  // roomId,
+  // currentPlayerId,
   initialPool,
   initialDeck = [],
   availableBasicLands = [],
@@ -1140,9 +1137,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
           <div className="flex items-center gap-4">
             {/* View Mode Switcher */}
             <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
-              <button onClick={() => setViewMode('list')} className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="List View"><List className="w-4 h-4" /></button>
-              <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Grid View"><LayoutGrid className="w-4 h-4" /></button>
-              <button onClick={() => setViewMode('stack')} className={`p-1.5 rounded ${viewMode === 'stack' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="List View"><List className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Grid View"><LayoutGrid className="w-4 h-4" /></button>
+              <button onClick={() => setViewMode('stack')} className={`p-2 rounded ${viewMode === 'stack' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-4 h-4" /></button>
             </div>
 
             {/* Group By Dropdown (Custom UI) */}
@@ -1225,8 +1222,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
             </div>
 
             {/* Slider */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-900 rounded-lg px-2 border border-slate-700 h-9">
-              <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
+            <div className="hidden sm:flex items-center gap-2 bg-slate-800 rounded-lg px-2 border border-slate-700 h-10">
+              <div className="w-3 h-4 rounded border border-slate-500 bg-slate-700" title="Small Cards" />
               <input
                 type="range"
                 min={MIN_CARD_WIDTH}
@@ -1240,9 +1237,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                 }}
                 onMouseUp={() => setCardWidth(localCardWidth)}
                 onTouchEnd={() => setCardWidth(localCardWidth)}
-                className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+                className="w-24 accent-purple-500 cursor-pointer h-1.5 bg-slate-600 rounded-lg appearance-none"
               />
-              <div className="w-3 h-5 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
+              <div className="w-4 h-6 rounded border border-slate-500 bg-slate-700" title="Large Cards" />
             </div>
           </div>
 
