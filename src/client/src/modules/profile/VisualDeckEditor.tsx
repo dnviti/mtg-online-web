@@ -105,6 +105,7 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
                         initialDeck={initialDeck}
                         availableBasicLands={basicLands}
                         isConstructed={true}
+                        format={existingDeck?.format || 'Standard'}
                         onSubmit={handleDeckSubmit}
                         submitLabel={loading ? "Saving..." : "Save Changes"}
                     />

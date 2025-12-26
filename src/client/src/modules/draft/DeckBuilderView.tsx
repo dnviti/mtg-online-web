@@ -20,6 +20,7 @@ interface DeckBuilderViewProps {
   initialDeck?: any[];
   availableBasicLands?: any[]; // For constructed/fallback
   isConstructed?: boolean;
+  format?: string;
   onSubmit?: (deck: any[]) => void;
   submitLabel?: string;
 }
@@ -315,7 +316,17 @@ const CardsDisplay: React.FC<{
   )
 };
 
-export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, initialDeck = [], availableBasicLands = [], onSubmit, submitLabel, isConstructed }) => {
+export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
+  roomId,
+  currentPlayerId,
+  initialPool,
+  initialDeck = [],
+  availableBasicLands = [],
+  onSubmit,
+  submitLabel,
+  isConstructed = false,
+  format = 'Standard'
+}) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   /* --- Hooks --- */
@@ -467,6 +478,31 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     };
     setDeck(prev => [...prev, newCard]);
   };
+
+  // -- Commander Logic --
+  const isCommanderFormat = useMemo(() => {
+    const f = format.toLowerCase();
+    return f.includes('commander') || f.includes('edh') || f.includes('brawl');
+  }, [format]);
+
+  const commanders = useMemo(() => deck.filter(c => c.isCommander), [deck]);
+  const mainDeck = useMemo(() => deck.filter(c => !c.isCommander), [deck]);
+
+  const toggleCommander = (card: any) => {
+    if (card.isCommander) {
+      // Demote
+      setDeck(prev => prev.map(c => c.id === card.id ? { ...c, isCommander: false } : c));
+    } else {
+      // Promote
+      if (commanders.length >= 2) {
+        alert("You can only have up to 2 Commanders.");
+        return;
+      }
+      setDeck(prev => prev.map(c => c.id === card.id ? { ...c, isCommander: true } : c));
+    }
+  };
+
+
 
   // --- Land Advice Logic ---
   const landSuggestion = useMemo(() => {
@@ -670,13 +706,41 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     const data = active.data.current;
     if (!data) return;
 
-    if (data.type === 'land' && over.id === 'deck-zone') {
+    if (over.id === 'commander-zone') {
+      // Only allow setting if format matches
+      if (!isCommanderFormat) return;
+
+      // Check if already 2 commanders
+      if (commanders.length >= 2) {
+        // If swapping within zone, do nothing. If new card, prevent.
+        const isAlreadyCommander = data.source === 'deck' && data.card.isCommander;
+        if (!isAlreadyCommander) {
+          alert("Max 2 Commanders allowed.");
+          setDraggedCard(null);
+          return;
+        }
+      }
+
+      if (data.source === 'pool') {
+        addToDeck({ ...data.card, isCommander: true });
+      } else if (data.source === 'deck') {
+        // Just update flag
+        setDeck(prev => prev.map(c => c.id === data.card.id ? { ...c, isCommander: true } : c));
+      }
+    } else if (data.type === 'land' && over.id === 'deck-zone') {
       addLandToDeck(data.card);
     } else if (data.source === 'pool' && over.id === 'deck-zone') {
       addToDeck(data.card);
+      // Ensure if it was somehow commander false (default)
     } else if (data.source === 'deck' && over.id === 'pool-zone') {
       removeFromDeck(data.card);
+    } else if (data.source === 'deck' && over.id === 'deck-zone') {
+      // If dragging a commander back to deck zone, demote it
+      if (data.card.isCommander) {
+        setDeck(prev => prev.map(c => c.id === data.card.id ? { ...c, isCommander: false } : c));
+      }
     }
+
     setDraggedCard(null);
   };
 
@@ -1113,13 +1177,15 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
               <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
             </button>
 
-            <button
-              onClick={handleAutoBuild}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg border border-indigo-400/50 shadow-lg font-bold text-xs transition-transform hover:scale-105"
-              title="Auto-Build Deck"
-            >
-              <Wand2 className="w-4 h-4" /> <span className="hidden sm:inline">Auto-Build</span>
-            </button>
+            {!isConstructed && (
+              <button
+                onClick={handleAutoBuild}
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg border border-indigo-400/50 shadow-lg font-bold text-xs transition-transform hover:scale-105"
+                title="Auto-Build Deck"
+              >
+                <Wand2 className="w-4 h-4" /> <span className="hidden sm:inline">Auto-Build</span>
+              </button>
+            )}
 
             <div className="hidden sm:flex items-center gap-2 text-amber-400 font-mono text-sm font-bold bg-slate-900 px-3 py-1.5 rounded border border-amber-500/30">
               <Clock className="w-4 h-4" /> {formatTime(timer)}
@@ -1152,17 +1218,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
           {/* Content Area */}
           {layout === 'vertical' ? (
             <div className="flex-1 flex flex-col lg:flex-row min-w-0">
-              {/* Vertical layout typically means Pool Left / Deck Right or vice versa. 
-                   The previous code had them side-by-side with equal flex. 
-                   The request asks for Library to be resizable. In vertical mode they share width.
-                   We can add a splitter here if needed, but horizontal split (top/bottom) is more common for resizing. 
-                   Let's stick to equal flex for vertical column mode for now, as it's cleaner, 
-                   or implement width resizing if specifically requested. 
-                   Given the constraints of "library section ... needs to be resizable", a Top/Bottom split is the only one
-                   where resizing makes distinct sense vs side-by-side. 
-                   Wait, "library section" usually implies the Deck list. 
-                   In side-by-side, we can resize the split.
-               */}
               {/* Pool Column */}
               <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-w-0 border-r border-slate-800 bg-slate-900/50">
                 <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900">
@@ -1215,17 +1270,54 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
                 </div>
               </DroppableZone>
 
-              {/* Deck Column */}
-              <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0 bg-slate-900/50">
-                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center">
-                  <span>Library ({deck.length})</span>
-                </div>
-                <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                  <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
-                </div>
-              </DroppableZone>
+              {/* Right Side: Commander + Deck */}
+              <div className="flex-1 flex flex-col min-w-0 bg-slate-900/50 relative">
+                {/* Commander Zone */}
+                {isCommanderFormat && (
+                  <div className="shrink-0 p-2 border-b border-slate-800 bg-slate-950/30 flex gap-2 overflow-x-auto min-h-[140px]">
+                    <DroppableZone id="commander-zone" className="flex-1 border-2 border-dashed border-slate-700/50 rounded-lg flex items-center justify-start p-2 gap-2 hover:border-indigo-500/50 transition-colors">
+                      {commanders.length === 0 && (
+                        <div className="text-slate-600 text-xs font-bold uppercase w-full text-center select-none">
+                          Drop Commander Here
+                        </div>
+                      )}
+                      {commanders.map(cmd => (
+                        <div key={cmd.id} className="relative group shrink-0">
+                          <div
+                            className="relative rounded-lg overflow-hidden shadow-lg cursor-grab active:cursor-grabbing ring-2 ring-amber-500"
+                            style={{ width: '100px', aspectRatio: '2.5/3.5' }} // Fixed mini size
+                            onMouseEnter={() => setHoveredCard(cmd)}
+                            onMouseLeave={() => setHoveredCard(null)}
+                          >
+                            <img src={cmd.imageArtCrop || cmd.image || cmd.image_uris?.art_crop || cmd.image_uris?.normal} className="w-full h-full object-cover" />
+                            <button
+                              onClick={() => toggleCommander(cmd)}
+                              className="absolute top-1 right-1 bg-black/50 hover:bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Remove from Command Zone"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </DroppableZone>
+                  </div>
+                )}
+
+                {/* Deck List */}
+                <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0">
+                  <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900">
+                    <span>Library ({mainDeck.length})</span>
+                    {isCommanderFormat && <span className="text-amber-500 text-[10px] tracking-wider border border-amber-900/50 bg-amber-900/20 px-2 py-0.5 rounded">COMMANDER</span>}
+                  </div>
+                  <div className="flex-1 overflow-auto p-2 custom-scrollbar">
+                    <CardsDisplay cards={mainDeck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
+                  </div>
+                </DroppableZone>
+              </div>
             </div>
           ) : (
+            // Horizontal Layout (Top/Bottom) - Add Commander Zone 
             <div className="flex-1 flex flex-col min-h-0 min-w-0 relative">
               {/* Top: Pool + Land Station */}
               <div className="flex-1 flex flex-col border-b border-slate-800 bg-slate-900/50 overflow-hidden min-h-0">
@@ -1294,17 +1386,46 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
               <div
                 ref={libraryRef}
                 style={{ height: `${libraryHeight}px` }}
-                className="shrink-0 flex flex-col border-t border-slate-800 bg-slate-900/50 overflow-hidden z-10"
+                className="shrink-0 flex flex-row border-t border-slate-800 bg-slate-900/50 overflow-hidden z-10"
               >
+                {isCommanderFormat && (
+                  <DroppableZone id="commander-zone" className="w-40 shrink-0 border-r border-slate-800 bg-slate-950/30 flex flex-col p-2 gap-2 overflow-y-auto">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase text-center mb-1">Commanders</div>
+                    {commanders.map(cmd => (
+                      <div key={cmd.id} className="relative group w-full">
+                        <div
+                          className="relative rounded-lg overflow-hidden shadow-lg ring-2 ring-amber-500 aspect-[2.5/3.5]"
+                          onMouseEnter={() => setHoveredCard(cmd)}
+                          onMouseLeave={() => setHoveredCard(null)}
+                        >
+                          <img src={cmd.imageArtCrop || cmd.image || cmd.image_uris?.art_crop || cmd.image_uris?.normal} className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => toggleCommander(cmd)}
+                            className="absolute top-1 right-1 bg-black/50 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {commanders.length < 2 && (
+                      <div className="border-2 border-dashed border-slate-700/50 rounded-lg flex-1 min-h-[100px] flex items-center justify-center text-slate-700 text-[10px] font-bold uppercase text-center p-2">
+                        Drag Here
+                      </div>
+                    )}
+                  </DroppableZone>
+                )}
+
                 <DroppableZone
                   id="deck-zone"
                   className="flex-1 flex flex-col min-h-0 overflow-hidden"
                 >
+                  {/* ... deck content uses mainDeck ... */}
                   <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0 items-center">
-                    <span>Library ({deck.length})</span>
+                    <span>Library ({mainDeck.length})</span>
                   </div>
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar">
-                    <CardsDisplay cards={deck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
+                    <CardsDisplay cards={mainDeck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
                   </div>
                 </DroppableZone>
               </div>
@@ -1334,5 +1455,3 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     </div>
   );
 };
-
-
