@@ -7,7 +7,9 @@ import { fileURLToPath } from 'url';
 import { RoomManager } from './managers/RoomManager';
 import { GameManager } from './managers/GameManager';
 import { DraftManager } from './managers/DraftManager';
+import { DraftManager } from './managers/DraftManager';
 import { TournamentManager } from './managers/TournamentManager';
+import { UserManager } from './managers/UserManager';
 import { CardService } from './services/CardService';
 import { ScryfallService } from './services/ScryfallService';
 import { PackGeneratorService } from './services/PackGeneratorService';
@@ -33,6 +35,7 @@ const roomManager = new RoomManager();
 const gameManager = new GameManager();
 const draftManager = new DraftManager();
 const tournamentManager = new TournamentManager();
+const userManager = new UserManager();
 const persistenceManager = new PersistenceManager(roomManager, draftManager, gameManager);
 
 // Game Over Listener
@@ -133,6 +136,73 @@ app.post('/api/cards/cache', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Error in cache route:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// --- AUTH MIDDLEWARE & ROUTES ---
+
+const authenticateToken = (req: Request, res: Response, next: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.sendStatus(401);
+
+  const payload = userManager.verifyToken(token);
+  if (!payload) return res.sendStatus(403);
+
+  (req as any).user = payload;
+  next();
+};
+
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+    const result = await userManager.register(username, password);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: 'Missing credentials' });
+    const result = await userManager.login(username, password);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/user/me', authenticateToken, (req: Request, res: Response) => {
+  const userId = (req as any).user.id;
+  const user = userManager.getSafeUser(userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json(user);
+});
+
+app.post('/api/user/decks', authenticateToken, (req: Request, res: Response) => {
+  const userId = (req as any).user.id;
+  const { name, cards } = req.body;
+
+  try {
+    const deck = userManager.saveDeck(userId, name || 'Untitled Deck', cards || []);
+    res.json(deck);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+app.delete('/api/user/decks/:id', authenticateToken, (req: Request, res: Response) => {
+  const userId = (req as any).user.id;
+  const { id } = req.params;
+
+  try {
+    userManager.deleteDeck(userId, id);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
   }
 });
 

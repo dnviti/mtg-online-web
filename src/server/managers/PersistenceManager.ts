@@ -36,6 +36,7 @@ export class PersistenceManager {
       const rooms = Array.from((this.roomManager as any).rooms.entries());
       const drafts = Array.from((this.draftManager as any).drafts.entries());
       const games = Array.from((this.gameManager as any).games.entries());
+      // Users handled by Prisma ORM internally
 
       if (this.redisManager.db0) {
         // Save to Redis
