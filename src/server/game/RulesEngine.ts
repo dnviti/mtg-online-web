@@ -116,7 +116,7 @@ export class RulesEngine {
     if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
     const card = this.state.cards[cardId];
-    if (!card || card.zone !== 'hand') throw new Error("Invalid card.");
+    if (!card || (card.zone !== 'hand' && card.zone !== 'command')) throw new Error("Invalid card source (must be Hand or Command Zone).");
 
     // Resolve Face if applicable
     let name = card.name;

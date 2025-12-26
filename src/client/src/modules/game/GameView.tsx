@@ -97,8 +97,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [isDFCModalOpen, setIsDFCModalOpen] = useState(false);
 
   const myPlayer = gameState.players[currentPlayerId];
-  const opponentId = Object.keys(gameState.players).find(id => id !== currentPlayerId);
-  const opponent = opponentId ? gameState.players[opponentId] : null;
+
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -656,11 +655,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const myLibrary = getCards(currentPlayerId, 'library');
   const myExile = getCards(currentPlayerId, 'exile');
 
-  const oppBattlefield = getCards(opponentId, 'battlefield');
-  const oppHand = getCards(opponentId, 'hand');
-  const oppLibrary = getCards(opponentId, 'library');
-  const oppGraveyard = getCards(opponentId, 'graveyard');
-  const oppExile = getCards(opponentId, 'exile');
+  const otherPlayers = Object.values(gameState.players).filter(p => p.id !== currentPlayerId);
+  const isMultiplayer = otherPlayers.length > 1;
+
+  // Helper to get opponent cards dynamically
+  const getPlayerCards = (pid: string, zone: string) => getCards(pid, zone);
+
+  const myCommandZone = getCards(currentPlayerId, 'command');
+  const opponentId = otherPlayers[0]?.id;
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -796,142 +798,209 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         <div className="flex-1 flex flex-col h-full relative">
           <StackVisualizer gameState={gameState} />
 
-          {/* Top Area: Opponent */}
+          {/* Top Area: Opponents */}
           <div className="flex-[2] relative flex flex-col pointer-events-none">
-            {/* Opponent Hand (Visual) */}
-            <div className="absolute top-[-40px] left-0 right-0 flex justify-center -space-x-4 opacity-70">
-              {oppHand.map((_, i) => (
-                <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-600 rounded shadow-lg transform rotate-180"></div>
-              ))}
-            </div>
-
-            {/* Opponent Info Bar */}
-            <div
-              className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700"
-            >
-              <DroppableZone id={opponentId || 'opponent'} data={{ type: 'player' }} className="absolute inset-0 z-0 opacity-0">Player</DroppableZone>
-              <div className="flex flex-col z-10 pointer-events-none">
-                <div className="flex flex-col">
-                  <span className="font-bold text-lg text-red-400">{opponent?.name || 'Waiting...'}</span>
-                  <div className="flex gap-2 text-xs text-slate-400">
-                    <span>Hand: {oppHand.length}</span>
-                    <span>Lib: {oppLibrary.length}</span>
-                    <span>Grave: {oppGraveyard.length}</span>
-                    <span>Exile: {oppExile.length}</span>
-                  </div>
-                </div>
-                <div className="text-3xl font-bold text-white">{opponent?.life}</div>
-              </div>
-            </div>
-
-            {/* Opponent Battlefield */}
-            <div className="flex-1 w-full relative perspective-1000 z-0">
-              <div
-                className="w-full h-full relative"
-                style={{
-                  transform: 'rotateX(-20deg) scale(0.9)',
-                  transformOrigin: 'center bottom',
-                }}
-              >
-                {(() => {
-                  // Organize Opponent Cards
-                  const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                  const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
+            {isMultiplayer ? (
+              // MULTIPLAYER GRID LAYOUT (3+ Players)
+              <div className="w-full h-full grid grid-cols-2 gap-1 p-1">
+                {otherPlayers.map(opp => {
+                  const oppHand = getPlayerCards(opp.id, 'hand');
+                  const oppBattlefield = getPlayerCards(opp.id, 'battlefield');
+                  const oppCommandZone = getPlayerCards(opp.id, 'command');
+                  const isOppActive = gameState.activePlayerId === opp.id;
 
                   return (
-
-                    <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
-                      {/* Back Row: Lands (Top - Far Side) */}
-                      <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
-                        {(() => {
-                          const oppLandGroups = oppLands.reduce((acc, card) => {
-                            const key = card.name || 'Unknown Land';
-                            if (!acc[key]) acc[key] = [];
-                            acc[key].push(card);
-                            return acc;
-                          }, {} as Record<string, typeof oppLands>);
-
-                          // If no lands, preserve spacing but don't eat space if not needed
-                          if (oppLands.length === 0) return <div className="h-20" />;
-
-                          return Object.entries(oppLandGroups).map(([name, group]) => (
-                            <div
-                              key={name}
-                              className="relative w-24 transition-all duration-300"
-                              style={{
-                                height: `${80 + (group.length - 1) * 20}px`, // 80px base + 20px offset
-                                zIndex: 0
-                              }}
-                            >
-                              {group.map((card, index) => (
-                                <div
-                                  key={card.instanceId}
-                                  className="absolute left-0 w-full pointer-events-auto"
-                                  style={{
-                                    top: `${index * 20}px`,
-                                    zIndex: index
-                                  }}
-                                >
-                                  <CardComponent
-                                    card={card}
-                                    viewMode="cutout"
-                                    className="w-24 h-24 rounded shadow-sm"
-                                    onDragStart={() => { }}
-                                    onClick={() => { }}
-                                    onMouseEnter={() => setHoveredCard(card)}
-                                    onMouseLeave={() => setHoveredCard(null)}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                          ));
-                        })()}
+                    <div key={opp.id} className="relative flex flex-col border border-white/5 bg-black/20 rounded overflow-hidden">
+                      {/* Header */}
+                      <div className={`p-1 px-2 flex justify-between items-center bg-slate-900/90 ${isOppActive ? 'border-b-2 border-amber-500' : 'border-b border-white/10'}`}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${isOppActive ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
+                          <span className="font-bold text-slate-200 text-xs truncate max-w-[100px]">{opp.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-black ${opp.life < 10 ? 'text-red-500' : 'text-emerald-400'}`}>{opp.life}</span>
+                          {oppCommandZone.length > 0 && (
+                            <div className="px-1 bg-amber-900/50 rounded text-[9px] text-amber-500 font-bold border border-amber-800">CMD {oppCommandZone.length}</div>
+                          )}
+                          <span className="text-[10px] text-slate-500">H:{oppHand.length}</span>
+                        </div>
                       </div>
 
-                      {/* Front Row: Creatures (Bottom) */}
-                      <div className="flex justify-center items-end gap-2 flex-wrap px-8">
-                        {oppCreatures.map(card => {
-                          const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
-                          const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
-
-                          return (
-                            <div
-                              key={card.instanceId}
-                              className="relative transition-all duration-300 ease-out pointer-events-auto"
-                              style={{
-                                transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none', // Attack moves "Forward" (Down)
-                                zIndex: 10
-                              }}
-                            >
+                      {/* Battlefield */}
+                      <div className="flex-1 relative p-1 pointer-events-auto">
+                        <div className="flex flex-wrap content-start gap-1 justify-center opacity-90 scale-75 origin-top">
+                          {oppBattlefield.map(card => (
+                            <div key={card.instanceId} className="relative">
                               <CardComponent
                                 card={card}
                                 viewMode="cutout"
+                                onClick={() => setInspectedCard(card)}
+                                onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                // No drags for now
+                                onDragStart={() => { }}
+                                onDragEnd={() => { }}
                                 onMouseEnter={() => setHoveredCard(card)}
                                 onMouseLeave={() => setHoveredCard(null)}
-                                onDragStart={() => { }}
-                                onClick={() => { }}
-                                className={`
-                                  w-24 h-24 rounded shadow-sm
-                                  ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
-                                  ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
-                                `}
                               />
-                              <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
-
-                              {isAttacking && (
-                                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
-                                  ATTACKING
-                                </div>
-                              )}
                             </div>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
                     </div>
                   );
-                })()}
+                })}
               </div>
-            </div>
+            ) : (
+              // 1v1 LAYOUT (Legacy View)
+              (() => {
+                const opponent = otherPlayers[0];
+                const oppHand = opponent ? getCards(opponent.id, 'hand') : [];
+                const oppBattlefield = opponent ? getCards(opponent.id, 'battlefield') : [];
+                const oppLibrary = opponent ? getCards(opponent.id, 'library') : [];
+                const oppGraveyard = opponent ? getCards(opponent.id, 'graveyard') : [];
+                const oppExile = opponent ? getCards(opponent.id, 'exile') : [];
+
+                return (
+                  <>
+                    {/* Opponent Hand (Visual) */}
+                    <div className="absolute top-[-40px] left-0 right-0 flex justify-center -space-x-4 opacity-70">
+                      {oppHand.map((_, i) => (
+                        <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-600 rounded shadow-lg transform rotate-180"></div>
+                      ))}
+                    </div>
+
+                    {/* Opponent Info Bar */}
+                    <div
+                      className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700"
+                    >
+                      <DroppableZone id={opponent?.id || 'opponent'} data={{ type: 'player' }} className="absolute inset-0 z-0 opacity-0">Player</DroppableZone>
+                      <div className="flex flex-col z-10 pointer-events-none">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-lg text-red-400">{opponent?.name || 'Waiting...'}</span>
+                          <div className="flex gap-2 text-xs text-slate-400">
+                            <span>Hand: {oppHand.length}</span>
+                            <span>Lib: {oppLibrary.length}</span>
+                            <span>Grave: {oppGraveyard.length}</span>
+                            <span>Exile: {oppExile.length}</span>
+                          </div>
+                        </div>
+                        <div className="text-3xl font-bold text-white">{opponent?.life}</div>
+                      </div>
+                    </div>
+
+                    {/* Opponent Battlefield */}
+                    <div className="flex-1 w-full relative perspective-1000 z-0">
+                      <div
+                        className="w-full h-full relative"
+                        style={{
+                          transform: 'rotateX(-20deg) scale(0.9)',
+                          transformOrigin: 'center bottom',
+                        }}
+                      >
+                        {(() => {
+                          // Organize Opponent Cards
+                          const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
+                          const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
+
+                          return (
+                            <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
+                              {/* Back Row: Lands (Top - Far Side) */}
+                              <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
+                                {(() => {
+                                  const oppLandGroups = oppLands.reduce((acc, card) => {
+                                    const key = card.name || 'Unknown Land';
+                                    if (!acc[key]) acc[key] = [];
+                                    acc[key].push(card);
+                                    return acc as any;
+                                  }, {} as Record<string, any[]>);
+
+                                  // If no lands, preserve spacing but don't eat space if not needed
+                                  if (oppLands.length === 0) return <div className="h-20" />;
+
+                                  return Object.entries(oppLandGroups).map(([name, group]) => (
+                                    <div key={name} className="relative group">
+                                      {(group as any[]).map((card, index) => (
+                                        <div
+                                          key={card.instanceId}
+                                          className="absolute transition-all duration-300 group-hover:translate-x-4 pointer-events-auto"
+                                          style={{
+                                            top: -index * 2,
+                                            left: index * 2,
+                                            zIndex: index,
+                                            position: index === 0 ? 'relative' : 'absolute'
+                                          }}
+                                        >
+                                          <CardComponent
+                                            card={card}
+                                            viewMode="cutout"
+
+                                            style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                            onClick={() => setInspectedCard(card)}
+                                            onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                            onDragStart={() => { }}
+                                            onDragEnd={() => { }}
+                                            onMouseEnter={() => setHoveredCard(card)}
+                                            onMouseLeave={() => setHoveredCard(null)}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+
+                              {/* Front Row: Creatures (Bottom - Nearer) */}
+                              <div className="flex justify-center items-end gap-2 flex-wrap px-8">
+                                {oppCreatures.map(card => {
+                                  const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
+                                  const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+
+                                  return (
+                                    <div
+                                      key={card.instanceId}
+                                      className="relative transition-all duration-300 ease-out pointer-events-auto"
+                                      style={{
+                                        transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none', // Attack moves "Forward" (Down)
+                                        zIndex: 10
+                                      }}
+                                    >
+                                      <CardComponent
+                                        card={card}
+                                        viewMode="normal"
+
+                                        style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                        onClick={() => setInspectedCard(card)}
+                                        onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                        onDragStart={() => { }}
+                                        onDragEnd={() => { }}
+                                        onMouseEnter={() => setHoveredCard(card)}
+                                        onMouseLeave={() => setHoveredCard(null)}
+                                        className={`
+                                          w-24 h-24 rounded shadow-sm
+                                          ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
+                                          ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
+                                        `}
+                                      />
+                                      <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
+
+                                      {isAttacking && (
+                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
+                                          ATTACKING
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()
+            )}
           </div>
 
           {/* Middle Area: My Battlefield (The Table) */}
@@ -1229,6 +1298,28 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   >
                     <span className="block text-slate-500 text-[8px] uppercase">GY</span>
                     <span className="text-sm font-bold text-slate-400">{myGraveyard.length}</span>
+                  </div>
+                </DroppableZone>
+              </div>
+
+              {/* Command Zone */}
+              <div className="flex gap-2 mt-2">
+                <DroppableZone
+                  id="command"
+                  data={{ type: 'zone' }}
+                  className="w-12 h-16 border-2 border-amber-500/50 rounded flex items-center justify-center transition-colors hover:border-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                >
+                  <div
+                    className="w-full h-full flex flex-col items-center justify-center relative"
+                    onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'command')}
+                  >
+                    {myCommandZone.length > 0 && (
+                      <div className="absolute inset-0">
+                        <img src={myCommandZone[0].imageArtCrop || myCommandZone[0].imageUrl} className="w-full h-full object-cover opacity-50 rounded" />
+                      </div>
+                    )}
+                    <span className="relative z-10 block text-amber-500 text-[8px] uppercase font-bold drop-shadow-md">CMD</span>
+                    <span className="relative z-10 text-sm font-bold text-amber-100 drop-shadow-md">{myCommandZone.length}</span>
                   </div>
                 </DroppableZone>
               </div>

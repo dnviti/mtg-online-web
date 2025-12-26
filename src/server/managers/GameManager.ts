@@ -470,9 +470,10 @@ export class GameManager extends EventEmitter {
     if (!game) return;
 
     // @ts-ignore - aligning types roughly
+    const cardDataAny = cardData as any;
     const card: CardObject = {
       instanceId: cardData.instanceId || Math.random().toString(36).substring(7),
-      zone: 'library',
+      zone: cardDataAny.isCommander ? 'command' : 'library',
       tapped: false,
       faceDown: true,
       counters: [],
