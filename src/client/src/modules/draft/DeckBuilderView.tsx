@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2 } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
@@ -642,7 +642,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     }
   };
 
-  // --- DnD Handlers ---
+  /* --- DnD Handlers --- */
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
     useSensor(TouchSensor, {
@@ -678,6 +678,132 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
       removeFromDeck(data.card);
     }
     setDraggedCard(null);
+  };
+
+  // --- Import Logic ---
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImport = async () => {
+    if (!importText.trim()) return;
+    setIsImporting(true);
+    try {
+      const res = await fetch('/api/cards/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: importText })
+      });
+
+      if (!res.ok) throw new Error("Import failed");
+
+      const cards = await res.json();
+      if (Array.isArray(cards) && cards.length > 0) {
+        // Add to deck preserving ID
+        const newCards = cards.map((c: any) => ({
+          ...c,
+          id: `${c.id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          scryfallId: c.id,
+          setCode: c.set,
+          image: c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+          imageArtCrop: c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
+        }));
+
+        setDeck(prev => [...prev, ...newCards]);
+        setIsImportOpen(false);
+        setImportText('');
+      }
+    } catch (e) {
+      console.error("Import error", e);
+      alert("Failed to import cards. Please checks your format.");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const ImportModal = () => {
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        if (text) {
+          setImportText(text);
+        }
+      };
+      reader.readAsText(file);
+    };
+
+    if (!isImportOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+          <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <Upload className="w-5 h-5 text-indigo-400" /> Import Deck
+            </h3>
+            <button onClick={() => setIsImportOpen(false)} className="text-slate-500 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-4 flex flex-col gap-4">
+            <div className="bg-slate-800/50 p-3 rounded text-xs text-slate-400 border border-slate-700/50 flex justify-between items-start">
+              <div>
+                <p className="mb-1 font-bold text-slate-300">Supported Formats:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  <li>MTG Arena / Magic Online (Quantity Name)</li>
+                  <li>Archidekt CSV (Headers: Quantity, Name)</li>
+                  <li>Simple List (1 Lightning Bolt)</li>
+                </ul>
+              </div>
+              <div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  className="hidden"
+                  accept=".csv,.txt"
+                  onChange={handleFileUpload}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-2"
+                >
+                  <Upload className="w-3 h-3" /> Upload File
+                </button>
+              </div>
+            </div>
+            <textarea
+              className="w-full h-48 bg-slate-950 border border-slate-700 rounded p-3 text-xs font-mono text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+              placeholder={`4 Lightning Bolt\n4 Counterspell\n\nOR Paste CSV...`}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              disabled={isImporting}
+            />
+          </div>
+          <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end gap-2">
+            <button
+              onClick={() => setIsImportOpen(false)}
+              className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors"
+              disabled={isImporting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={isImporting || !importText.trim()}
+              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95 text-xs"
+            >
+              {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {isImporting ? 'Importing...' : 'Import Cards'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // --- Resize Handlers ---
@@ -980,6 +1106,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
 
           <div className="flex items-center gap-4">
             <button
+              onClick={() => setIsImportOpen(true)}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-600 shadow-sm font-bold text-xs transition-transform hover:scale-105"
+              title="Import Deck List"
+            >
+              <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+            </button>
+
+            <button
               onClick={handleAutoBuild}
               className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg border border-indigo-400/50 shadow-lg font-bold text-xs transition-transform hover:scale-105"
               title="Auto-Build Deck"
@@ -1196,6 +1330,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
           })() : null}
         </DragOverlay>
       </DndContext>
+      <ImportModal />
     </div>
   );
 };
