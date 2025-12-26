@@ -1004,14 +1004,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
           </div>
 
           {/* Middle Area: My Battlefield (The Table) */}
-          <DroppableZone id="battlefield" data={{ type: 'zone' }} className="flex-[4] relative perspective-1000 z-10">
+          <DroppableZone id="battlefield" data={{ type: 'zone' }} className="flex-[4] relative perspective-1000 z-10 min-h-0 overflow-y-auto">
             <div
-              className="w-full h-full"
+              className="w-full min-h-full"
               ref={battlefieldRef}
             >
               <GestureManager onGesture={handleGesture}>
                 <div
-                  className="w-full h-full relative flex flex-col overflow-visible"
+                  className="w-full min-h-full relative flex flex-col overflow-visible"
                   style={{
                     transform: 'rotateX(5deg)',
                     transformOrigin: 'center 40%',
