@@ -79,13 +79,17 @@ const normalizeCard = (c: any): DraftCard => {
   const localImage = (targetId && setCode)
     ? `/cards/images/${setCode}/full/${targetId}.jpg`
     : null;
+  const localCrop = (targetId && setCode)
+    ? `/cards/images/${setCode}/crop/${targetId}.jpg`
+    : null;
 
   return {
     ...c,
     finish: c.finish || 'nonfoil',
     typeLine: c.typeLine || c.type_line,
     // Ensure image is top-level for components that expect it
-    image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal
+    image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+    imageArtCrop: localCrop || c.imageArtCrop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
   };
 };
 
@@ -455,8 +459,11 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     const newCard = {
       ...card,
       id: `${card.id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      scryfallId: card.id, // Preserve original ID for image resolution
+      setCode: card.set,   // Ensure set code is top-level
       // Ensure image prop is carried over for visual
-      image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal
+      image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
+      imageArtCrop: card.image_uris?.art_crop || card.card_faces?.[0]?.image_uris?.art_crop
     };
     setDeck(prev => [...prev, newCard]);
   };
