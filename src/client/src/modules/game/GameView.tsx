@@ -798,450 +798,453 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
         <div className="flex-1 flex flex-col h-full relative">
           <StackVisualizer gameState={gameState} />
 
-          {/* Top Area: Opponents */}
-          <div className="flex-[2] relative flex flex-col pointer-events-none">
-            {isMultiplayer ? (
-              // MULTIPLAYER GRID LAYOUT (3+ Players)
-              <div className="w-full h-full grid grid-cols-2 gap-1 p-1">
-                {otherPlayers.map(opp => {
-                  const oppHand = getPlayerCards(opp.id, 'hand');
-                  const oppBattlefield = getPlayerCards(opp.id, 'battlefield');
-                  const oppCommandZone = getPlayerCards(opp.id, 'command');
-                  const isOppActive = gameState.activePlayerId === opp.id;
+          {/* Scrollable Battlefield Area (Opponent + Mine) */}
+          <div className="flex-1 flex flex-col relative overflow-y-auto min-h-0">
+            {/* Top Area: Opponents */}
+            <div className="shrink-0 h-[40vh] min-h-[300px] relative flex flex-col pointer-events-none">
+              {isMultiplayer ? (
+                // MULTIPLAYER GRID LAYOUT (3+ Players)
+                <div className="w-full h-full grid grid-cols-2 gap-1 p-1">
+                  {otherPlayers.map(opp => {
+                    const oppHand = getPlayerCards(opp.id, 'hand');
+                    const oppBattlefield = getPlayerCards(opp.id, 'battlefield');
+                    const oppCommandZone = getPlayerCards(opp.id, 'command');
+                    const isOppActive = gameState.activePlayerId === opp.id;
 
-                  return (
-                    <div key={opp.id} className="relative flex flex-col border border-white/5 bg-black/20 rounded overflow-hidden">
-                      {/* Header */}
-                      <div className={`p-1 px-2 flex justify-between items-center bg-slate-900/90 ${isOppActive ? 'border-b-2 border-amber-500' : 'border-b border-white/10'}`}>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${isOppActive ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
-                          <span className="font-bold text-slate-200 text-xs truncate max-w-[100px]">{opp.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-black ${opp.life < 10 ? 'text-red-500' : 'text-emerald-400'}`}>{opp.life}</span>
-                          {oppCommandZone.length > 0 && (
-                            <div className="px-1 bg-amber-900/50 rounded text-[9px] text-amber-500 font-bold border border-amber-800">CMD {oppCommandZone.length}</div>
-                          )}
-                          <span className="text-[10px] text-slate-500">H:{oppHand.length}</span>
-                        </div>
-                      </div>
-
-                      {/* Battlefield */}
-                      <div className="flex-1 relative p-1 pointer-events-auto">
-                        <div className="flex flex-wrap content-start gap-1 justify-center opacity-90 scale-75 origin-top">
-                          {oppBattlefield.map(card => (
-                            <div key={card.instanceId} className="relative">
-                              <CardComponent
-                                card={card}
-                                viewMode="cutout"
-                                onClick={() => setInspectedCard(card)}
-                                onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
-                                // No drags for now
-                                onDragStart={() => { }}
-                                onDragEnd={() => { }}
-                                onMouseEnter={() => setHoveredCard(card)}
-                                onMouseLeave={() => setHoveredCard(null)}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              // 1v1 LAYOUT (Legacy View)
-              (() => {
-                const opponent = otherPlayers[0];
-                const oppHand = opponent ? getCards(opponent.id, 'hand') : [];
-                const oppBattlefield = opponent ? getCards(opponent.id, 'battlefield') : [];
-                const oppLibrary = opponent ? getCards(opponent.id, 'library') : [];
-                const oppGraveyard = opponent ? getCards(opponent.id, 'graveyard') : [];
-                const oppExile = opponent ? getCards(opponent.id, 'exile') : [];
-
-                return (
-                  <>
-                    {/* Opponent Hand (Visual) */}
-                    <div className="absolute top-[-40px] left-0 right-0 flex justify-center -space-x-4 opacity-70">
-                      {oppHand.map((_, i) => (
-                        <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-600 rounded shadow-lg transform rotate-180"></div>
-                      ))}
-                    </div>
-
-                    {/* Opponent Info Bar */}
-                    <div
-                      className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700"
-                    >
-                      <DroppableZone id={opponent?.id || 'opponent'} data={{ type: 'player' }} className="absolute inset-0 z-0 opacity-0">Player</DroppableZone>
-                      <div className="flex flex-col z-10 pointer-events-none">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-lg text-red-400">{opponent?.name || 'Waiting...'}</span>
-                          <div className="flex gap-2 text-xs text-slate-400">
-                            <span>Hand: {oppHand.length}</span>
-                            <span>Lib: {oppLibrary.length}</span>
-                            <span>Grave: {oppGraveyard.length}</span>
-                            <span>Exile: {oppExile.length}</span>
+                    return (
+                      <div key={opp.id} className="relative flex flex-col border border-white/5 bg-black/20 rounded overflow-hidden">
+                        {/* Header */}
+                        <div className={`p-1 px-2 flex justify-between items-center bg-slate-900/90 ${isOppActive ? 'border-b-2 border-amber-500' : 'border-b border-white/10'}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${isOppActive ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
+                            <span className="font-bold text-slate-200 text-xs truncate max-w-[100px]">{opp.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-black ${opp.life < 10 ? 'text-red-500' : 'text-emerald-400'}`}>{opp.life}</span>
+                            {oppCommandZone.length > 0 && (
+                              <div className="px-1 bg-amber-900/50 rounded text-[9px] text-amber-500 font-bold border border-amber-800">CMD {oppCommandZone.length}</div>
+                            )}
+                            <span className="text-[10px] text-slate-500">H:{oppHand.length}</span>
                           </div>
                         </div>
-                        <div className="text-3xl font-bold text-white">{opponent?.life}</div>
-                      </div>
-                    </div>
 
-                    {/* Opponent Battlefield */}
-                    <div className="flex-1 w-full relative perspective-1000 z-0">
-                      <div
-                        className="w-full h-full relative"
-                        style={{
-                          transform: 'rotateX(-20deg) scale(0.9)',
-                          transformOrigin: 'center bottom',
-                        }}
-                      >
-                        {(() => {
-                          // Organize Opponent Cards
-                          const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                          const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
-
-                          return (
-                            <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
-                              {/* Back Row: Lands (Top - Far Side) */}
-                              <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
-                                {(() => {
-                                  const oppLandGroups = oppLands.reduce((acc, card) => {
-                                    const key = card.name || 'Unknown Land';
-                                    if (!acc[key]) acc[key] = [];
-                                    acc[key].push(card);
-                                    return acc as any;
-                                  }, {} as Record<string, any[]>);
-
-                                  // If no lands, preserve spacing but don't eat space if not needed
-                                  if (oppLands.length === 0) return <div className="h-20" />;
-
-                                  return Object.entries(oppLandGroups).map(([name, group]) => (
-                                    <div key={name} className="relative group">
-                                      {(group as any[]).map((card, index) => (
-                                        <div
-                                          key={card.instanceId}
-                                          className="absolute transition-all duration-300 group-hover:translate-x-4 pointer-events-auto"
-                                          style={{
-                                            top: -index * 2,
-                                            left: index * 2,
-                                            zIndex: index,
-                                            position: index === 0 ? 'relative' : 'absolute'
-                                          }}
-                                        >
-                                          <CardComponent
-                                            card={card}
-                                            viewMode="cutout"
-
-                                            style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
-                                            onClick={() => setInspectedCard(card)}
-                                            onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
-                                            onDragStart={() => { }}
-                                            onDragEnd={() => { }}
-                                            onMouseEnter={() => setHoveredCard(card)}
-                                            onMouseLeave={() => setHoveredCard(null)}
-                                          />
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ));
-                                })()}
+                        {/* Battlefield */}
+                        <div className="flex-1 relative p-1 pointer-events-auto">
+                          <div className="flex flex-wrap content-start gap-1 justify-center opacity-90 scale-75 origin-top">
+                            {oppBattlefield.map(card => (
+                              <div key={card.instanceId} className="relative">
+                                <CardComponent
+                                  card={card}
+                                  viewMode="cutout"
+                                  onClick={() => setInspectedCard(card)}
+                                  onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                  // No drags for now
+                                  onDragStart={() => { }}
+                                  onDragEnd={() => { }}
+                                  onMouseEnter={() => setHoveredCard(card)}
+                                  onMouseLeave={() => setHoveredCard(null)}
+                                />
                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // 1v1 LAYOUT (Legacy View)
+                (() => {
+                  const opponent = otherPlayers[0];
+                  const oppHand = opponent ? getCards(opponent.id, 'hand') : [];
+                  const oppBattlefield = opponent ? getCards(opponent.id, 'battlefield') : [];
+                  const oppLibrary = opponent ? getCards(opponent.id, 'library') : [];
+                  const oppGraveyard = opponent ? getCards(opponent.id, 'graveyard') : [];
+                  const oppExile = opponent ? getCards(opponent.id, 'exile') : [];
 
-                              {/* Front Row: Creatures (Bottom - Nearer) */}
-                              <div className="flex justify-center items-end gap-2 flex-wrap px-8">
-                                {oppCreatures.map(card => {
-                                  const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
-                                  const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+                  return (
+                    <>
+                      {/* Opponent Hand (Visual) */}
+                      <div className="absolute top-[-40px] left-0 right-0 flex justify-center -space-x-4 opacity-70">
+                        {oppHand.map((_, i) => (
+                          <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-600 rounded shadow-lg transform rotate-180"></div>
+                        ))}
+                      </div>
 
-                                  return (
-                                    <div
-                                      key={card.instanceId}
-                                      className="relative transition-all duration-300 ease-out pointer-events-auto"
-                                      style={{
-                                        transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none', // Attack moves "Forward" (Down)
-                                        zIndex: 10
-                                      }}
-                                    >
-                                      <CardComponent
-                                        card={card}
-                                        viewMode="normal"
+                      {/* Opponent Info Bar */}
+                      <div
+                        className="absolute top-4 left-4 z-10 flex items-center space-x-4 pointer-events-auto bg-black/50 p-2 rounded-lg backdrop-blur-sm border border-slate-700"
+                      >
+                        <DroppableZone id={opponent?.id || 'opponent'} data={{ type: 'player' }} className="absolute inset-0 z-0 opacity-0">Player</DroppableZone>
+                        <div className="flex flex-col z-10 pointer-events-none">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-lg text-red-400">{opponent?.name || 'Waiting...'}</span>
+                            <div className="flex gap-2 text-xs text-slate-400">
+                              <span>Hand: {oppHand.length}</span>
+                              <span>Lib: {oppLibrary.length}</span>
+                              <span>Grave: {oppGraveyard.length}</span>
+                              <span>Exile: {oppExile.length}</span>
+                            </div>
+                          </div>
+                          <div className="text-3xl font-bold text-white">{opponent?.life}</div>
+                        </div>
+                      </div>
 
-                                        style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
-                                        onClick={() => setInspectedCard(card)}
-                                        onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
-                                        onDragStart={() => { }}
-                                        onDragEnd={() => { }}
-                                        onMouseEnter={() => setHoveredCard(card)}
-                                        onMouseLeave={() => setHoveredCard(null)}
-                                        className={`
+                      {/* Opponent Battlefield */}
+                      <div className="flex-1 w-full relative perspective-1000 z-0">
+                        <div
+                          className="w-full h-full relative"
+                          style={{
+                            transform: 'rotateX(-20deg) scale(0.9)',
+                            transformOrigin: 'center bottom',
+                          }}
+                        >
+                          {(() => {
+                            // Organize Opponent Cards
+                            const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
+                            const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
+
+                            return (
+                              <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
+                                {/* Back Row: Lands (Top - Far Side) */}
+                                <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
+                                  {(() => {
+                                    const oppLandGroups = oppLands.reduce((acc, card) => {
+                                      const key = card.name || 'Unknown Land';
+                                      if (!acc[key]) acc[key] = [];
+                                      acc[key].push(card);
+                                      return acc as any;
+                                    }, {} as Record<string, any[]>);
+
+                                    // If no lands, preserve spacing but don't eat space if not needed
+                                    if (oppLands.length === 0) return <div className="h-20" />;
+
+                                    return Object.entries(oppLandGroups).map(([name, group]) => (
+                                      <div key={name} className="relative group">
+                                        {(group as any[]).map((card, index) => (
+                                          <div
+                                            key={card.instanceId}
+                                            className="absolute transition-all duration-300 group-hover:translate-x-4 pointer-events-auto"
+                                            style={{
+                                              top: -index * 2,
+                                              left: index * 2,
+                                              zIndex: index,
+                                              position: index === 0 ? 'relative' : 'absolute'
+                                            }}
+                                          >
+                                            <CardComponent
+                                              card={card}
+                                              viewMode="cutout"
+
+                                              style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                              onClick={() => setInspectedCard(card)}
+                                              onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                              onDragStart={() => { }}
+                                              onDragEnd={() => { }}
+                                              onMouseEnter={() => setHoveredCard(card)}
+                                              onMouseLeave={() => setHoveredCard(null)}
+                                            />
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ));
+                                  })()}
+                                </div>
+
+                                {/* Front Row: Creatures (Bottom - Nearer) */}
+                                <div className="flex justify-center items-end gap-2 flex-wrap px-8">
+                                  {oppCreatures.map(card => {
+                                    const isAttacking = card.attacking === currentPlayerId; // They are attacking ME
+                                    const isBlockedByMe = Array.from(proposedBlockers.values()).includes(card.instanceId);
+
+                                    return (
+                                      <div
+                                        key={card.instanceId}
+                                        className="relative transition-all duration-300 ease-out pointer-events-auto"
+                                        style={{
+                                          transform: isAttacking ? 'translateY(40px) scale(1.1)' : 'none', // Attack moves "Forward" (Down)
+                                          zIndex: 10
+                                        }}
+                                      >
+                                        <CardComponent
+                                          card={card}
+                                          viewMode="normal"
+
+                                          style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                          onClick={() => setInspectedCard(card)}
+                                          onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                          onDragStart={() => { }}
+                                          onDragEnd={() => { }}
+                                          onMouseEnter={() => setHoveredCard(card)}
+                                          onMouseLeave={() => setHoveredCard(null)}
+                                          className={`
                                           w-24 h-24 rounded shadow-sm
                                           ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
                                           ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
                                         `}
-                                      />
-                                      <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
+                                        />
+                                        <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
 
-                                      {isAttacking && (
-                                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
-                                          ATTACKING
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                                        {isAttacking && (
+                                          <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-20">
+                                            ATTACKING
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })()}
+                            );
+                          })()}
+                        </div>
                       </div>
-                    </div>
-                  </>
-                );
-              })()
-            )}
-          </div>
+                    </>
+                  );
+                })()
+              )}
+            </div>
 
-          {/* Middle Area: My Battlefield (The Table) */}
-          <DroppableZone id="battlefield" data={{ type: 'zone' }} className="flex-[4] relative perspective-1000 z-10 min-h-0 overflow-y-auto">
-            <div
-              className="w-full min-h-full"
-              ref={battlefieldRef}
-            >
-              <GestureManager onGesture={handleGesture}>
-                <div
-                  className="w-full min-h-full relative flex flex-col overflow-visible"
-                  style={{
-                    transform: 'rotateX(5deg)',
-                    transformOrigin: 'center 40%',
-                  }}
-                >
+            {/* Middle Area: My Battlefield (The Table) */}
+            <DroppableZone id="battlefield" data={{ type: 'zone' }} className="flex-1 min-h-[50vh] relative perspective-1000 z-10">
+              <div
+                className="w-full min-h-full"
+                ref={battlefieldRef}
+              >
+                <GestureManager onGesture={handleGesture}>
+                  <div
+                    className="w-full min-h-full relative flex flex-col overflow-visible"
+                    style={{
+                      transform: 'rotateX(5deg)',
+                      transformOrigin: 'center 40%',
+                    }}
+                  >
 
 
-                  {(() => {
-                    // Separate Roots and Attachments
-                    const attachments = myBattlefield.filter(c => c.attachedTo);
-                    const unattached = myBattlefield.filter(c => !c.attachedTo);
+                    {(() => {
+                      // Separate Roots and Attachments
+                      const attachments = myBattlefield.filter(c => c.attachedTo);
+                      const unattached = myBattlefield.filter(c => !c.attachedTo);
 
-                    const creatures = unattached.filter(c => c.types?.includes('Creature'));
-                    const allLands = unattached.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                    const others = unattached.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
+                      const creatures = unattached.filter(c => c.types?.includes('Creature'));
+                      const allLands = unattached.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
+                      const others = unattached.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
 
-                    // Map Attachments to Hosts
-                    const attachmentsMap = attachments.reduce((acc, c) => {
-                      const target = c.attachedTo;
-                      if (target) {
-                        if (!acc[target]) acc[target] = [];
-                        acc[target].push(c);
-                      }
-                      return acc;
-                    }, {} as Record<string, CardInstance[]>);
+                      // Map Attachments to Hosts
+                      const attachmentsMap = attachments.reduce((acc, c) => {
+                        const target = c.attachedTo;
+                        if (target) {
+                          if (!acc[target]) acc[target] = [];
+                          acc[target].push(c);
+                        }
+                        return acc;
+                      }, {} as Record<string, CardInstance[]>);
 
-                    const landGroups = allLands.reduce((acc, card) => {
-                      const key = card.name || 'Unknown Land';
-                      if (!acc[key]) acc[key] = [];
-                      acc[key].push(card);
-                      return acc;
-                    }, {} as Record<string, CardInstance[]>);
+                      const landGroups = allLands.reduce((acc, card) => {
+                        const key = card.name || 'Unknown Land';
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(card);
+                        return acc;
+                      }, {} as Record<string, CardInstance[]>);
 
-                    const renderCard = (card: CardInstance) => {
-                      const isAttacking = proposedAttackers.has(card.instanceId);
-                      const blockingTargetId = proposedBlockers.get(card.instanceId);
-                      const isPreviewTapped = previewTappedIds.has(card.instanceId);
+                      const renderCard = (card: CardInstance) => {
+                        const isAttacking = proposedAttackers.has(card.instanceId);
+                        const blockingTargetId = proposedBlockers.get(card.instanceId);
+                        const isPreviewTapped = previewTappedIds.has(card.instanceId);
 
-                      const attachedCards = attachmentsMap[card.instanceId] || [];
+                        const attachedCards = attachmentsMap[card.instanceId] || [];
 
-                      return (
-                        <div
-                          key={card.instanceId}
-                          className="relative transition-all duration-300 group"
-                          style={{
-                            zIndex: 10,
-                            transform: isAttacking
-                              ? 'translateY(-40px) scale(1.1) rotateX(10deg)'
-                              : blockingTargetId
-                                ? 'translateY(-20px) scale(1.05)'
-                                : isPreviewTapped
-                                  ? 'rotate(10deg)'  // Preview Tap Rotation
-                                  : 'none',
-                            boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none',
-                            opacity: isPreviewTapped ? 0.7 : 1 // Preview Tap Opacity
-                          }}
-                        >
-                          <DraggableCardWrapper card={card} disabled={!hasPriority}>
-                            {/* Render Attachments UNDER the card */}
-                            {attachedCards.length > 0 && (
-                              <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 hover:space-y-4 hover:bottom-[-200px] transition-all duration-300 z-[-1] hover:z-50">
-                                {attachedCards.map((att, idx) => (
-                                  <div key={att.instanceId} className="relative transition-transform hover:scale-110" style={{ zIndex: idx }}>
-                                    <CardComponent
-                                      card={att}
-                                      viewMode="cutout"
-                                      onClick={() => { }}
-                                      onDragStart={() => { }}
-                                      className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
-                                    />
-                                    {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
-                                    {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
+                        return (
+                          <div
+                            key={card.instanceId}
+                            className="relative transition-all duration-300 group"
+                            style={{
+                              zIndex: 10,
+                              transform: isAttacking
+                                ? 'translateY(-40px) scale(1.1) rotateX(10deg)'
+                                : blockingTargetId
+                                  ? 'translateY(-20px) scale(1.05)'
+                                  : isPreviewTapped
+                                    ? 'rotate(10deg)'  // Preview Tap Rotation
+                                    : 'none',
+                              boxShadow: isAttacking ? '0 20px 40px -10px rgba(239, 68, 68, 0.5)' : 'none',
+                              opacity: isPreviewTapped ? 0.7 : 1 // Preview Tap Opacity
+                            }}
+                          >
+                            <DraggableCardWrapper card={card} disabled={!hasPriority}>
+                              {/* Render Attachments UNDER the card */}
+                              {attachedCards.length > 0 && (
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 hover:space-y-4 hover:bottom-[-200px] transition-all duration-300 z-[-1] hover:z-50">
+                                  {attachedCards.map((att, idx) => (
+                                    <div key={att.instanceId} className="relative transition-transform hover:scale-110" style={{ zIndex: idx }}>
+                                      <CardComponent
+                                        card={att}
+                                        viewMode="cutout"
+                                        onClick={() => { }}
+                                        onDragStart={() => { }}
+                                        className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
+                                      />
+                                      {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
+                                      {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
                                                 Ideally, we define DraggableCardWrapper around THIS too?
                                                 GameView dnd uses ID. If we use DraggableCardWrapper here, it should work.
                                             */}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
 
-                            <CardComponent
-                              card={card}
-                              viewMode="cutout"
-                              currentTurn={gameState.turnCount ?? gameState.turn}
-                              onDragStart={() => { }}
-                              onClick={(id) => {
-                                if (gameState.step === 'declare_attackers') {
-                                  // Attack declaration is special: It happens during the "Pause" where AP has priority but isn't passing yet.
-                                  // We allow toggling attackers if it's our turn to attack.
-                                  if (gameState.activePlayerId !== currentPlayerId) return;
+                              <CardComponent
+                                card={card}
+                                viewMode="cutout"
+                                currentTurn={gameState.turnCount ?? gameState.turn}
+                                onDragStart={() => { }}
+                                onClick={(id) => {
+                                  if (gameState.step === 'declare_attackers') {
+                                    // Attack declaration is special: It happens during the "Pause" where AP has priority but isn't passing yet.
+                                    // We allow toggling attackers if it's our turn to attack.
+                                    if (gameState.activePlayerId !== currentPlayerId) return;
 
-                                  // Validate Creature Type
-                                  const types = card.types || [];
-                                  const typeLine = card.typeLine || '';
-                                  if (!types.includes('Creature') && !typeLine.includes('Creature')) {
-                                    return;
-                                  }
-
-                                  const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-                                    card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-                                    card.oracleText?.toLowerCase().includes('haste');
-
-                                  const currentT = gameState.turnCount ?? gameState.turn;
-                                  const isSick = card.controlledSinceTurn === currentT && !hasHaste;
-
-                                  if (isSick) {
-                                    // TODO: Toast or Alert
-                                    // alert(`${card.name} has Summoning Sickness!`);
-                                    showGameToast(`${card.name} has Summoning Sickness!`, 'warning');
-                                    return;
-                                  }
-
-                                  const newSet = new Set(proposedAttackers);
-                                  if (newSet.has(id)) newSet.delete(id);
-                                  else newSet.add(id);
-                                  setProposedAttackers(newSet);
-                                } else if (gameState.step === 'declare_blockers') {
-                                  // BLOCKING LOGIC
-                                  // Only Defending Player (NOT active player) can declare blockers
-                                  if (gameState.activePlayerId === currentPlayerId) return;
-
-                                  // Check eligibility (Untapped Creature)
-                                  if (card.tapped) return;
-                                  const types = card.types || [];
-                                  if (!types.includes('Creature') && !card.typeLine?.includes('Creature')) return;
-
-                                  // Find all Valid Attackers
-                                  // Attackers are cards in opponent's control that are marked 'attacking'
-                                  const attackers = Object.values(gameState.cards).filter(c =>
-                                    c.controllerId !== currentPlayerId && c.attacking
-                                  );
-
-                                  if (attackers.length === 0) return; // Nothing to block
-
-                                  const currentTargetId = proposedBlockers.get(id);
-                                  const newMap = new Map(proposedBlockers);
-
-                                  if (!currentTargetId) {
-                                    // Not currently blocking -> Block the first attacker
-                                    newMap.set(id, attackers[0].instanceId);
-                                  } else {
-                                    // Currently blocking -> Cycle to next attacker OR unblock if at end of list
-                                    const currentIndex = attackers.findIndex(a => a.instanceId === currentTargetId);
-                                    if (currentIndex === -1 || currentIndex === attackers.length - 1) {
-                                      // Was blocking last one (or invalid), so Unblock
-                                      newMap.delete(id);
-                                    } else {
-                                      // Cycle to next
-                                      newMap.set(id, attackers[currentIndex + 1].instanceId);
+                                    // Validate Creature Type
+                                    const types = card.types || [];
+                                    const typeLine = card.typeLine || '';
+                                    if (!types.includes('Creature') && !typeLine.includes('Creature')) {
+                                      return;
                                     }
-                                  }
-                                  setProposedBlockers(newMap);
 
-                                } else {
-                                  // Regular Tap (Mana/Ability)
-                                  if (!hasPriority) return;
-                                  toggleTap(id);
-                                }
-                              }}
-                              onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
-                              onMouseEnter={() => setHoveredCard(card)}
-                              onMouseLeave={() => setHoveredCard(null)}
-                              className={`
+                                    const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+                                      card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
+                                      card.oracleText?.toLowerCase().includes('haste');
+
+                                    const currentT = gameState.turnCount ?? gameState.turn;
+                                    const isSick = card.controlledSinceTurn === currentT && !hasHaste;
+
+                                    if (isSick) {
+                                      // TODO: Toast or Alert
+                                      // alert(`${card.name} has Summoning Sickness!`);
+                                      showGameToast(`${card.name} has Summoning Sickness!`, 'warning');
+                                      return;
+                                    }
+
+                                    const newSet = new Set(proposedAttackers);
+                                    if (newSet.has(id)) newSet.delete(id);
+                                    else newSet.add(id);
+                                    setProposedAttackers(newSet);
+                                  } else if (gameState.step === 'declare_blockers') {
+                                    // BLOCKING LOGIC
+                                    // Only Defending Player (NOT active player) can declare blockers
+                                    if (gameState.activePlayerId === currentPlayerId) return;
+
+                                    // Check eligibility (Untapped Creature)
+                                    if (card.tapped) return;
+                                    const types = card.types || [];
+                                    if (!types.includes('Creature') && !card.typeLine?.includes('Creature')) return;
+
+                                    // Find all Valid Attackers
+                                    // Attackers are cards in opponent's control that are marked 'attacking'
+                                    const attackers = Object.values(gameState.cards).filter(c =>
+                                      c.controllerId !== currentPlayerId && c.attacking
+                                    );
+
+                                    if (attackers.length === 0) return; // Nothing to block
+
+                                    const currentTargetId = proposedBlockers.get(id);
+                                    const newMap = new Map(proposedBlockers);
+
+                                    if (!currentTargetId) {
+                                      // Not currently blocking -> Block the first attacker
+                                      newMap.set(id, attackers[0].instanceId);
+                                    } else {
+                                      // Currently blocking -> Cycle to next attacker OR unblock if at end of list
+                                      const currentIndex = attackers.findIndex(a => a.instanceId === currentTargetId);
+                                      if (currentIndex === -1 || currentIndex === attackers.length - 1) {
+                                        // Was blocking last one (or invalid), so Unblock
+                                        newMap.delete(id);
+                                      } else {
+                                        // Cycle to next
+                                        newMap.set(id, attackers[currentIndex + 1].instanceId);
+                                      }
+                                    }
+                                    setProposedBlockers(newMap);
+
+                                  } else {
+                                    // Regular Tap (Mana/Ability)
+                                    if (!hasPriority) return;
+                                    toggleTap(id);
+                                  }
+                                }}
+                                onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                onMouseEnter={() => setHoveredCard(card)}
+                                onMouseLeave={() => setHoveredCard(null)}
+                                className={`
                                   w-24 h-24 rounded shadow-sm transition-all duration-300
                                   ${isAttacking ? "ring-4 ring-red-500 ring-offset-2 ring-offset-slate-900" : ""}
                                   ${blockingTargetId ? "ring-4 ring-blue-500 ring-offset-2 ring-offset-slate-900" : ""}
                                 `}
-                            />
-                          </DraggableCardWrapper>
-                          {blockingTargetId && (
-                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow z-50 whitespace-nowrap">
-                              Blocking
-                            </div>
-                          )}
-                        </div>
-                      );
-                    };
+                              />
+                            </DraggableCardWrapper>
+                            {blockingTargetId && (
+                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow z-50 whitespace-nowrap">
+                                Blocking
+                              </div>
+                            )}
+                          </div>
+                        );
+                      };
 
-                    return (
-                      <>
-                        <div className="flex-1 flex flex-wrap content-end justify-center items-end p-4 gap-2 relative z-10 w-full overflow-visible">
-                          {creatures.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
-                            </div>
-                          )}
-                          {creatures.map(renderCard)}
-                        </div>
-                        <div className="min-h-[120px] flex flex-wrap content-center justify-center items-center p-2 gap-2 relative z-0 w-full overflow-visible">
-                          {others.length > 0 ? others.map(renderCard) : (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-h-[120px] flex flex-wrap content-start justify-start items-start p-2 gap-1 relative z-0 w-full">
-                          {allLands.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
-                              <span className="text-white text-xs font-bold uppercase tracking-widest">Lands</span>
-                            </div>
-                          )}
-                          {Object.entries(landGroups).map(([name, group]) => (
-                            <div
-                              key={name}
-                              className="relative w-24 transition-all duration-300"
-                              style={{
-                                height: `${96 + (group.length - 1) * 25}px`, // 96px base + 25px offset per card
-                                marginBottom: '0.5rem'
-                              }}
-                            >
-                              {group.map((card, index) => (
-                                <div
-                                  key={card.instanceId}
-                                  className="absolute left-0 w-full"
-                                  style={{
-                                    top: `${index * 25}px`,
-                                    zIndex: index
-                                  }}
-                                >
-                                  {renderCard(card)}
-                                </div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </GestureManager>
-            </div>
-          </DroppableZone>
+                      return (
+                        <>
+                          <div className="flex-1 flex flex-wrap content-end justify-center items-end p-4 gap-2 relative z-10 w-full overflow-visible">
+                            {creatures.length === 0 && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
+                              </div>
+                            )}
+                            {creatures.map(renderCard)}
+                          </div>
+                          <div className="min-h-[120px] flex flex-wrap content-center justify-center items-center p-2 gap-2 relative z-0 w-full overflow-visible">
+                            {others.length > 0 ? others.map(renderCard) : (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-0">
+                              </div>
+                            )}
+                          </div>
+                          <div className="min-h-[120px] flex flex-wrap content-start justify-start items-start p-2 gap-1 relative z-0 w-full">
+                            {allLands.length === 0 && (
+                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
+                                <span className="text-white text-xs font-bold uppercase tracking-widest">Lands</span>
+                              </div>
+                            )}
+                            {Object.entries(landGroups).map(([name, group]) => (
+                              <div
+                                key={name}
+                                className="relative w-24 transition-all duration-300"
+                                style={{
+                                  height: `${96 + (group.length - 1) * 25}px`, // 96px base + 25px offset per card
+                                  marginBottom: '0.5rem'
+                                }}
+                              >
+                                {group.map((card, index) => (
+                                  <div
+                                    key={card.instanceId}
+                                    className="absolute left-0 w-full"
+                                    style={{
+                                      top: `${index * 25}px`,
+                                      zIndex: index
+                                    }}
+                                  >
+                                    {renderCard(card)}
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </GestureManager>
+              </div>
+            </DroppableZone>
+          </div>
 
           {/* New Phase Control Bar - Between Battlefield and Hand */}
           <div className="w-full z-30 bg-black border-y border-white/10 flex justify-center shrink-0 relative shadow-2xl">
