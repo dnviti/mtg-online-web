@@ -428,6 +428,15 @@ export class RulesEngine {
     if (this.state.activePlayerId !== playerId) throw new Error("Only Active Player can declare attackers.");
 
     // Validate and Process
+
+    // CRITICAL FIX: Explicitly clear 'attacking' status for ALL creatures controlled by this player first.
+    // This ensures that if they declare 0 attackers (Skip Combat), we don't leave old state.
+    Object.values(this.state.cards).forEach(c => {
+      if (c.controllerId === playerId && c.zone === 'battlefield') {
+        c.attacking = undefined;
+      }
+    });
+
     attackers.forEach(({ attackerId, targetId }) => {
       const card = this.state.cards[attackerId];
       if (!card || card.controllerId !== playerId || card.zone !== 'battlefield') throw new Error(`Invalid attacker ${attackerId}`);
@@ -1036,11 +1045,12 @@ export class RulesEngine {
 
   private cleanupStep(_playerId: string) {
     // Remove damage, discard down to 7
-    console.log(`Cleanup execution.`);
+    console.log(`[RulesEngine] Cleanup execution for ${this.state.turnCount}`);
     Object.values(this.state.cards).forEach(c => {
       c.damageMarked = 0;
       c.attacking = undefined; // Clear Combat Status
       c.blocking = [];         // Clear Combat Status
+      // Defensive coding: access modifiers safely
       if (c.modifiers) {
         c.modifiers = c.modifiers.filter(m => !m.untilEndOfTurn);
       }
