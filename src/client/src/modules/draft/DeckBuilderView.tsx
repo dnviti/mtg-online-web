@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
@@ -18,7 +18,8 @@ interface DeckBuilderViewProps {
   currentPlayerId: string;
   initialPool: any[];
   initialDeck?: any[];
-  availableBasicLands?: any[];
+  availableBasicLands?: any[]; // For constructed/fallback
+  isConstructed?: boolean;
   onSubmit?: (deck: any[]) => void;
   submitLabel?: string;
 }
@@ -310,7 +311,7 @@ const CardsDisplay: React.FC<{
   )
 };
 
-export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, initialDeck = [], availableBasicLands = [], onSubmit, submitLabel }) => {
+export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, initialDeck = [], availableBasicLands = [], onSubmit, submitLabel, isConstructed }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   /* --- Hooks --- */
@@ -411,11 +412,54 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
   const [hoveredCard, setHoveredCard] = useState<any>(null);
   const [displayCard, setDisplayCard] = useState<any>(null);
 
+  // Constructed Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   React.useEffect(() => {
     if (hoveredCard) {
       setDisplayCard(hoveredCard);
     }
   }, [hoveredCard]);
+
+  // Search Handler
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/cards/search?q=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      setSearchResults(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleConstructedAdd = async (card: any) => {
+    // Cache on pick
+    try {
+      await fetch('/api/cards/cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards: [card] })
+      });
+    } catch (e) { console.error("Cache failed", e); }
+
+    // Add to deck
+    // For constructed, we usually add copies. 
+    // Generate unique ID
+    const newCard = {
+      ...card,
+      id: `${card.id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      // Ensure image prop is carried over for visual
+      image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal
+    };
+    setDeck(prev => [...prev, newCard]);
+  };
 
   // --- Land Advice Logic ---
   const landSuggestion = useMemo(() => {
@@ -514,7 +558,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
     const newLand = {
       ...land,
       id: `land-${land.scryfallId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-      image_uris: land.image_uris || { normal: land.image }
+      image_uris: land.image_uris || { normal: land.image },
+      image: land.image, // Propagate resolved image
+      imageArtCrop: land.imageArtCrop
     };
     setDeck(prev => [...prev, newLand]);
   };
@@ -696,7 +742,18 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
   const landSourceCards = useMemo(() => {
     // If we have specific lands from cube, use them.
     if (availableBasicLands && availableBasicLands.length > 0) {
-      return availableBasicLands.map(land => {
+      // Deduplicate by Name to ensure strict "One per Type" rule on client side
+      const uniqueLands: any[] = [];
+      const seenNames = new Set();
+
+      for (const land of availableBasicLands) {
+        if (!seenNames.has(land.name)) {
+          seenNames.add(land.name);
+          uniqueLands.push(land);
+        }
+      }
+
+      return uniqueLands.map(land => {
         const targetId = land.scryfallId || land.id;
         const setCode = land.setCode || land.set;
 
@@ -706,7 +763,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
 
         return {
           ...land,
-          id: `land-source-${land.name}`, // stable ID for list
+          id: `land-source-${land.scryfallId || land.name}`,
+          scryfallId: targetId, // CRITICAL: Preserve the original UUID for image resolution!
           isLandSource: true,
           // Ensure image is set for display
           image: localImage || land.image || land.image_uris?.normal
@@ -966,13 +1024,53 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
                */}
               {/* Pool Column */}
               <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-w-0 border-r border-slate-800 bg-slate-900/50">
-                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between">
-                  <span>Card Pool ({pool.length})</span>
+                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900">
+                  <span>{isConstructed ? 'Cards & Search' : `Card Pool (${pool.length})`}</span>
                 </div>
+
+                {/* Constructed Search Bar */}
+                {isConstructed && (
+                  <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10">
+                    <form onSubmit={handleSearch} className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Search cards..."
+                          className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                        />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                      </div>
+                      {/* Optional: Filter buttons or clear */}
+                      {searchQuery && (
+                        <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
+                      )}
+                    </form>
+                  </div>
+                )}
+
                 <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                  {/* Land Station Merged into Display */}
+                  {/* Land Station */}
                   <LandRow />
-                  <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
+
+                  {isConstructed && searchQuery ? (
+                    isSearching ? (
+                      <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
+                    ) : (
+                      <CardsDisplay
+                        cards={searchResults}
+                        viewMode="list"
+                        cardWidth={localCardWidth}
+                        onCardClick={handleConstructedAdd}
+                        onHover={setHoveredCard}
+                        emptyMessage="No results found."
+                        source="pool"
+                      />
+                    )
+                  ) : (
+                    <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage={isConstructed ? "Search to add cards, or click lands above." : "Pool Empty"} source="pool" groupBy={groupBy} />
+                  )}
                 </div>
               </DroppableZone>
 
@@ -994,12 +1092,50 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({ initialPool, i
                   id="pool-zone"
                   className="flex-1 flex flex-col overflow-hidden"
                 >
-                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0">
-                    <span>Card Pool ({pool.length})</span>
+                  <div className="p-2 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between shrink-0 bg-slate-900">
+                    <span>{isConstructed ? 'Cards & Search' : `Card Pool (${pool.length})`}</span>
                   </div>
+
+                  {/* Constructed Search Bar */}
+                  {isConstructed && (
+                    <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10 shrink-0">
+                      <form onSubmit={handleSearch} className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search cards..."
+                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                          <Search className="w-4 h-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                        </div>
+                        {searchQuery && (
+                          <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
+                        )}
+                      </form>
+                    </div>
+                  )}
+
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                     <LandRow />
-                    <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage="Pool Empty" source="pool" groupBy={groupBy} />
+                    {isConstructed && searchQuery ? (
+                      isSearching ? (
+                        <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
+                      ) : (
+                        <CardsDisplay
+                          cards={searchResults}
+                          viewMode="list"
+                          cardWidth={localCardWidth}
+                          onCardClick={handleConstructedAdd}
+                          onHover={setHoveredCard}
+                          emptyMessage="No results found."
+                          source="pool"
+                        />
+                      )
+                    ) : (
+                      <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage={isConstructed ? "Search to add cards." : "Pool Empty"} source="pool" groupBy={groupBy} />
+                    )}
                   </div>
                 </DroppableZone>
               </div>

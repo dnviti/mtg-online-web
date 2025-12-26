@@ -459,7 +459,16 @@ export class ScryfallService {
       if (!resp.ok) throw new Error(`Scryfall API error: ${resp.statusText}`);
 
       const data = await resp.json();
-      const cards = data.data || [];
+      let cards = data.data || [];
+
+      // Filter to keep only Single Instance per Name (Color) as requested
+      const uniqueNameMap = new Map();
+      cards.forEach((c: ScryfallCard) => {
+        if (!uniqueNameMap.has(c.name)) {
+          uniqueNameMap.set(c.name, c);
+        }
+      });
+      cards = Array.from(uniqueNameMap.values());
 
       if (cards.length > 0) {
         // Save Cache
@@ -469,7 +478,7 @@ export class ScryfallService {
         // Also cache individual cards
         cards.forEach((c: ScryfallCard) => this.saveCard(c));
 
-        console.log(`[ScryfallService] Cached ${cards.length} Foundation lands.`);
+        console.log(`[ScryfallService] Cached ${cards.length} Foundation lands (Unique per color).`);
       }
 
       return cards;

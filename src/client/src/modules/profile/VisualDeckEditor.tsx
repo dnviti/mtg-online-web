@@ -14,6 +14,23 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
     const { saveDeck, updateDeck, user } = useUser();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
+    const [basicLands, setBasicLands] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        // Fetch fallback lands (J25) for constructed mode
+        const fetchLands = async () => {
+            try {
+                const res = await fetch('/api/lands/fallback');
+                if (res.ok) {
+                    const data = await res.json();
+                    setBasicLands(data);
+                }
+            } catch (e) {
+                console.error("Failed to fetch fallback lands", e);
+            }
+        };
+        fetchLands();
+    }, []);
 
     // Initial parsing of deck cards
     const initialDeck = React.useMemo(() => {
@@ -84,9 +101,10 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
                     <DeckBuilderView
                         roomId="builder"
                         currentPlayerId={user?.id || 'offline'}
-                        initialPool={[]} // No pool for constructed edit initially
+                        initialPool={[]}
                         initialDeck={initialDeck}
-                        availableBasicLands={[]} // Uses defaults
+                        availableBasicLands={basicLands}
+                        isConstructed={true}
                         onSubmit={handleDeckSubmit}
                         submitLabel={loading ? "Saving..." : "Save Changes"}
                     />

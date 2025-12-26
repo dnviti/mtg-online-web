@@ -246,6 +246,41 @@ app.get('/api/sets/:code/cards', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/lands/fallback', async (_req: Request, res: Response) => {
+  try {
+    const lands = await scryfallService.getFoundationLands();
+    // Cache images for them to ensure they appear
+    if (lands.length > 0) {
+      await cardService.cacheImages(lands).catch(e => console.error('Failed to cache fallback land images', e));
+    }
+    res.json(lands);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/cards/search', async (req: Request, res: Response) => {
+  try {
+    const query = req.query.q as string;
+    if (!query) return res.json([]);
+
+    // Simple proxy to Scryfall search with unique=prints
+    // We do NOT cache everything here, only when user picks.
+    // However, user requirement: "search... to then be able to add to the deck... cache the card whenever it is picked"
+    // So this search just returns results.
+    const resp = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=prints`);
+    if (!resp.ok) {
+      // logic for 404
+      if (resp.status === 404) return res.json([]);
+      throw new Error(`Scryfall error: ${resp.statusText}`);
+    }
+    const data = await resp.json();
+    res.json(data.data || []);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/cards/parse', async (req: Request, res: Response) => {
   try {
     const { text } = req.body;
