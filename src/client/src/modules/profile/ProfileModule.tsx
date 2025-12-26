@@ -2,7 +2,7 @@ import React from 'react';
 import { useUser } from '../../contexts/UserContext';
 import { LogOut, Trash2, Calendar, Layers, Clock } from 'lucide-react';
 import { useToast } from '../../components/Toast';
-import { DeckEditor } from './DeckEditor';
+import { VisualDeckEditor } from './VisualDeckEditor';
 
 export const ProfileModule: React.FC = () => {
     const { user, logout, deleteDeck } = useUser();
@@ -15,8 +15,8 @@ export const ProfileModule: React.FC = () => {
 
     if (editingDeck || isCreating) {
         return (
-            <div className="p-6 max-w-4xl mx-auto h-full overflow-y-auto">
-                <DeckEditor
+            <div className="fixed inset-0 z-50 bg-slate-950">
+                <VisualDeckEditor
                     existingDeck={editingDeck}
                     onSave={() => {
                         setEditingDeck(null);

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import { RoomManager } from './managers/RoomManager';
 import { GameManager } from './managers/GameManager';
 import { DraftManager } from './managers/DraftManager';
-import { DraftManager } from './managers/DraftManager';
+
 import { TournamentManager } from './managers/TournamentManager';
 import { UserManager } from './managers/UserManager';
 import { CardService } from './services/CardService';
@@ -176,9 +176,9 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/user/me', authenticateToken, (req: Request, res: Response) => {
+app.get('/api/user/me', authenticateToken, async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
-  const user = userManager.getSafeUser(userId);
+  const user = await userManager.getSafeUser(userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json(user);
 });
@@ -207,12 +207,12 @@ app.put('/api/user/decks/:id', authenticateToken, async (req: Request, res: Resp
   }
 });
 
-app.delete('/api/user/decks/:id', authenticateToken, (req: Request, res: Response) => {
+app.delete('/api/user/decks/:id', authenticateToken, async (req: Request, res: Response) => {
   const userId = (req as any).user.id;
   const { id } = req.params;
 
   try {
-    userManager.deleteDeck(userId, id);
+    await userManager.deleteDeck(userId, id);
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ error: e.message });

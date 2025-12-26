@@ -99,7 +99,17 @@ export class UserManager {
 
         if (!user) return null;
         const { passwordHash, ...safe } = user;
-        return safe;
+
+        // Parse cards JSON for each deck
+        const parsedDecks = safe.decks.map(d => ({
+            ...d,
+            cards: JSON.parse(d.cards)
+        }));
+
+        return {
+            ...safe,
+            decks: parsedDecks
+        };
     }
 
     // Changed to Async
@@ -108,7 +118,7 @@ export class UserManager {
         // Validate cards are JSON serializable
         const cardsJson = JSON.stringify(cards);
 
-        return this.prisma.savedDeck.create({
+        const newDeck = await this.prisma.savedDeck.create({
             data: {
                 name: deckName,
                 cards: cardsJson,
@@ -116,6 +126,8 @@ export class UserManager {
                 format: format || 'Standard'
             }
         });
+
+        return { ...newDeck, cards: cards } as any; // Return with parsed cards
     }
 
     async updateDeck(userId: string, deckId: string, deckName: string, cards: any[], format?: string): Promise<SavedDeck> {
@@ -129,7 +141,7 @@ export class UserManager {
 
         const cardsJson = JSON.stringify(cards);
 
-        return this.prisma.savedDeck.update({
+        const updated = await this.prisma.savedDeck.update({
             where: { id: deckId },
             data: {
                 name: deckName,
@@ -137,6 +149,8 @@ export class UserManager {
                 format: format
             }
         });
+
+        return { ...updated, cards: cards } as any;
     }
 
     // Changed to Async
