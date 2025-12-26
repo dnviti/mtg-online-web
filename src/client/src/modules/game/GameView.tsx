@@ -789,23 +789,53 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                   const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
 
                   return (
-                    <div className="w-full h-full flex flex-col justify-end pb-4">
-                      {/* Back Row: Lands (Top) */}
-                      <div className="flex justify-center items-end -space-x-8 mb-4 opacity-90 scale-90 origin-bottom">
-                        {oppLands.map((card, idx) => (
-                          <div key={card.instanceId} style={{ zIndex: idx }} className="pointer-events-auto">
-                            <CardComponent
-                              card={card}
-                              viewMode="cutout"
-                              className="w-20 h-20 rounded shadow-sm"
-                              onDragStart={() => { }}
-                              onClick={() => { }}
-                              onMouseEnter={() => setHoveredCard(card)}
-                              onMouseLeave={() => setHoveredCard(null)}
-                            />
-                          </div>
-                        ))}
-                        {oppLands.length === 0 && <div className="h-20" />}
+
+                    <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
+                      {/* Back Row: Lands (Top - Far Side) */}
+                      <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
+                        {(() => {
+                          const oppLandGroups = oppLands.reduce((acc, card) => {
+                            const key = card.name || 'Unknown Land';
+                            if (!acc[key]) acc[key] = [];
+                            acc[key].push(card);
+                            return acc;
+                          }, {} as Record<string, typeof oppLands>);
+
+                          // If no lands, preserve spacing but don't eat space if not needed
+                          if (oppLands.length === 0) return <div className="h-20" />;
+
+                          return Object.entries(oppLandGroups).map(([name, group]) => (
+                            <div
+                              key={name}
+                              className="relative w-24 transition-all duration-300"
+                              style={{
+                                height: `${80 + (group.length - 1) * 20}px`, // 80px base + 20px offset
+                                zIndex: 0
+                              }}
+                            >
+                              {group.map((card, index) => (
+                                <div
+                                  key={card.instanceId}
+                                  className="absolute left-0 w-full pointer-events-auto"
+                                  style={{
+                                    top: `${index * 20}px`,
+                                    zIndex: index
+                                  }}
+                                >
+                                  <CardComponent
+                                    card={card}
+                                    viewMode="cutout"
+                                    className="w-24 h-24 rounded shadow-sm"
+                                    onDragStart={() => { }}
+                                    onClick={() => { }}
+                                    onMouseEnter={() => setHoveredCard(card)}
+                                    onMouseLeave={() => setHoveredCard(null)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          ));
+                        })()}
                       </div>
 
                       {/* Front Row: Creatures (Bottom) */}
