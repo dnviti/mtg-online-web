@@ -920,23 +920,27 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                     if (oppLands.length === 0) return <div className="h-20" />;
 
                                     return Object.entries(oppLandGroups).map(([name, group]) => (
-                                      <div key={name} className="relative group">
+                                      <div
+                                        key={name}
+                                        className="relative w-24 transition-all duration-300 pointer-events-auto"
+                                        style={{
+                                          height: `${96 + ((group as any[]).length - 1) * 25}px`,
+                                          marginBottom: '0.5rem'
+                                        }}
+                                      >
                                         {(group as any[]).map((card, index) => (
                                           <div
                                             key={card.instanceId}
-                                            className="absolute transition-all duration-300 group-hover:translate-x-4 pointer-events-auto"
+                                            className="absolute left-0 w-full"
                                             style={{
-                                              top: -index * 2,
-                                              left: index * 2,
-                                              zIndex: index,
-                                              position: index === 0 ? 'relative' : 'absolute'
+                                              top: `${index * 25}px`,
+                                              zIndex: index
                                             }}
                                           >
                                             <CardComponent
                                               card={card}
                                               viewMode="cutout"
-
-                                              style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                              style={{}}
                                               onClick={() => setInspectedCard(card)}
                                               onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
                                               onDragStart={() => { }}
@@ -968,9 +972,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                                       >
                                         <CardComponent
                                           card={card}
-                                          viewMode="normal"
+                                          viewMode="cutout"
 
-                                          style={{ transform: card.tapped ? 'rotate(180deg)' : 'rotate(180deg)' }}
+                                          style={{}}
                                           onClick={() => setInspectedCard(card)}
                                           onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
                                           onDragStart={() => { }}
