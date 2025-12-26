@@ -594,7 +594,7 @@ export class RulesEngine {
     this.state.priorityPlayerId = this.state.turnOrder[nextIndex];
   }
 
-  private moveCardToZone(cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }) {
+  public moveCardToZone(cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }) {
     const card = this.state.cards[cardId];
     if (card) {
 
@@ -619,6 +619,12 @@ export class RulesEngine {
         card.blocking = [];
         card.damageMarked = 0;
         card.counters = []; // Counters usually removed unless specific ability
+        card.modifiers = []; // Rule 400.7: Clear modifiers
+
+        // Reset P/T to base immediately
+        card.power = card.basePower;
+        card.toughness = card.baseToughness;
+
         card.attachedTo = undefined; // Detach
         // Also detach anything attached TO this
         Object.values(this.state.cards).forEach(other => {
@@ -1124,6 +1130,68 @@ export class RulesEngine {
     });
 
     return sbaPerformed;
+  }
+
+  public addCounter(playerId: string, cardId: string, type: string, count: number = 1) {
+    const card = this.state.cards[cardId];
+    if (!card || card.zone !== 'battlefield') throw new Error("Card not on battlefield");
+
+    // Initialize counters array if missing
+    if (!card.counters) card.counters = [];
+
+    // Cancellation Logic for +1/+1 and -1/-1
+    let remaining = count;
+
+    if (type === '+1/+1') {
+      // Check for existing -1/-1 counters to remove
+      const minusIndex = card.counters.findIndex(c => c.type === '-1/-1');
+      if (minusIndex !== -1) {
+        // We found -1/-1 counters.
+        const minusCounter = card.counters[minusIndex];
+        // How many can we cancel?
+        const toCancel = Math.min(remaining, minusCounter.count);
+
+        minusCounter.count -= toCancel;
+        remaining -= toCancel;
+
+        console.log(`Cancelled ${toCancel} -1/-1 counters with +1/+1.`);
+
+        if (minusCounter.count <= 0) {
+          card.counters.splice(minusIndex, 1);
+        }
+      }
+    } else if (type === '-1/-1') {
+      // Check for existing +1/+1 counters to remove
+      const plusIndex = card.counters.findIndex(c => c.type === '+1/+1');
+      if (plusIndex !== -1) {
+        const plusCounter = card.counters[plusIndex];
+        const toCancel = Math.min(remaining, plusCounter.count);
+
+        plusCounter.count -= toCancel;
+        remaining -= toCancel;
+
+        console.log(`Cancelled ${toCancel} +1/+1 counters with -1/-1.`);
+
+        if (plusCounter.count <= 0) {
+          card.counters.splice(plusIndex, 1);
+        }
+      }
+    }
+
+    // If we still have counters to add after cancellation
+    if (remaining > 0) {
+      const existing = card.counters.find(c => c.type === type);
+      if (existing) {
+        existing.count += remaining;
+      } else {
+        card.counters.push({ type, count: remaining });
+      }
+    }
+
+    console.log(`Added ${count} ${type} counters to ${card.name}. Final Counters:`, card.counters);
+
+    // Recalculate and check death immediately
+    this.processStateBasedActions();
   }
 
 

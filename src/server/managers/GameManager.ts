@@ -175,6 +175,9 @@ export class GameManager extends EventEmitter {
           engine.resetPriority(actorId);
           break;
         // TODO: Activate Ability
+        case 'ADD_COUNTER':
+          engine.addCounter(actorId, action.cardId, action.counterType, action.count || action.amount);
+          break;
         default:
           console.warn(`Unknown strict action: ${action.type}`);
           return null;
@@ -410,6 +413,10 @@ export class GameManager extends EventEmitter {
         case 'RESTART_GAME':
           this.restartGame(roomId);
           break;
+        case 'ADD_COUNTER':
+          const engineForCounter = new RulesEngine(game);
+          engineForCounter.addCounter(actorId, action.cardId, action.counterType, action.count || action.amount);
+          break;
       }
     } catch (e: any) {
       console.error(`Legacy Action Error [${action?.type}]: ${e.message}`);
@@ -426,9 +433,10 @@ export class GameManager extends EventEmitter {
     const card = game.cards[action.cardId];
     if (card) {
       if (card.controllerId !== actorId) return;
-      // @ts-ignore
-      card.position = { x: 0, y: 0, z: ++game.maxZ, ...action.position }; // type hack relative to legacy visual pos
-      card.zone = action.toZone;
+
+      const engine = new RulesEngine(game);
+      // Use the engine method which handles cleanup (counters, modifiers, P/T reset)
+      engine.moveCardToZone(action.cardId, action.toZone, false, action.position);
     }
   }
 

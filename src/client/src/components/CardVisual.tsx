@@ -86,11 +86,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     }
   }, [card, viewMode]);
 
-  // Counters logic (only for Game cards usually)
-  const totalCounters = useMemo(() => {
-    if (!card.counters) return 0;
-    return card.counters.map((c: any) => c.count).reduce((a: number, b: number) => a + b, 0);
-  }, [card.counters]);
+
 
   const getLandManaSymbols = (card: VisualCard): string[] => {
     // 1. Try to use explicit produced_mana from Scryfall definition if available
@@ -172,10 +168,20 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
           {/* Bottom Overlays based on Type */}
           {isCreature && (card.power != null && card.toughness != null) && (
-            <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
-              <span>{card.power}</span>
+            <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
+              <span className={
+                (Number(card.power) > (card.basePower ?? Number(card.power))) ? "text-blue-400" :
+                  (Number(card.power) < (card.basePower ?? Number(card.power))) ? "text-red-400" : "text-white"
+              }>
+                {card.power}
+              </span>
               <span className="text-slate-400">/</span>
-              <span>{card.toughness}</span>
+              <span className={
+                (Number(card.toughness) > (card.baseToughness ?? Number(card.toughness))) ? "text-blue-400" :
+                  (Number(card.toughness) < (card.baseToughness ?? Number(card.toughness))) ? "text-red-400" : "text-white"
+              }>
+                {card.toughness}
+              </span>
             </div>
           )}
 
@@ -239,9 +245,34 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       )}
 
       {/* Counters */}
-      {showCounters && totalCounters > 0 && (
-        <div className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1 rounded z-10 pointer-events-none">
-          {totalCounters}
+      {showCounters && card.counters && card.counters.length > 0 && (
+        <div className="absolute top-16 left-1 flex flex-col gap-1 z-20 pointer-events-none">
+          {card.counters.map((c: any, i: number) => {
+            if (c.count <= 0) return null;
+            let bgColor = "bg-slate-700";
+            let textColor = "text-white";
+            let borderColor = "border-slate-500";
+            let label = c.type;
+
+            if (c.type === '+1/+1') {
+              bgColor = "bg-emerald-600";
+              borderColor = "border-emerald-400";
+              label = `+ ${c.count}`;
+            } else if (c.type === '-1/-1') {
+              bgColor = "bg-red-600";
+              borderColor = "border-red-400";
+              label = `- ${c.count}`;
+            } else {
+              // Generic
+              label = `${c.count} ${c.type}`;
+            }
+
+            return (
+              <div key={i} className={`${bgColor} ${textColor} text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${borderColor} shadow-md flex items-center justify-center min-w-[24px]`}>
+                {label}
+              </div>
+            );
+          })}
         </div>
       )}
 
