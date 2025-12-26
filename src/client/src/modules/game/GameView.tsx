@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../../components/ConfirmDialog';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGameToast } from '../../components/GameToast';
 import { ManaIcon } from '../../components/ManaIcon';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
@@ -89,6 +89,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false);
   const [isTokenPickerOpen, setIsTokenPickerOpen] = useState(false);
   const [pendingTokenPosition, setPendingTokenPosition] = useState<{ x: number, y: number } | null>(null);
+  const [handScrollOffset, setHandScrollOffset] = useState(0);
 
   // Auto-Pass Priority if Yielding
   useEffect(() => {
@@ -1167,32 +1168,91 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
 
 
 
-                <div className="flex justify-center -space-x-12 w-full h-full items-end pb-4 perspective-500">
-                  {myHand.map((card, index) => (
+                {/* Hand Scroll Container Logic */}
+                {(() => {
+                  const VISIBLE_HAND_COUNT = 7;
+                  const maxOffset = Math.max(0, myHand.length - VISIBLE_HAND_COUNT);
+                  const effectiveOffset = Math.min(handScrollOffset, maxOffset);
+
+                  // Slice the hand to show only visible cards
+                  const visibleHand = myHand.slice(effectiveOffset, effectiveOffset + VISIBLE_HAND_COUNT);
+
+                  const handleWheel = (e: React.WheelEvent) => {
+                    if (myHand.length <= VISIBLE_HAND_COUNT) return;
+                    e.stopPropagation();
+                    // e.deltaY > 0 -> Scroll Right (Next)
+                    // e.deltaY < 0 -> Scroll Left (Prev)
+                    if (e.deltaY > 0) {
+                      setHandScrollOffset(prev => Math.min(maxOffset, prev + 1));
+                    } else {
+                      setHandScrollOffset(prev => Math.max(0, prev - 1));
+                    }
+                  };
+
+                  return (
                     <div
-                      key={card.instanceId}
-                      className="transition-all duration-300 hover:-translate-y-16 hover:scale-110 hover:z-50 hover:rotate-0 origin-bottom"
-                      style={{
-                        transform: `rotate(${(index - (myHand.length - 1) / 2) * 5}deg) translateY(${Math.abs(index - (myHand.length - 1) / 2) * 5}px)`,
-                        zIndex: index
-                      }}
+                      className="flex justify-center -space-x-12 w-full h-full items-end pb-4 perspective-500 relative"
+                      onWheel={handleWheel}
                     >
-                      <DraggableCardWrapper card={card} disabled={!hasPriority}>
-                        <CardComponent
-                          card={card}
-                          viewMode="normal"
-                          onDragStart={() => { }}
-                          onDragEnd={() => { }}
-                          onClick={() => setInspectedCard(card)}
-                          onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
-                          style={{ transformOrigin: 'bottom center' }}
-                          onMouseEnter={() => setHoveredCard(card)}
-                          onMouseLeave={() => setHoveredCard(null)}
-                        />
-                      </DraggableCardWrapper>
+                      {/* Left Navigation Arrow */}
+                      {myHand.length > VISIBLE_HAND_COUNT && (
+                        <button
+                          className={`absolute left-0 top-1/2 -translate-y-1/2 z-50 p-2 bg-slate-900/80 hover:bg-slate-700 border border-slate-600 rounded-full text-white transition-all ${effectiveOffset === 0 ? 'opacity-30 cursor-not-allowed' : 'opacity-100 shadow-lg scale-110'}`}
+                          onClick={() => setHandScrollOffset(prev => Math.max(0, prev - 1))}
+                          disabled={effectiveOffset === 0}
+                          style={{ left: '10px' }}
+                        >
+                          <ChevronLeft className="w-6 h-6" />
+                        </button>
+                      )}
+
+                      {visibleHand.map((card, index) => {
+                        // Calculate Fan Transform based on VISIBLE count (centered)
+                        const count = visibleHand.length;
+                        const center = (count - 1) / 2;
+                        const deg = (index - center) * 5;
+                        const transY = Math.abs(index - center) * 5;
+
+                        return (
+                          <div
+                            key={card.instanceId}
+                            className="transition-all duration-300 hover:-translate-y-16 hover:scale-110 hover:z-50 hover:rotate-0 origin-bottom"
+                            style={{
+                              transform: `rotate(${deg}deg) translateY(${transY}px)`,
+                              zIndex: index
+                            }}
+                          >
+                            <DraggableCardWrapper card={card} disabled={!hasPriority}>
+                              <CardComponent
+                                card={card}
+                                viewMode="normal"
+                                onDragStart={() => { }}
+                                onDragEnd={() => { }}
+                                onClick={() => setInspectedCard(card)}
+                                onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                style={{ transformOrigin: 'bottom center' }}
+                                onMouseEnter={() => setHoveredCard(card)}
+                                onMouseLeave={() => setHoveredCard(null)}
+                              />
+                            </DraggableCardWrapper>
+                          </div>
+                        );
+                      })}
+
+                      {/* Right Navigation Arrow */}
+                      {myHand.length > VISIBLE_HAND_COUNT && (
+                        <button
+                          className={`absolute right-0 top-1/2 -translate-y-1/2 z-50 p-2 bg-slate-900/80 hover:bg-slate-700 border border-slate-600 rounded-full text-white transition-all ${effectiveOffset >= maxOffset ? 'opacity-30 cursor-not-allowed' : 'opacity-100 shadow-lg scale-110'}`}
+                          onClick={() => setHandScrollOffset(prev => Math.min(maxOffset, prev + 1))}
+                          disabled={effectiveOffset >= maxOffset}
+                          style={{ right: '10px' }}
+                        >
+                          <ChevronRight className="w-6 h-6" />
+                        </button>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </DroppableZone>
             </div>
 
