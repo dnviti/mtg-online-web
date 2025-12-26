@@ -108,7 +108,7 @@ const LAND_DEFAULTS: Record<string, { name: string, set: string, id: string, ima
 };
 
 // Universal Wrapper handling both Pool Cards (Move) and Land Sources (Copy/Ghost)
-const UniversalCardWrapper = React.memo(({ children, card, source, disabled }: any) => {
+const UniversalCardWrapper = React.memo(({ children, card, source, disabled, mode }: any) => {
   const isLand = card.isLandSource;
   const dndId = isLand ? `land-source-${card.name}` : card.id;
   const dndData = useMemo(() => isLand ? { card, type: 'land' } : { card, source }, [card, source, isLand]);
@@ -131,7 +131,7 @@ const UniversalCardWrapper = React.memo(({ children, card, source, disabled }: a
     </div>
   );
 }, (prev, next) => {
-  return prev.card?.id === next.card?.id && prev.disabled === next.disabled && prev.source === next.source;
+  return prev.card?.id === next.card?.id && prev.disabled === next.disabled && prev.source === next.source && prev.mode === next.mode;
 });
 
 // Droppable Zone
@@ -263,7 +263,7 @@ const CardsDisplay: React.FC<{
     return (
       <div className="flex flex-col gap-1 w-full">
         {sorted.map(c => (
-          <UniversalCardWrapper key={c.id || c.name} card={c} source={source}>
+          <UniversalCardWrapper key={c.id || c.name} card={c} source={source} mode="list">
             <ListItem card={c} onClick={() => onCardClick(c)} onHover={onHover} />
           </UniversalCardWrapper>
         ))}
@@ -289,7 +289,7 @@ const CardsDisplay: React.FC<{
           groupBy={groupBy}
           useArtCrop={cardWidth < FULL_ART_THRESHOLD}
           renderWrapper={(card, children) => (
-            <UniversalCardWrapper key={card.id || card.name} card={card} source={source}>
+            <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="stack">
               {children}
             </UniversalCardWrapper>
           )}
@@ -311,7 +311,7 @@ const CardsDisplay: React.FC<{
         const isFoil = card.finish === 'foil';
 
         return (
-          <UniversalCardWrapper key={card.id || card.name} card={card} source={source}>
+          <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="grid">
             <DeckCardItem
               card={card}
               useArtCrop={useArtCrop}
