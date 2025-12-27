@@ -12,11 +12,19 @@ interface VisualDeckEditorProps {
     onCancel: () => void;
 }
 
+import { DeckMetadataModal } from '../draft/DeckMetadataModal';
+import { Pencil } from 'lucide-react';
+
 export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck, initialName, initialFormat, onSave, onCancel }) => {
     const { saveDeck, updateDeck, user } = useUser();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
     const [basicLands, setBasicLands] = useState<any[]>([]);
+
+    // Metadata State
+    const [deckName, setDeckName] = useState(existingDeck?.name || initialName || 'New Deck');
+    const [deckFormat, setDeckFormat] = useState(existingDeck?.format || initialFormat || 'Standard');
+    const [isMetadataModalOpen, setIsMetadataModalOpen] = useState(false);
 
     React.useEffect(() => {
         // Fetch fallback lands (J25) for constructed mode
@@ -37,20 +45,9 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
     // Initial parsing of deck cards
     const initialDeck = React.useMemo(() => {
         if (!existingDeck) return [];
-        // Transform SavedDeck cards (which might be minimal) to full objects if possible
-        // The SavedDeck stores `cards` as parsed JSON.
-        // Assuming the structure matches loosely what DeckBuilderView expects or we map it.
-        // DeckBuilderView expects DraftCard-like structure.
         return existingDeck.cards.map(c => ({
             ...c,
-            // Ensure ID is unique enough for the view
             id: c.id || `card-${Math.random().toString(36)}`,
-            // Ensure Image properties exist. If they are missing in DB, we handled it?
-            // Usually DB stores full object or at least necessary parts.
-            // If they are just scryfallIds, we might have issue displaying them without fetching.
-            // But checking UserManager.ts, it stores "JSON.stringify(cards)".
-            // If "cards" comes from DeckBuilderView submit, it has everything.
-            // If it comes from Text Import, it has parsed data.
         }));
     }, [existingDeck]);
 
@@ -59,24 +56,17 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
         setLoading(true);
 
         try {
-            const deckName = existingDeck?.name || initialName || `${user.username}'s Deck`;
-            const format = existingDeck?.format || initialFormat || 'Standard';
-
-            // Clean up cards for saving (remove temporary specific view IDs if needed, but for now exact state is fine)
-            // Actually DeckBuilderView assigns ephemeral IDs like `land-Island-...`.
-            // We can keep them to preserve exact instances.
-
             if (existingDeck) {
                 await updateDeck(existingDeck.id, {
                     name: deckName,
                     cards: deckCards
-                }, format);
+                }, deckFormat);
                 showToast('Deck updated successfully', 'success');
             } else {
                 await saveDeck({
                     name: deckName,
                     cards: deckCards
-                }, format);
+                }, deckFormat);
                 showToast('Deck saved successfully', 'success');
             }
             onSave();
@@ -93,7 +83,21 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
             <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
                 {/* Header Overlay for Cancel/Context */}
                 <div className="bg-slate-900 border-b border-slate-800 p-2 flex justify-between items-center shrink-0">
-                    <h2 className="text-white font-bold ml-4">{existingDeck?.name || initialName || 'New Deck'}</h2>
+                    <div className="flex items-center gap-2 ml-4">
+                        <button
+                            onClick={() => setIsMetadataModalOpen(true)}
+                            className="flex items-center gap-2 hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors group"
+                            title="Edit Deck Name & Format"
+                        >
+                            <div className="flex flex-col items-start">
+                                <h2 className="text-white font-bold text-lg group-hover:text-emerald-400 transition-colors flex items-center gap-2">
+                                    {deckName}
+                                    <Pencil className="w-4 h-4 text-slate-500 group-hover:text-emerald-500 opacity-0 group-hover:opacity-100 transition-all" />
+                                </h2>
+                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{deckFormat}</span>
+                            </div>
+                        </button>
+                    </div>
                     <button onClick={onCancel} className="text-slate-400 hover:text-white px-4 py-2">
                         Close
                     </button>
@@ -107,11 +111,24 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
                         initialDeck={initialDeck}
                         availableBasicLands={basicLands}
                         isConstructed={true}
-                        format={existingDeck?.format || initialFormat || 'Standard'}
+                        format={deckFormat}
+                        deckName={deckName}
                         onSubmit={handleDeckSubmit}
                         submitLabel={loading ? "Saving..." : "Save Changes"}
                     />
                 </div>
+
+                <DeckMetadataModal
+                    isOpen={isMetadataModalOpen}
+                    onClose={() => setIsMetadataModalOpen(false)}
+                    initialName={deckName}
+                    initialFormat={deckFormat}
+                    isConstructed={true}
+                    onSave={(name, fmt) => {
+                        setDeckName(name);
+                        setDeckFormat(fmt);
+                    }}
+                />
             </div>
         </GameLogProvider>
     );

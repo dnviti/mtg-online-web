@@ -23,7 +23,8 @@ interface DeckBuilderViewProps {
   availableBasicLands?: any[]; // For constructed/fallback
   isConstructed?: boolean;
   format?: string;
-  onSubmit?: (deck: any[]) => void;
+  deckName?: string; // NEW PROP
+  onSubmit?: (deck: any[], metadata?: { name: string, format: string }) => void;
   submitLabel?: string;
 }
 
@@ -537,16 +538,24 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   initialDeck = [],
   availableBasicLands = [],
   onSubmit,
-  submitLabel,
   isConstructed = false,
-  format = 'Standard'
+  submitLabel,
+  format: initialFormat = 'Standard',
+  deckName: initialDeckName = 'New Deck'
 }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");
   /* --- Hooks --- */
   // const { showToast } = useToast();
   const { confirm } = useConfirm();
-  // const [deckName, setDeckName] = useState('New Deck');
+
+  // -- Metadata State --
+  const [currentFormat, setCurrentFormat] = useState(initialFormat);
+  // Sync format prop changes (Controlled by Parent)
+  React.useEffect(() => {
+    setCurrentFormat(initialFormat);
+  }, [initialFormat]);
+
   const [layout, setLayout] = useState<'vertical' | 'horizontal'>(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('deck_layout') : null;
     return (saved as 'vertical' | 'horizontal') || 'vertical';
@@ -759,9 +768,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
   // -- Commander Logic --
   const isCommanderFormat = useMemo(() => {
-    const f = format.toLowerCase();
+    const f = currentFormat.toLowerCase();
     return f.includes('commander') || f.includes('edh') || f.includes('brawl');
-  }, [format]);
+  }, [currentFormat]);
 
   const commanders = useMemo(() => deck.filter(c => c.isCommander), [deck]);
   const mainDeck = useMemo(() => deck.filter(c => !c.isCommander), [deck]);
@@ -771,8 +780,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     // Pass mainDeck + commanders as full deck, assuming validateDeck handles logic based on size
     // Or if validateDeck expects 'deck' to be total cards including commander?
     // Based on my implementation of validateDeck, it counts total cards.
-    return validateDeck(deck, [], format);
-  }, [deck, format]);
+    return validateDeck(deck, [], currentFormat);
+  }, [deck, currentFormat]);
 
   const toggleCommander = (card: any) => {
     if (card.isCommander) {
@@ -1478,19 +1487,20 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
               </button>
             )}
 
+
             <div className="hidden sm:flex items-center gap-2 text-amber-400 font-mono text-sm font-bold bg-slate-900 px-3 py-1.5 rounded border border-amber-500/30">
               <Clock className="w-4 h-4" /> {formatTime(timer)}
             </div>
-            {/* Validation Indicator */}
-            <div className={`hidden md:flex flex-col items-end mr-2 text-[10px] sm:text-xs leading-tight ${validationResult.isValid ? 'text-emerald-400' : 'text-red-400'}`}>
+
+            <div className="flex bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
               <div className="flex items-center gap-1 font-bold uppercase tracking-wider">
                 {validationResult.isValid ? (
                   <>
-                    <CheckCircle className="w-3 h-3" /> Deck Valid ({format})
+                    <CheckCircle className="w-3 h-3" /> Deck Valid ({currentFormat})
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="w-3 h-3" /> Invalid Deck ({format})
+                    <AlertTriangle className="w-3 h-3" /> Invalid Deck ({currentFormat})
                   </>
                 )}
               </div>
