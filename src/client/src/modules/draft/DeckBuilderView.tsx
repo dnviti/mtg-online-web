@@ -388,6 +388,105 @@ const LandRow = React.memo(({ landSourceCards, addLandToDeck, setHoveredCard, la
   </div>
 ));
 
+interface SearchToolbarProps {
+  searchQuery: string;
+  setSearchQuery: (val: string) => void;
+  handleSearch: (e: React.FormEvent) => void;
+  setSearchResults: (val: any[]) => void;
+  searchViewMode: 'list' | 'grid' | 'stack';
+  setSearchViewMode: (mode: 'list' | 'grid' | 'stack') => void;
+  searchCardWidth: number;
+  setSearchCardWidth: (val: number) => void;
+  searchFilterCmc: number | null;
+  setSearchFilterCmc: (val: number | null) => void;
+  searchFilterSet: string;
+  setSearchFilterSet: (val: string) => void;
+  availableSets: string[];
+}
+
+const SearchToolbar = React.memo(({
+  searchQuery, setSearchQuery, handleSearch, setSearchResults,
+  searchViewMode, setSearchViewMode,
+  searchCardWidth, setSearchCardWidth,
+  searchFilterCmc, setSearchFilterCmc,
+  searchFilterSet, setSearchFilterSet,
+  availableSets
+}: SearchToolbarProps) => (
+  <div className="flex flex-col gap-2 p-2 bg-slate-900 border-b border-slate-700 sticky top-0 z-10 shrink-0">
+    {/* Search Input Row */}
+    <form onSubmit={handleSearch} className="flex gap-2">
+      <div className="relative flex-1">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search Scryfall..."
+          className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-xs text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+        />
+        <Search className="w-3 h-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
+      </div>
+      {searchQuery && (
+        <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
+      )}
+    </form>
+
+    {/* Tools Row */}
+    <div className="flex items-center justify-between gap-2">
+      {/* View Modes */}
+      <div className="flex bg-slate-800 rounded p-0.5 border border-slate-700 shrink-0">
+        <button onClick={() => setSearchViewMode('list')} className={`p-1.5 rounded ${searchViewMode === 'list' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="List View"><List className="w-3 h-3" /></button>
+        <button onClick={() => setSearchViewMode('grid')} className={`p-1.5 rounded ${searchViewMode === 'grid' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Grid View"><LayoutGrid className="w-3 h-3" /></button>
+        <button onClick={() => setSearchViewMode('stack')} className={`p-1.5 rounded ${searchViewMode === 'stack' ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-white'}`} title="Stack View"><Layers className="w-3 h-3" /></button>
+      </div>
+
+      {/* Slider */}
+      <div className="flex items-center gap-1.5 bg-slate-800 rounded px-2 border border-slate-700 h-7 flex-1 max-w-[140px]">
+        <div className="w-2 h-3 rounded border border-slate-500 bg-slate-700" title="Small" />
+        <input
+          type="range"
+          min={MIN_CARD_WIDTH}
+          max={MAX_CARD_WIDTH}
+          value={searchCardWidth}
+          onChange={(e) => setSearchCardWidth(parseInt(e.target.value))}
+          className="w-full accent-purple-500 cursor-pointer h-1 bg-slate-600 rounded appearance-none"
+        />
+        <div className="w-3 h-4 rounded border border-slate-500 bg-slate-700" title="Large" />
+      </div>
+    </div>
+
+    {/* Filters Row */}
+    <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar pt-1 border-t border-slate-800">
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[9px] font-bold text-slate-500 uppercase mr-1">CMC</span>
+        {[0, 1, 2, 3, 4, 5, 6, 7].map(n => (
+          <button
+            key={n}
+            onClick={() => setSearchFilterCmc(searchFilterCmc === n ? null : n)}
+            className={`w-5 h-5 flex items-center justify-center text-[10px] font-bold rounded border transition-colors ${searchFilterCmc === n ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+            title={`Cost: ${n}${n === 7 ? '+' : ''}`}
+          >
+            {n}{n === 7 ? '+' : ''}
+          </button>
+        ))}
+      </div>
+      <div className="w-px h-4 bg-slate-700 shrink-0 mx-1" />
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-[9px] font-bold text-slate-500 uppercase">Set</span>
+        <select
+          className="bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:ring-1 focus:ring-indigo-500 outline-none max-w-[100px]"
+          value={searchFilterSet}
+          onChange={e => setSearchFilterSet(e.target.value)}
+        >
+          <option value="">All Sets</option>
+          {availableSets.map(set => (
+            <option key={set} value={set}>{set.toUpperCase()}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  </div>
+));
+
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   // roomId,
   // currentPlayerId,
@@ -503,6 +602,43 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Derived unique sets for filter dropdown
+  const availableSets = useMemo(() => {
+    if (!searchResults.length) return [];
+    const sets = new Set(searchResults.map(c => c.set || c.setCode).filter(Boolean));
+    return Array.from(sets).sort();
+  }, [searchResults]);
+
+  // Search Toolbar State
+  const [searchViewMode, setSearchViewMode] = useState<'list' | 'grid' | 'stack'>('grid');
+  const [searchCardWidth, setSearchCardWidth] = useState(200); // Default larger for search
+  const [searchFilterCmc, setSearchFilterCmc] = useState<number | null>(null);
+  const [searchFilterSet, setSearchFilterSet] = useState('');
+
+  // Filter Search Results
+  const filteredSearchResults = useMemo(() => {
+    if (!searchResults.length) return [];
+    return searchResults.filter(c => {
+      // CMC
+      if (searchFilterCmc !== null) {
+        const val = Math.floor(c.cmc || 0);
+        if (searchFilterCmc === 7) {
+          if (val < 7) return false;
+        } else {
+          if (val !== searchFilterCmc) return false;
+        }
+      }
+      // Set
+      if (searchFilterSet.trim()) {
+        const query = searchFilterSet.toLowerCase();
+        const setCode = (c.set || '').toLowerCase();
+        const setName = (c.set_name || '').toLowerCase();
+        if (!setCode.includes(query) && !setName.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [searchResults, searchFilterCmc, searchFilterSet]);
 
   // Sync initialDeck prop changes
   useEffect(() => {
@@ -1004,6 +1140,8 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     );
   };
 
+
+
   // --- Resize Handlers ---
   // --- Resize Handlers ---
   const handleResizeStart = (type: 'sidebar' | 'library', e: React.MouseEvent | React.TouchEvent) => {
@@ -1305,27 +1443,22 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   <span>{isConstructed ? 'Cards & Search' : `Card Pool (${pool.length})`}</span>
                 </div>
 
-                {/* Constructed Search Bar */}
-                {isConstructed && (
-                  <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10 shrink-0">
-                    <form onSubmit={handleSearch} className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search cards..."
-                          className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                        />
-                        <Search className="w-4 h-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                      </div>
-                      {/* Optional: Filter buttons or clear */}
-                      {searchQuery && (
-                        <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
-                      )}
-                    </form>
-                  </div>
-                )}
+                {/* Constructed Search Toolbar */}
+                {isConstructed && <SearchToolbar
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  handleSearch={handleSearch}
+                  setSearchResults={setSearchResults}
+                  searchViewMode={searchViewMode}
+                  setSearchViewMode={setSearchViewMode}
+                  searchCardWidth={searchCardWidth}
+                  setSearchCardWidth={setSearchCardWidth}
+                  searchFilterCmc={searchFilterCmc}
+                  setSearchFilterCmc={setSearchFilterCmc}
+                  searchFilterSet={searchFilterSet}
+                  setSearchFilterSet={setSearchFilterSet}
+                  availableSets={availableSets}
+                />}
 
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar flex flex-col shadow-inner">
                   {/* Land Station */}
@@ -1342,15 +1475,17 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                     isSearching ? (
                       <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
                     ) : (
-                      <CardsDisplay
-                        cards={searchResults}
-                        viewMode="list"
-                        cardWidth={localCardWidth}
-                        onCardClick={handleConstructedAdd}
-                        onHover={setHoveredCard}
-                        emptyMessage="No results found."
-                        source="pool"
-                      />
+                      <div style={{ '--card-width': `${searchCardWidth}px` } as React.CSSProperties} className="h-full">
+                        <CardsDisplay
+                          cards={filteredSearchResults}
+                          viewMode={searchViewMode}
+                          cardWidth={searchCardWidth}
+                          onCardClick={handleConstructedAdd}
+                          onHover={setHoveredCard}
+                          emptyMessage={filteredSearchResults.length === 0 && searchResults.length > 0 ? "No cards match filters." : "No results found."}
+                          source="pool"
+                        />
+                      </div>
                     )
                   ) : (
                     <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage={isConstructed ? "Search to add cards, or click lands above." : "Pool Empty"} source="pool" groupBy={groupBy} />
@@ -1417,26 +1552,22 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                     <span>{isConstructed ? 'Cards & Search' : `Card Pool (${pool.length})`}</span>
                   </div>
 
-                  {/* Constructed Search Bar */}
-                  {isConstructed && (
-                    <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10 shrink-0">
-                      <form onSubmit={handleSearch} className="flex gap-2">
-                        <div className="relative flex-1">
-                          <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search cards..."
-                            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                          />
-                          <Search className="w-4 h-4 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                        </div>
-                        {searchQuery && (
-                          <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
-                        )}
-                      </form>
-                    </div>
-                  )}
+                  {/* Constructed Search Toolbar */}
+                  {isConstructed && <SearchToolbar
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    handleSearch={handleSearch}
+                    setSearchResults={setSearchResults}
+                    searchViewMode={searchViewMode}
+                    setSearchViewMode={setSearchViewMode}
+                    searchCardWidth={searchCardWidth}
+                    setSearchCardWidth={setSearchCardWidth}
+                    searchFilterCmc={searchFilterCmc}
+                    setSearchFilterCmc={setSearchFilterCmc}
+                    searchFilterSet={searchFilterSet}
+                    setSearchFilterSet={setSearchFilterSet}
+                    availableSets={availableSets}
+                  />}
 
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
                     {/* Land Station */}
@@ -1451,15 +1582,17 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                       isSearching ? (
                         <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
                       ) : (
-                        <CardsDisplay
-                          cards={searchResults}
-                          viewMode="list"
-                          cardWidth={localCardWidth}
-                          onCardClick={handleConstructedAdd}
-                          onHover={setHoveredCard}
-                          emptyMessage="No results found."
-                          source="pool"
-                        />
+                        <div style={{ '--card-width': `${searchCardWidth}px` } as React.CSSProperties} className="h-full">
+                          <CardsDisplay
+                            cards={filteredSearchResults}
+                            viewMode={searchViewMode}
+                            cardWidth={searchCardWidth}
+                            onCardClick={handleConstructedAdd}
+                            onHover={setHoveredCard}
+                            emptyMessage={filteredSearchResults.length === 0 && searchResults.length > 0 ? "No cards match filters." : "No results found."}
+                            source="pool"
+                          />
+                        </div>
                       )
                     ) : (
                       <CardsDisplay cards={pool} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={addToDeck} onHover={setHoveredCard} emptyMessage={isConstructed ? "Search to add cards." : "Pool Empty"} source="pool" groupBy={groupBy} />
