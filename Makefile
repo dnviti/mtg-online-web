@@ -1,4 +1,4 @@
-# MTG Draft Maker - Node.js Monolith
+# MTGate - Node.js Monolith
 
 # Variables
 PROJECT_DIR := src
@@ -8,7 +8,7 @@ PROJECT_DIR := src
 # Default target
 help:
 	@echo "======================================================================"
-	@echo "  MTG Draft Maker - Node.js Monolith"
+	@echo "  MTGate - Node.js Monolith"
 	@echo "======================================================================"
 	@echo "  make install     : Install dependencies"
 	@echo "  make dev         : Run both Server and Client (Development)"

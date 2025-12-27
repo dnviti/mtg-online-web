@@ -1,7 +1,7 @@
 {
-  "name": "mtg-draft-maker",
+  "name": "mtgate",
   "version": "1.0.0",
-  "description": "MTG Draft Maker - Monolith Node.js",
+  "description": "MTGate - Monolith Node.js",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",

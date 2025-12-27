@@ -2,9 +2,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "mtg-draft-maker.fullname" . }}
+  name: {{ include "mtgate.fullname" . }}
   labels:
-    {{- include "mtg-draft-maker.labels" . | nindent 4 }}
+    {{- include "mtgate.labels" . | nindent 4 }}
 spec:
   accessModes:
     - {{ .Values.persistence.accessMode | quote }}

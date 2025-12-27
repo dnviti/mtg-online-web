@@ -1,6 +1,6 @@
 import { ScryfallCard } from '../services/ScryfallService';
 
-const DB_NAME = 'mtg-draft-maker';
+const DB_NAME = 'mtgate';
 const STORE_NAME = 'cards';
 const DB_VERSION = 1;
 

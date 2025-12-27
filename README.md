@@ -1,4 +1,4 @@
-# MTG Draft Maker
+# MTGate
 
 A monolithic Node.js application designed to simulate Magic: The Gathering drafts with multiplayer support. This project aims to bridge the gap between utilitarian management tools and immersive, game-like user experiences for drafting.
 

@@ -13,8 +13,8 @@ export default defineConfig({
         enabled: true
       },
       manifest: {
-        name: 'MTG Draft Maker',
-        short_name: 'MTG Draft',
+        name: 'MTGate',
+        short_name: 'MTGate',
         description: 'Multiplayer Magic: The Gathering Draft Simulator',
         theme_color: '#0f172a',
         background_color: '#0f172a',
