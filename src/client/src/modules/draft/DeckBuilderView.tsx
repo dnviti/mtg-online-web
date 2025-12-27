@@ -10,8 +10,9 @@ import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { AutoDeckBuilder } from '../../utils/AutoDeckBuilder';
-import { Wand2 } from 'lucide-react'; // Import Wand icon
+import { Wand2, AlertTriangle, CheckCircle } from 'lucide-react'; // Import Wand icon
 import { useConfirm } from '../../components/ConfirmDialog';
+import { validateDeck } from '../../utils/deckValidation';
 
 
 interface DeckBuilderViewProps {
@@ -765,6 +766,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   const commanders = useMemo(() => deck.filter(c => c.isCommander), [deck]);
   const mainDeck = useMemo(() => deck.filter(c => !c.isCommander), [deck]);
 
+  // Validation
+  const validationResult = useMemo(() => {
+    // Pass mainDeck + commanders as full deck, assuming validateDeck handles logic based on size
+    // Or if validateDeck expects 'deck' to be total cards including commander?
+    // Based on my implementation of validateDeck, it counts total cards.
+    return validateDeck(deck, [], format);
+  }, [deck, format]);
+
   const toggleCommander = (card: any) => {
     if (card.isCommander) {
       // Demote
@@ -1472,9 +1481,31 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
             <div className="hidden sm:flex items-center gap-2 text-amber-400 font-mono text-sm font-bold bg-slate-900 px-3 py-1.5 rounded border border-amber-500/30">
               <Clock className="w-4 h-4" /> {formatTime(timer)}
             </div>
+            {/* Validation Indicator */}
+            <div className={`hidden md:flex flex-col items-end mr-2 text-[10px] sm:text-xs leading-tight ${validationResult.isValid ? 'text-emerald-400' : 'text-red-400'}`}>
+              <div className="flex items-center gap-1 font-bold uppercase tracking-wider">
+                {validationResult.isValid ? (
+                  <>
+                    <CheckCircle className="w-3 h-3" /> Deck Valid ({format})
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3 h-3" /> Invalid Deck ({format})
+                  </>
+                )}
+              </div>
+              {!validationResult.isValid && (
+                <span className="opacity-70 text-[9px]">{validationResult.errors[0]}</span>
+              )}
+            </div>
+
             <button
               onClick={submitDeck}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105 text-sm"
+              className={`px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform hover:scale-105 text-sm ${validationResult.isValid
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : 'bg-slate-700 text-slate-400 hover:bg-slate-600 border border-red-500/30'
+                }`}
+              title={validationResult.isValid ? 'Submit Deck' : validationResult.errors.join('\n')}
             >
               <Save className="w-4 h-4" /> <span className="hidden sm:inline">{submitLabel || 'Submit Deck'}</span><span className="sm:hidden">Save</span>
             </button>
