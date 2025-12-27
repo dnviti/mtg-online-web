@@ -128,7 +128,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
                 // To show a "strip" of say 35px at the top of each card.
                 const isLast = index === catCards.length - 1;
                 // Use prop if provided, otherwise fallback to width check (legacy/default behavior)
-                const shouldCrop = forceArtCrop !== undefined ? forceArtCrop : (cardWidth < 130);
+                const shouldCrop = forceArtCrop !== undefined ? forceArtCrop : (cardWidth < 100);
                 const useArtCrop = shouldCrop && !!card.imageArtCrop;
                 const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 

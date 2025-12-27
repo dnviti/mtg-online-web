@@ -28,7 +28,7 @@ interface DeckBuilderViewProps {
 
 const MIN_CARD_WIDTH = 60;
 const MAX_CARD_WIDTH = 200;
-const FULL_ART_THRESHOLD = (MIN_CARD_WIDTH + MAX_CARD_WIDTH) / 2; // 130
+const FULL_ART_THRESHOLD = 100; // Absolute value as requested
 
 const ManaCurve = React.memo(({ deck }: { deck: any[] }) => {
   const counts = new Array(8).fill(0);
@@ -200,12 +200,15 @@ const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHove
   const displayImage = useArtCrop ? card.imageArtCrop : card.image;
   const fallbackImage = useArtCrop ? card.remoteArtCrop : card.remoteImage;
 
-  const [imgSrc, setImgSrc] = useState(displayImage);
+  // Use state ONLY for error handling. Primary source is derived directly from props for 0-latency switching.
+  const [hasError, setHasError] = useState(false);
 
-  // Sync prop changes
+  // Reset error when the intended image changes
   useEffect(() => {
-    setImgSrc(displayImage);
+    setHasError(false);
   }, [displayImage]);
+
+  const activeSrc = hasError ? fallbackImage : displayImage;
 
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
     if (window.matchMedia('(pointer: coarse)').matches) {
@@ -228,24 +231,18 @@ const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHove
       <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
         {isFoil && <FoilOverlay />}
         {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
-        {imgSrc ? (
+        {activeSrc ? (
           <img
-            src={imgSrc}
+            key={useArtCrop ? 'crop' : 'full'} // Force remount of img tag on mode switch to prevent ghosting/stretching
+            src={activeSrc}
             alt={card.name}
             className="w-full h-full object-cover"
             draggable={false}
             onError={(e) => {
-              // Prevent infinite loop if fallback also fails
-              if (fallbackImage && imgSrc !== fallbackImage) {
-                setImgSrc(fallbackImage);
+              if (!hasError && fallbackImage) {
+                setHasError(true);
               } else {
-                e.currentTarget.style.display = 'none'; // Hide broken image
-                // Show text fallback?
-                // We could set imgSrc to null to show the text fallback div below, 
-                // but react state update inside onError is tricky.
-                // Just hiding it reveals background which is empty. 
-                // Better to setImgSrc(null) to render the else block.
-                setImgSrc(null);
+                e.currentTarget.style.display = 'none';
               }
             }}
           />
