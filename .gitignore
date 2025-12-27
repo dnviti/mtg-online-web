@@ -141,4 +141,5 @@ vite.config.ts.timestamp-*
 .vite/
 
 src/server/public/cards/*
-src/server-data
+src/server-data/
+server-data/
