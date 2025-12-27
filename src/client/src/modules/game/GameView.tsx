@@ -792,7 +792,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={setIsSidebarCollapsed}
           onResizeStart={handleResizeStart}
-          showLog={true}
+          showLog={false}
         />
 
         {/* Main Game Area */}

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText } from 'lucide-react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { useGameToast, GameToastProvider } from '../../components/GameToast';
 import { GameLogProvider, useGameLog } from '../../contexts/GameLogContext'; // Import Log Provider and Hook
 import { GameView } from '../game/GameView';
+import { GameLogPanel } from '../../components/GameLogPanel';
 import { DraftView } from '../draft/DraftView';
 import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
@@ -60,7 +61,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
   }>({ title: '', message: '', type: 'info' });
 
   // Side Panel State
-  const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | null>(null);
+  const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | 'log' | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     return localStorage.getItem('notifications_enabled') !== 'false';
   });
@@ -521,6 +522,19 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
             Chat
           </span>
         </button>
+
+        <button
+          onClick={() => setActivePanel(activePanel === 'log' ? null : 'log')}
+          className={`p - 3 rounded - xl transition - all duration - 200 group relative ${activePanel === 'log' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50' : 'text-slate-500 hover:text-emerald-400 hover:bg-slate-800'} `}
+          title="Game Log"
+        >
+          <div className="relative">
+            <ScrollText className="w-6 h-6" />
+          </div>
+          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-bold px-2 py-1 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none ring-1 ring-white/10">
+            Game Log
+          </span>
+        </button>
       </div>
 
       {/* Floating Panel (Desktop) */}
@@ -530,7 +544,9 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
           {/* Header */}
           <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              {activePanel === 'lobby' ? <><Users className="w-5 h-5 text-purple-400" /> Lobby</> : <><MessageSquare className="w-5 h-5 text-blue-400" /> Chat</>}
+              {activePanel === 'lobby' && <><Users className="w-5 h-5 text-purple-400" /> Lobby</>}
+              {activePanel === 'chat' && <><MessageSquare className="w-5 h-5 text-blue-400" /> Chat</>}
+              {activePanel === 'log' && <><ScrollText className="w-5 h-5 text-emerald-400" /> Game Log</>}
             </h3>
             <button onClick={() => setActivePanel(null)} className="p-1 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-colors">
               <X className="w-5 h-5" />
@@ -656,6 +672,13 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
                   </button>
                 </form>
               </div>
+            </div>
+          )}
+
+          {/* Game Log Content */}
+          {activePanel === 'log' && (
+            <div className="flex-1 flex flex-col min-h-0 bg-slate-950/50">
+              <GameLogPanel className="h-full border-t-0 bg-transparent" maxHeight="100%" />
             </div>
           )}
 
