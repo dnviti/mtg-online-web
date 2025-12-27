@@ -10,11 +10,12 @@ import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { AutoDeckBuilder } from '../../utils/AutoDeckBuilder';
-import { Wand2, AlertTriangle, CheckCircle } from 'lucide-react'; // Import Wand icon
+import { Wand2 } from 'lucide-react'; // Import Wand icon
 import { useConfirm } from '../../components/ConfirmDialog';
 import { validateDeck } from '../../utils/deckValidation';
 
 
+import { DeckValidationDisplay } from './DeckValidationDisplay';
 interface DeckBuilderViewProps {
   roomId: string;
   currentPlayerId: string;
@@ -1492,22 +1493,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
               <Clock className="w-4 h-4" /> {formatTime(timer)}
             </div>
 
-            <div className="flex bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-              <div className="flex items-center gap-1 font-bold uppercase tracking-wider">
-                {validationResult.isValid ? (
-                  <>
-                    <CheckCircle className="w-3 h-3" /> Deck Valid ({currentFormat})
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="w-3 h-3" /> Invalid Deck ({currentFormat})
-                  </>
-                )}
-              </div>
-              {!validationResult.isValid && (
-                <span className="opacity-70 text-[9px]">{validationResult.errors[0]}</span>
-              )}
-            </div>
+            <DeckValidationDisplay validationResult={validationResult} format={currentFormat} />
 
             <button
               onClick={submitDeck}
