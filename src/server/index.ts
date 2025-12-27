@@ -264,18 +264,63 @@ app.get('/api/cards/search', async (req: Request, res: Response) => {
     const query = req.query.q as string;
     if (!query) return res.json([]);
 
-    // Simple proxy to Scryfall search with unique=prints
-    // We do NOT cache everything here, only when user picks.
-    // However, user requirement: "search... to then be able to add to the deck... cache the card whenever it is picked"
-    // So this search just returns results.
-    const resp = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=prints`);
-    if (!resp.ok) {
-      // logic for 404
-      if (resp.status === 404) return res.json([]);
-      throw new Error(`Scryfall error: ${resp.statusText}`);
+    // 1. Local Search
+    const localResults = scryfallService.searchLocal(query);
+    console.log(`[API] Search '${query}': Found ${localResults.length} local matches.`);
+
+    // 2. API Search
+    let apiResults: any[] = [];
+    try {
+      const resp = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=prints`);
+      if (resp.ok) {
+        const data = await resp.json();
+        apiResults = data.data || [];
+
+        // 3. Auto-Cache API Results (Metadata, Images, Sets)
+        // User Requirement: "automatically cache cards upon scryfall search... in all their assets (image full, image crop, metadata and set metadata)"
+        if (apiResults.length > 0) {
+          // We float this promise so we don't delay the UI significantly.
+          (async () => {
+            try {
+              // A. Metadata (JSON)
+              await scryfallService.cacheCards(apiResults);
+
+              // B. Images (Full & Crop)
+              console.log(`[API] Triggering background image cache for ${apiResults.length} search results...`);
+              await cardService.cacheImages(apiResults);
+
+              // C. Set Metadata
+              const setCodes = apiResults.map(c => c.set).filter(Boolean);
+              if (setCodes.length > 0) {
+                await scryfallService.cacheSetsMetadata(setCodes);
+              }
+            } catch (err) {
+              console.error("Auto-cache failed", err);
+            }
+          })();
+        }
+      } else if (resp.status !== 404) {
+        console.warn(`[API] Scryfall search failed: ${resp.statusText}`);
+      }
+    } catch (e) {
+      console.warn(`[API] Scryfall search offline/error`, e);
     }
-    const data = await resp.json();
-    res.json(data.data || []);
+
+    // 4. Merge & Prioritize
+    // We prioritize Local (because we might have custom overrides or it's faster/guaranteed)
+    // But we want to show everything.
+    const mergedMap = new Map();
+
+    // Add API results first
+    apiResults.forEach(c => mergedMap.set(c.id, c));
+
+    // Overwrite/Add Local results (Prioritize)
+    localResults.forEach(c => mergedMap.set(c.id, c));
+
+    const finalResults = Array.from(mergedMap.values());
+    console.log(`[API] Search '${query}': Returning ${finalResults.length} total results.`);
+
+    res.json(finalResults);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

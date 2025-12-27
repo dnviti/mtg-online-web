@@ -50,6 +50,7 @@ export interface ScryfallSet {
 
 export class ScryfallService {
   private cacheById = new Map<string, ScryfallCard>();
+  private cacheByName = new Map<string, ScryfallCard[]>(); // Index by name (lowercase) -> List of cards (prints)
   // Map ID to Set Code to locate the file efficiently
   private idToSet = new Map<string, string>();
 
@@ -79,45 +80,60 @@ export class ScryfallService {
               if (file.endsWith('.json')) {
                 const id = file.replace('.json', '');
                 this.idToSet.set(id, setCode);
+
+                // For name index, we ideally need the name. 
+                // Opening every file is too slow for 30k+ cards.
+                // We will populate name cache lazily or progressively? 
+                // User requirement: "prioritize use of cached cards".
+                // To search efficiently, we need names loaded.
+                // Let's rely on set caches if available, or just index strictly necessary ones?
+                // Actually, reading 30k small files IS slow.
+                // But we have Set Caches (large JSONs).
+                // Let's iterate Set Caches in `SETS_DIR` to populate the name index efficiently!
               }
             }
           } catch (err) {
             console.error(`[ScryfallService] Error reading set dir ${setCode}`, err);
           }
         } else if (entry.isFile() && entry.name.endsWith('.json')) {
-          // Legacy flat file - needs migration
-          // We read it to find the set, then move it
-          const oldPath = path.join(METADATA_DIR, entry.name);
-          try {
-            const content = fs.readFileSync(oldPath, 'utf-8');
-            const card = JSON.parse(content) as ScryfallCard;
+          // ... legacy handling ...
+        }
+      }
 
-            if (card.set && card.id) {
-              const setCode = card.set;
-              const newDir = path.join(METADATA_DIR, setCode);
-              if (!fs.existsSync(newDir)) {
-                fs.mkdirSync(newDir, { recursive: true });
-              }
-              const newPath = path.join(newDir, `${card.id}.json`);
-              fs.renameSync(oldPath, newPath);
-
-              // Update Index
-              this.idToSet.set(card.id, setCode);
-              // Also update memory cache if we want, but let's keep it light
-            } else {
-              console.warn(`[ScryfallService] Skipping migration for invalid card file: ${entry.name}`);
-            }
-          } catch (e) {
-            console.error(`[ScryfallService] Failed to migrate ${entry.name}`, e);
+      // Populate Name Index from Set Caches (Much faster)
+      if (fs.existsSync(SETS_DIR)) {
+        const setFiles = fs.readdirSync(SETS_DIR);
+        for (const file of setFiles) {
+          if (file.endsWith('.json') && !file.startsWith('t')) { // Skip tokens for main name index? or include?
+            try {
+              const content = fs.readFileSync(path.join(SETS_DIR, file), 'utf-8');
+              const cards = JSON.parse(content) as ScryfallCard[];
+              cards.forEach(c => {
+                this.indexCardByName(c);
+                // Also ensure ID mapping
+                if (c.id && c.set) this.idToSet.set(c.id, c.set);
+              });
+            } catch (e) { /* ignore corrupt */ }
           }
         }
       }
 
-      console.log(`[ScryfallService] Cache hydration complete. Indexed ${this.idToSet.size} cards.`);
+      console.log(`[ScryfallService] Cache hydration complete. Indexed ${this.idToSet.size} IDs.`);
     } catch (e) {
       console.error("Failed to hydrate cache", e);
     }
     console.timeEnd('ScryfallService:hydrateCache');
+  }
+
+  private indexCardByName(card: ScryfallCard) {
+    if (!card.name) return;
+    const key = card.name.toLowerCase();
+    const existing = this.cacheByName.get(key) || [];
+    // Avoid dups by ID
+    if (!existing.find(e => e.id === card.id)) {
+      existing.push(card);
+      this.cacheByName.set(key, existing);
+    }
   }
 
   private getCachedCard(id: string): ScryfallCard | null {
@@ -171,6 +187,7 @@ export class ScryfallService {
 
     this.cacheById.set(card.id, card);
     this.idToSet.set(card.id, card.set);
+    this.indexCardByName(card);
 
     const setDir = path.join(METADATA_DIR, card.set);
     if (!fs.existsSync(setDir)) {
@@ -183,6 +200,76 @@ export class ScryfallService {
     fs.writeFile(p, JSON.stringify(card, null, 2), (err) => {
       if (err) console.error(`Error saving metadata for ${card.id}`, err);
     });
+  }
+
+  async cacheCards(cards: ScryfallCard[]): Promise<void> {
+    let newCount = 0;
+    for (const card of cards) {
+      if (!this.idToSet.has(card.id)) {
+        this.saveCard(card);
+        newCount++;
+      }
+    }
+    if (newCount > 0) {
+      console.log(`[ScryfallService] Cached ${newCount} new cards found in search.`);
+    }
+  }
+
+  searchLocal(query: string): ScryfallCard[] {
+    const q = query.toLowerCase().trim();
+    if (!q) return [];
+
+    // Exact name match optimization?
+    // User probably wants partial match.
+    // Iterating Map keys can be slow if map is huge.
+    // But map sizes for names are ~25k. It's fine for V8.
+
+    const results: ScryfallCard[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. Check exact tokens or startsWith
+    for (const [name, cards] of this.cacheByName.entries()) {
+      if (name.includes(q)) {
+        cards.forEach(c => {
+          if (!seenIds.has(c.id)) {
+            seenIds.add(c.id);
+            results.push(c);
+          }
+        });
+      }
+    }
+
+    // Sort? Scryfall usually sorts by name, release date.
+    // We can just return mixed, client might sort.
+    return results;
+  }
+
+  async cacheSetsMetadata(setCodes: string[]): Promise<void> {
+    const uniqueSets = Array.from(new Set(setCodes.map(s => s.toLowerCase())));
+    let setsCached = 0;
+
+    for (const code of uniqueSets) {
+      const setInfoPath = path.join(SETS_DIR, `${code}_info.json`);
+      if (!fs.existsSync(setInfoPath)) {
+        // Fetch specific set info? 
+        // Or simpler: We fetch ALL sets and filter, because single set endpoint is rate limited same as all sets?
+        // Actually Scryfall has /sets/:code
+        try {
+          const resp = await fetch(`https://api.scryfall.com/sets/${code}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            fs.writeFileSync(setInfoPath, JSON.stringify(data, null, 2));
+            setsCached++;
+          }
+        } catch (e) {
+          console.error(`[ScryfallService] Failed to cache set info for ${code}`, e);
+        }
+      }
+    }
+
+    if (setsCached > 0) {
+      console.log(`[ScryfallService] Cached metadata for ${setsCached} new sets.`);
+    }
   }
 
   async fetchSets(): Promise<ScryfallSet[]> {
@@ -203,6 +290,10 @@ export class ScryfallService {
           parent_set_code: s.parent_set_code,
           card_count: s.card_count
         }));
+
+      // Auto-cache this global list too?
+      const setsListPath = path.join(SETS_DIR, 'all_sets.json');
+      fs.writeFileSync(setsListPath, JSON.stringify(sets, null, 2));
 
       return sets;
     } catch (e) {

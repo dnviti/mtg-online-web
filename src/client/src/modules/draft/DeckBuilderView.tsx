@@ -95,7 +95,10 @@ const normalizeCard = (c: any): DraftCard => {
     // Ensure image is top-level for components that expect it
     // Prioritize local cache
     image: localImage || c.image || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
-    imageArtCrop: localCrop || c.imageArtCrop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
+    imageArtCrop: localCrop || c.imageArtCrop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop,
+    // Store remote URLs for fallback
+    remoteImage: c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+    remoteArtCrop: c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
   };
 };
 
@@ -194,6 +197,15 @@ const ListItem = React.memo(({ card, onClick, onHover }: { card: DraftCard; onCl
 
 const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
   const displayImage = useArtCrop ? card.imageArtCrop : card.image;
+  const fallbackImage = useArtCrop ? card.remoteArtCrop : card.remoteImage;
+
+  const [imgSrc, setImgSrc] = useState(displayImage);
+
+  // Sync prop changes
+  useEffect(() => {
+    setImgSrc(displayImage);
+  }, [displayImage]);
+
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover, () => {
     if (window.matchMedia('(pointer: coarse)').matches) {
       onHover(card);
@@ -215,8 +227,27 @@ const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHove
       <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
         {isFoil && <FoilOverlay />}
         {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
-        {displayImage ? (
-          <img src={displayImage} alt={card.name} className="w-full h-full object-cover" draggable={false} />
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={card.name}
+            className="w-full h-full object-cover"
+            draggable={false}
+            onError={(e) => {
+              // Prevent infinite loop if fallback also fails
+              if (fallbackImage && imgSrc !== fallbackImage) {
+                setImgSrc(fallbackImage);
+              } else {
+                e.currentTarget.style.display = 'none'; // Hide broken image
+                // Show text fallback?
+                // We could set imgSrc to null to show the text fallback div below, 
+                // but react state update inside onError is tricky.
+                // Just hiding it reveals background which is empty. 
+                // Better to setImgSrc(null) to render the else block.
+                setImgSrc(null);
+              }
+            }}
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">{card.name}</div>
         )}
