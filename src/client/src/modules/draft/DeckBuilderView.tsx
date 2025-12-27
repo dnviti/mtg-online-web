@@ -323,6 +323,71 @@ const CardsDisplay: React.FC<{
   )
 });
 
+const LandAdvice = React.memo(({ landSuggestion, applySuggestion }: { landSuggestion: any, applySuggestion: () => void }) => {
+  if (!landSuggestion) return null;
+  return (
+    <div className="flex items-center justify-between bg-amber-900/40 p-2 rounded-lg border border-amber-700/50 mb-2 mx-1 animate-in fade-in slide-in-from-top-2">
+      <div className="flex items-center gap-3">
+        <div className="bg-amber-500/20 p-1.5 rounded-md">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">Recommended Lands</span>
+          <div className="flex gap-2 text-xs font-medium text-slate-300">
+            {Object.entries(landSuggestion).map(([type, count]) => {
+              if ((count as number) <= 0) return null;
+              const colorClass = type === 'Plains' ? 'text-yellow-200' : type === 'Island' ? 'text-blue-200' : type === 'Swamp' ? 'text-purple-200' : type === 'Mountain' ? 'text-red-200' : 'text-emerald-200';
+              return <span key={type} className={colorClass}>{count as number} {type}</span>
+            })}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={applySuggestion}
+        className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-md shadow-lg font-bold uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1"
+      >
+        <Check className="w-3 h-3" /> Auto-Fill
+      </button>
+    </div>
+  );
+});
+
+const LandRow = React.memo(({ landSourceCards, addLandToDeck, setHoveredCard, landSuggestion, applySuggestion }: {
+  landSourceCards: any[];
+  addLandToDeck: (land: any) => void;
+  setHoveredCard: (card: any) => void;
+  landSuggestion: any;
+  applySuggestion: () => void;
+}) => (
+  <div className="flex flex-col gap-2 mb-4 shrink-0">
+    <LandAdvice landSuggestion={landSuggestion} applySuggestion={applySuggestion} />
+    <div className="flex flex-wrap gap-2 px-1 justify-center sm:justify-start">
+      {landSourceCards.map(land => (
+        <div
+          key={land.id}
+          onClick={() => addLandToDeck(land)}
+          onMouseEnter={() => setHoveredCard(land)}
+          onMouseLeave={() => setHoveredCard(null)}
+          className="relative group cursor-pointer hover:scale-105 transition-transform"
+          style={{ width: '85px' }}
+        >
+          <div className="aspect-[2.5/3.5] rounded-md overflow-hidden shadow-sm border border-slate-700 group-hover:border-purple-400 relative">
+            <img src={land.image || land.image_uris?.normal} className="w-full h-full object-cover" draggable={false} />
+            {/* Click Only Indicator */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <span className="text-white text-xs font-bold bg-emerald-600/90 px-2 py-1 rounded shadow-lg backdrop-blur-sm border border-emerald-400/50 flex items-center gap-1">
+              <span className="text-[10px]">+</span> ADD
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent w-full mt-2" />
+  </div>
+));
+
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   // roomId,
   // currentPlayerId,
@@ -1064,65 +1129,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
 
 
-  const LandAdvice = () => {
-    if (!landSuggestion) return null;
-    return (
-      <div className="flex items-center justify-between bg-amber-900/40 p-2 rounded-lg border border-amber-700/50 mb-2 mx-1 animate-in fade-in slide-in-from-top-2">
-        <div className="flex items-center gap-3">
-          <div className="bg-amber-500/20 p-1.5 rounded-md">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-amber-200 uppercase tracking-wider">Recommended Lands</span>
-            <div className="flex gap-2 text-xs font-medium text-slate-300">
-              {Object.entries(landSuggestion).map(([type, count]) => {
-                if ((count as number) <= 0) return null;
-                const colorClass = type === 'Plains' ? 'text-yellow-200' : type === 'Island' ? 'text-blue-200' : type === 'Swamp' ? 'text-purple-200' : type === 'Mountain' ? 'text-red-200' : 'text-emerald-200';
-                return <span key={type} className={colorClass}>{count as number} {type}</span>
-              })}
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={applySuggestion}
-          className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1.5 rounded-md shadow-lg font-bold uppercase tracking-wider transition-all hover:scale-105 active:scale-95 flex items-center gap-1"
-        >
-          <Check className="w-3 h-3" /> Auto-Fill
-        </button>
-      </div>
-    );
-  };
-
-  const LandRow = () => (
-    <div className="flex flex-col gap-2 mb-4 shrink-0">
-      <LandAdvice />
-      <div className="flex flex-wrap gap-2 px-1 justify-center sm:justify-start">
-        {landSourceCards.map(land => (
-          <div
-            key={land.id}
-            onClick={() => addLandToDeck(land)}
-            onMouseEnter={() => setHoveredCard(land)}
-            onMouseLeave={() => setHoveredCard(null)}
-            className="relative group cursor-pointer hover:scale-105 transition-transform"
-            style={{ width: '85px' }}
-          >
-            <div className="aspect-[2.5/3.5] rounded-md overflow-hidden shadow-sm border border-slate-700 group-hover:border-purple-400 relative">
-              <img src={land.image || land.image_uris?.normal} className="w-full h-full object-cover" draggable={false} />
-              {/* Click Only Indicator */}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-            </div>
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <span className="text-white text-xs font-bold bg-emerald-600/90 px-2 py-1 rounded shadow-lg backdrop-blur-sm border border-emerald-400/50 flex items-center gap-1">
-                <span className="text-[10px]">+</span> ADD
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent w-full mt-2" />
-    </div>
-  );
-
   return (
     <div
       ref={containerRef}
@@ -1323,7 +1329,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar flex flex-col shadow-inner">
                   {/* Land Station */}
-                  <LandRow />
+                  {/* Land Station */}
+                  <LandRow
+                    landSourceCards={landSourceCards}
+                    addLandToDeck={addLandToDeck}
+                    setHoveredCard={setHoveredCard}
+                    landSuggestion={landSuggestion}
+                    applySuggestion={applySuggestion}
+                  />
 
                   {isConstructed && searchQuery ? (
                     isSearching ? (
@@ -1426,7 +1439,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   )}
 
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                    <LandRow />
+                    {/* Land Station */}
+                    <LandRow
+                      landSourceCards={landSourceCards}
+                      addLandToDeck={addLandToDeck}
+                      setHoveredCard={setHoveredCard}
+                      landSuggestion={landSuggestion}
+                      applySuggestion={applySuggestion}
+                    />
                     {isConstructed && searchQuery ? (
                       isSearching ? (
                         <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
@@ -1527,6 +1547,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
         </DragOverlay>
       </DndContext>
       <ImportModal />
-    </div>
+    </div >
   );
 };
