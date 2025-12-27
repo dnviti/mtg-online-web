@@ -289,8 +289,15 @@ const CardsDisplay: React.FC<{
       return (a.cmc || 0) - (b.cmc || 0);
     });
 
+    // Calculate dynamic column width based on slider
+    // Map cardWidth (60-200) to a reasonable list item width (e.g., 200px - 500px)
+    const listMinColWidth = Math.max(200, Math.round(cardWidth * 2.5));
+
     return (
-      <div className="flex flex-col gap-1 w-full">
+      <div
+        className="grid gap-2 w-full pb-20 content-start"
+        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${listMinColWidth}px, 1fr))` }}
+      >
         {sorted.map(c => (
           <UniversalCardWrapper key={c.id || c.name} card={c} source={source} mode="list">
             <ListItem card={c} onClick={() => onCardClick(c)} onHover={onHover} />
