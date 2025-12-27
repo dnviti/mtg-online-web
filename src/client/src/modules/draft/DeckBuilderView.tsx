@@ -1449,13 +1449,15 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsImportOpen(true)}
-              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-600 shadow-sm font-bold text-xs transition-transform hover:scale-105"
-              title="Import Deck List"
-            >
-              <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
-            </button>
+            {isConstructed && (
+              <button
+                onClick={() => setIsImportOpen(true)}
+                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-600 shadow-sm font-bold text-xs transition-transform hover:scale-105"
+                title="Import Deck List"
+              >
+                <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Import</span>
+              </button>
+            )}
 
             {!isConstructed && (
               <button
