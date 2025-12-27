@@ -451,7 +451,7 @@ const SearchToolbar = React.memo(({
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search Scryfall..."
+          placeholder="Search Card"
           className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-xs text-white focus:ring-2 focus:ring-emerald-500 outline-none"
         />
         <Search className="w-3 h-3 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2" />
@@ -1457,6 +1457,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={setIsSidebarCollapsed}
             onResizeStart={(e) => handleResizeStart('sidebar', e)}
+            showLog={false}
           >
             {/* Mana Curve at Bottom */}
             <div className="mt-auto w-full pt-4 border-t border-slate-800">
