@@ -1233,7 +1233,7 @@ export class RulesEngine {
     return sbaPerformed;
   }
 
-  public addCounter(playerId: string, cardId: string, type: string, count: number = 1) {
+  public addCounter(_playerId: string, cardId: string, type: string, count: number = 1) {
     const card = this.state.cards[cardId];
     if (!card || card.zone !== 'battlefield') throw new Error("Card not on battlefield");
 

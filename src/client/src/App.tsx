@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Box, Trophy, Users, Play } from 'lucide-react';
+import { Layers, Box, Trophy, Users } from 'lucide-react';
 import { CubeManager } from './modules/cube/CubeManager';
 import { LobbyManager } from './modules/lobby/LobbyManager';
 

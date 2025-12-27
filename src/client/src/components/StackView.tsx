@@ -155,7 +155,7 @@ export const StackView: React.FC<StackViewProps> = ({ cards, cardWidth = 150, on
   );
 };
 
-const StackCardItem = ({ card, cardWidth, isLast, useArtCrop, displayImage, onHover, onCardClick, disableHoverPreview, renderWrapper }: any) => {
+const StackCardItem = ({ card, isLast, useArtCrop, displayImage, onHover, onCardClick, disableHoverPreview, renderWrapper }: any) => {
   const { onTouchStart, onTouchEnd, onTouchMove, onClick } = useCardTouch(onHover || (() => { }), () => onCardClick && onCardClick(card), card);
 
   const content = (

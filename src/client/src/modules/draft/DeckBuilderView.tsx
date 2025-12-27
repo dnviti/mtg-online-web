@@ -542,7 +542,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   isConstructed = false,
   submitLabel,
   format: initialFormat = 'Standard',
-  deckName: initialDeckName = 'New Deck'
+  deckName: _deckName = 'New Deck'
 }) => {
   // Unlimited Timer (Static for now)
   const [timer] = useState<string>("Unlimited");

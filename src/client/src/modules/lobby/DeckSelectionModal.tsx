@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useUser, SavedDeck } from '../../contexts/UserContext';
-import { Modal } from '../../components/Modal';
+
 import { Layers, Search, Clock, Hash, Check } from 'lucide-react';
 
 interface DeckSelectionModalProps {
