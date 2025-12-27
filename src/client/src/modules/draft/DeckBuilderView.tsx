@@ -28,7 +28,7 @@ interface DeckBuilderViewProps {
 
 const MIN_CARD_WIDTH = 60;
 const MAX_CARD_WIDTH = 200;
-const FULL_ART_THRESHOLD = 100; // Absolute value as requested
+const FULL_ART_THRESHOLD = 130; // Absolute value as requested (50% of 60-200 range)
 
 const ManaCurve = React.memo(({ deck }: { deck: any[] }) => {
   const counts = new Array(8).fill(0);
@@ -135,7 +135,7 @@ const UniversalCardWrapper = React.memo(({ children, card, source, disabled, mod
     </div>
   );
 }, (prev, next) => {
-  return prev.card?.id === next.card?.id && prev.disabled === next.disabled && prev.source === next.source && prev.mode === next.mode;
+  return prev.card?.id === next.card?.id && prev.disabled === next.disabled && prev.source === next.source && prev.mode === next.mode && prev.dependency === next.dependency;
 });
 
 // Droppable Zone
@@ -318,7 +318,7 @@ const CardsDisplay: React.FC<{
           groupBy={groupBy}
           useArtCrop={cardWidth < FULL_ART_THRESHOLD}
           renderWrapper={(card, children) => (
-            <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="stack">
+            <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="stack" dependency={cardWidth < FULL_ART_THRESHOLD}>
               {children}
             </UniversalCardWrapper>
           )}
@@ -335,7 +335,7 @@ const CardsDisplay: React.FC<{
         const isFoil = card.finish === 'foil';
 
         return (
-          <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="grid">
+          <UniversalCardWrapper key={card.id || card.name} card={card} source={source} mode="grid" dependency={useArtCrop}>
             <div style={{ width: 'var(--card-width)' }} className="shrink-0">
               <DeckCardItem
                 card={card}
