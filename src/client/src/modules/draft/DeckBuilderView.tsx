@@ -1475,6 +1475,16 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                 </div>
 
                 {/* Constructed Search Toolbar */}
+                <div className="bg-slate-900 border-b border-slate-800 px-2 pt-2 shrink-0">
+                  <LandRow
+                    landSourceCards={landSourceCards}
+                    addLandToDeck={addLandToDeck}
+                    setHoveredCard={setHoveredCard}
+                    landSuggestion={landSuggestion}
+                    applySuggestion={applySuggestion}
+                  />
+                </div>
+
                 {isConstructed && <SearchToolbar
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
@@ -1492,15 +1502,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                 />}
 
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar flex flex-col shadow-inner">
-                  {/* Land Station */}
-                  {/* Land Station */}
-                  <LandRow
-                    landSourceCards={landSourceCards}
-                    addLandToDeck={addLandToDeck}
-                    setHoveredCard={setHoveredCard}
-                    landSuggestion={landSuggestion}
-                    applySuggestion={applySuggestion}
-                  />
 
                   {isConstructed && searchQuery ? (
                     isSearching ? (
@@ -1584,6 +1585,16 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   </div>
 
                   {/* Constructed Search Toolbar */}
+                  <div className="bg-slate-900 border-b border-slate-800 px-2 pt-2 shrink-0">
+                    <LandRow
+                      landSourceCards={landSourceCards}
+                      addLandToDeck={addLandToDeck}
+                      setHoveredCard={setHoveredCard}
+                      landSuggestion={landSuggestion}
+                      applySuggestion={applySuggestion}
+                    />
+                  </div>
+
                   {isConstructed && <SearchToolbar
                     searchQuery={searchQuery}
                     setSearchQuery={setSearchQuery}
@@ -1601,14 +1612,6 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   />}
 
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
-                    {/* Land Station */}
-                    <LandRow
-                      landSourceCards={landSourceCards}
-                      addLandToDeck={addLandToDeck}
-                      setHoveredCard={setHoveredCard}
-                      landSuggestion={landSuggestion}
-                      applySuggestion={applySuggestion}
-                    />
                     {isConstructed && searchQuery ? (
                       isSearching ? (
                         <div className="flex items-center justify-center p-8 text-slate-500 animate-pulse">Searching Scryfall...</div>
