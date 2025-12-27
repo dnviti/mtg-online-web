@@ -54,6 +54,26 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
           <span className="text-[10px] bg-slate-800 px-1 rounded text-slate-400 capitalize">{zone}</span>
         </div>
 
+        {/* Command Zone Menu */}
+        {zone === 'command' && (
+          <>
+            <MenuItem
+              label={card.typeLine?.toLowerCase().includes('land') ? "Play Land" : "Cast Commander"}
+              onClick={() => {
+                const isLand = card.typeLine?.toLowerCase().includes('land');
+                if (isLand) {
+                  handleAction('PLAY_LAND', { cardId: card.instanceId });
+                } else {
+                  handleAction('CAST_SPELL', { cardId: card.instanceId, targets: [] });
+                }
+              }}
+            />
+            <div className="h-px bg-slate-800 my-1 mx-2"></div>
+            <MenuItem label="To Hand" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'hand' })} />
+            <MenuItem label="To Library (Top)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'library', position: 'top' })} />
+          </>
+        )}
+
         {/* Hand Menu */}
         {zone === 'hand' && (
           <>
