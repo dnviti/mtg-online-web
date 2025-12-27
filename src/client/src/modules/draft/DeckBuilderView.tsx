@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { socketService } from '../../services/SocketService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2 } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2, SlidersHorizontal } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
+import { AdvancedSearchModal } from './AdvancedSearchModal';
 import { DraftCard } from '../../services/PackGeneratorService';
 import { useCardTouch } from '../../utils/interaction';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
@@ -432,7 +433,7 @@ interface SearchToolbarProps {
   setSearchFilterCmc: (val: number | null) => void;
   searchFilterSet: string;
   setSearchFilterSet: (val: string) => void;
-  availableSets: string[];
+  onOpenAdvanced: () => void;
 }
 
 const SearchToolbar = React.memo(({
@@ -441,7 +442,7 @@ const SearchToolbar = React.memo(({
   searchCardWidth, setSearchCardWidth,
   searchFilterCmc, setSearchFilterCmc,
   searchFilterSet, setSearchFilterSet,
-  availableSets
+  onOpenAdvanced
 }: SearchToolbarProps) => (
   <div className="flex flex-col gap-2 p-2 bg-slate-900 border-b border-slate-700 sticky top-0 z-10 shrink-0">
     {/* Search Input Row */}
@@ -459,6 +460,14 @@ const SearchToolbar = React.memo(({
       {searchQuery && (
         <button type="button" onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-xs text-slate-400 hover:text-white px-2">Clear</button>
       )}
+      <button
+        type="button"
+        onClick={onOpenAdvanced}
+        className="bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded px-2 text-slate-400 hover:text-white transition-colors"
+        title="Advanced Search"
+      >
+        <SlidersHorizontal className="w-4 h-4" />
+      </button>
     </form>
 
     {/* Tools Row */}
@@ -509,9 +518,7 @@ const SearchToolbar = React.memo(({
           onChange={e => setSearchFilterSet(e.target.value)}
         >
           <option value="">All Sets</option>
-          {availableSets.map(set => (
-            <option key={set} value={set}>{set.toUpperCase()}</option>
-          ))}
+          <option disabled>Use Advanced Search</option>
         </select>
       </div>
     </div>
@@ -634,18 +641,14 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Derived unique sets for filter dropdown
-  const availableSets = useMemo(() => {
-    if (!searchResults.length) return [];
-    const sets = new Set(searchResults.map(c => c.set || c.setCode).filter(Boolean));
-    return Array.from(sets).sort();
-  }, [searchResults]);
+
 
   // Search Toolbar State
   const [searchViewMode, setSearchViewMode] = useState<'list' | 'grid' | 'stack'>('grid');
   const [searchCardWidth, setSearchCardWidth] = useState(200); // Default larger for search
   const [searchFilterCmc, setSearchFilterCmc] = useState<number | null>(null);
   const [searchFilterSet, setSearchFilterSet] = useState('');
+  const [isAdvancedSearchOpen, setIsAdvancedSearchOpen] = useState(false);
 
   // Filter Search Results
   const filteredSearchResults = useMemo(() => {
@@ -692,6 +695,29 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     setIsSearching(true);
     try {
       const res = await fetch(`/api/cards/search?q=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      setSearchResults(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Trigger search from Advanced Modal
+  const handleAdvancedSearch = (query: string) => {
+    setSearchQuery(query);
+    // Trigger search logic directly - wrapped in setImmediate/useEffect or just call fetch?
+    // Since handleSearch expects FormEvent, we'll extract logic or just mock it.
+    // Better: Helper function
+    performSearch(query);
+  };
+
+  const performSearch = async (q: string) => {
+    if (!q.trim()) return;
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/cards/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       setSearchResults(data);
     } catch (err) {
@@ -1499,7 +1525,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   setSearchFilterCmc={setSearchFilterCmc}
                   searchFilterSet={searchFilterSet}
                   setSearchFilterSet={setSearchFilterSet}
-                  availableSets={availableSets}
+                  onOpenAdvanced={() => setIsAdvancedSearchOpen(true)}
                 />}
 
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar flex flex-col shadow-inner">
@@ -1609,7 +1635,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                     setSearchFilterCmc={setSearchFilterCmc}
                     searchFilterSet={searchFilterSet}
                     setSearchFilterSet={setSearchFilterSet}
-                    availableSets={availableSets}
+                    onOpenAdvanced={() => setIsAdvancedSearchOpen(true)}
                   />}
 
                   <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
@@ -1714,6 +1740,11 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
           })() : null}
         </DragOverlay>
       </DndContext>
+      <AdvancedSearchModal
+        isOpen={isAdvancedSearchOpen}
+        onClose={() => setIsAdvancedSearchOpen(false)}
+        onSearch={handleAdvancedSearch}
+      />
       <ImportModal />
     </div >
   );
