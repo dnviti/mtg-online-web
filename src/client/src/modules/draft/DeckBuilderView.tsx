@@ -1292,16 +1292,16 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
           {/* Content Area */}
           {layout === 'vertical' ? (
-            <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+            <div className="flex-1 flex flex-col lg:flex-row min-w-0 min-h-0">
               {/* Pool Column */}
-              <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-w-0 border-r border-slate-800 bg-slate-900/50">
-                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900">
+              <DroppableZone id="pool-zone" className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden border-r border-slate-800 bg-slate-900/50">
+                <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900 shrink-0">
                   <span>{isConstructed ? 'Cards & Search' : `Card Pool (${pool.length})`}</span>
                 </div>
 
                 {/* Constructed Search Bar */}
                 {isConstructed && (
-                  <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10">
+                  <div className="p-2 border-b border-slate-700 bg-slate-900 sticky top-0 z-10 shrink-0">
                     <form onSubmit={handleSearch} className="flex gap-2">
                       <div className="relative flex-1">
                         <input
@@ -1321,7 +1321,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                   </div>
                 )}
 
-                <div className="flex-1 overflow-auto p-2 custom-scrollbar flex flex-col">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar flex flex-col shadow-inner">
                   {/* Land Station */}
                   <LandRow />
 
@@ -1346,7 +1346,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
               </DroppableZone>
 
               {/* Right Side: Commander + Deck */}
-              <div className="flex-1 flex flex-col min-w-0 bg-slate-900/50 relative">
+              <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-slate-900/50 relative">
                 {/* Commander Zone */}
                 {isCommanderFormat && (
                   <div className="shrink-0 p-2 border-b border-slate-800 bg-slate-950/30 flex gap-2 overflow-x-auto min-h-[140px]">
@@ -1380,12 +1380,12 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
                 )}
 
                 {/* Deck List */}
-                <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0">
-                  <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900">
+                <DroppableZone id="deck-zone" className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+                  <div className="p-3 border-b border-slate-800 font-bold text-slate-400 uppercase text-xs flex justify-between items-center bg-slate-900 shrink-0">
                     <span>Library ({mainDeck.length})</span>
                     {isCommanderFormat && <span className="text-amber-500 text-[10px] tracking-wider border border-amber-900/50 bg-amber-900/20 px-2 py-0.5 rounded">COMMANDER</span>}
                   </div>
-                  <div className="flex-1 overflow-auto p-2 custom-scrollbar">
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 custom-scrollbar shadow-inner">
                     <CardsDisplay cards={mainDeck} viewMode={viewMode} cardWidth={localCardWidth} onCardClick={removeFromDeck} onHover={setHoveredCard} emptyMessage="Your Library is Empty" source="deck" groupBy={groupBy} />
                   </div>
                 </DroppableZone>
