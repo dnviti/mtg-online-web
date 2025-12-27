@@ -306,7 +306,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ room: initialRoom, currentPl
 
   const renderContent = () => {
     if (gameState) {
-      return <GameView gameState={gameState} currentPlayerId={currentPlayerId} />;
+      return <GameView gameState={gameState} currentPlayerId={currentPlayerId} format={room.format} />;
     }
 
     if (room.status === 'drafting' && draftState) {

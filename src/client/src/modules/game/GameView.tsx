@@ -60,9 +60,10 @@ const DroppableZone = ({ id, children, className, data }: { id: string, children
 interface GameViewProps {
   gameState: GameState;
   currentPlayerId: string;
+  format?: string;
 }
 
-export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }) => {
+export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format }) => {
   const hasPriority = gameState.priorityPlayerId === currentPlayerId;
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
@@ -821,7 +822,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
                           </div>
                           <div className="flex items-center gap-2">
                             <span className={`text-sm font-black ${opp.life < 10 ? 'text-red-500' : 'text-emerald-400'}`}>{opp.life}</span>
-                            {oppCommandZone.length > 0 && (
+                            {format === 'commander' && oppCommandZone.length > 0 && (
                               <div className="px-1 bg-amber-900/50 rounded text-[9px] text-amber-500 font-bold border border-amber-800">CMD {oppCommandZone.length}</div>
                             )}
                             <span className="text-[10px] text-slate-500">H:{oppHand.length}</span>
@@ -1310,26 +1311,28 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId }
               </div>
 
               {/* Command Zone */}
-              <div className="flex gap-2 mt-2">
-                <DroppableZone
-                  id="command"
-                  data={{ type: 'zone' }}
-                  className="w-12 h-16 border-2 border-amber-500/50 rounded flex items-center justify-center transition-colors hover:border-amber-400 hover:bg-amber-500/10 cursor-pointer"
-                >
-                  <div
-                    className="w-full h-full flex flex-col items-center justify-center relative"
-                    onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'command')}
+              {format === 'commander' && (
+                <div className="flex gap-2 mt-2">
+                  <DroppableZone
+                    id="command"
+                    data={{ type: 'zone' }}
+                    className="w-12 h-16 border-2 border-amber-500/50 rounded flex items-center justify-center transition-colors hover:border-amber-400 hover:bg-amber-500/10 cursor-pointer"
                   >
-                    {myCommandZone.length > 0 && (
-                      <div className="absolute inset-0">
-                        <img src={myCommandZone[0].imageArtCrop || myCommandZone[0].imageUrl} className="w-full h-full object-cover opacity-50 rounded" />
-                      </div>
-                    )}
-                    <span className="relative z-10 block text-amber-500 text-[8px] uppercase font-bold drop-shadow-md">CMD</span>
-                    <span className="relative z-10 text-sm font-bold text-amber-100 drop-shadow-md">{myCommandZone.length}</span>
-                  </div>
-                </DroppableZone>
-              </div>
+                    <div
+                      className="w-full h-full flex flex-col items-center justify-center relative"
+                      onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'command')}
+                    >
+                      {myCommandZone.length > 0 && (
+                        <div className="absolute inset-0">
+                          <img src={myCommandZone[0].imageArtCrop || myCommandZone[0].imageUrl} className="w-full h-full object-cover opacity-50 rounded" />
+                        </div>
+                      )}
+                      <span className="relative z-10 block text-amber-500 text-[8px] uppercase font-bold drop-shadow-md">CMD</span>
+                      <span className="relative z-10 text-sm font-bold text-amber-100 drop-shadow-md">{myCommandZone.length}</span>
+                    </div>
+                  </DroppableZone>
+                </div>
+              )}
 
               <DroppableZone id="exile" data={{ type: 'zone' }} className="w-full text-center border-t border-white/10 mt-2 pt-2 cursor-pointer hover:bg-white/5 rounded p-1">
                 <div onContextMenu={(e) => handleContextMenu(e, 'zone', undefined, 'exile')}>
