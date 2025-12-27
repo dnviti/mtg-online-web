@@ -4,6 +4,9 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
+# Install OpenSSL for Prisma
+RUN apk -U upgrade && apk add --no-cache openssl
+
 # Copy package definition first to cache dependencies
 COPY src/package.json src/package-lock.json ./
 

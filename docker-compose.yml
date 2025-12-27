@@ -1,0 +1,29 @@
+services:
+  app:
+    image: ghcr.io/dnviti/mtg-online-web:latest
+    container_name: mtgate-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Database stored in the persisted server-data volume
+      # Path is relative to prisma/schema.prisma inside the container (/app/prisma/schema.prisma)
+      - DATABASE_URL=file:../server-data/mtgate.db
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      # Persist all server data (images, metadata, database)
+      - ./server-data:/app/server-data
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: mtgate-redis
+    restart: always
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:
