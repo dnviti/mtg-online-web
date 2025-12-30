@@ -37,6 +37,22 @@ export class TournamentManager extends EventEmitter {
     // 1. Shuffle Players
     const shuffled = [...players].sort(() => Math.random() - 0.5);
 
+    // Guard: Need at least 2 players
+    if (shuffled.length < 2) {
+      console.warn(`[TournamentManager] Cannot create tournament with ${shuffled.length} players. Need at least 2.`);
+      // Return a dummy finished tournament or handle error?
+      // For now, let's return a dummy "finished" state to prevent crash
+      const t: Tournament = {
+        id: roomId,
+        players,
+        rounds: [],
+        currentRound: 0,
+        status: 'finished'
+      };
+      this.tournaments.set(roomId, t);
+      return t;
+    }
+
     // 2. Generate Bracket (Single Elimination)
     // Calc next power of 2
     const total = shuffled.length;

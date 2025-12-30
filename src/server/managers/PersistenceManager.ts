@@ -31,6 +31,7 @@ export class PersistenceManager {
       // Save to Database
       for (const room of rooms) {
         const r = room as any;
+        if (!r.id) { console.warn("[DB] Room missing ID, skipping save"); continue; }
         await prisma.room.upsert({
           where: { id: r.id },
           update: { data: JSON.stringify(r) },
@@ -40,6 +41,7 @@ export class PersistenceManager {
 
       for (const draft of drafts) {
         const d = draft as any;
+        if (!d.id) { console.warn("[DB] Draft missing ID, skipping save"); continue; }
         await prisma.draft.upsert({
           where: { id: d.id },
           update: { data: JSON.stringify(d) },
@@ -49,6 +51,7 @@ export class PersistenceManager {
 
       for (const game of games) {
         const g = game as any;
+        if (!g.id) { console.warn("[DB] Game missing ID, skipping save"); continue; }
         await prisma.game.upsert({
           where: { id: g.id },
           update: { data: JSON.stringify(g) },

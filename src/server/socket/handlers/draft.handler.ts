@@ -73,6 +73,12 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
       io.to(room.id).emit('room_update', updatedRoom);
       const activePlayers = updatedRoom.players.filter(p => p.role === 'player');
       if (activePlayers.length > 0 && activePlayers.every(p => p.ready)) {
+        // Ensure strictly > 1 total players (including bots) to make a tournament
+        if (updatedRoom.players.length < 2) {
+          console.warn("[DraftHandler] Not enough players for tournament.");
+          return;
+        }
+
         updatedRoom.status = 'tournament';
         io.to(room.id).emit('room_update', updatedRoom);
 
