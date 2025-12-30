@@ -1,16 +1,12 @@
 
-import fs from 'fs';
-import path from 'path';
 import { RoomManager } from './RoomManager';
 import { DraftManager } from './DraftManager';
 import { GameManager } from './GameManager';
 
 import { RedisClientManager } from './RedisClientManager';
+import { PrismaClient } from '@prisma/client';
 
-
-
-// Store data in src/server/data so it persists (assuming not inside a dist that gets wiped, but user root)
-const DATA_DIR = path.resolve(process.cwd(), 'server-data');
+const prisma = new PrismaClient();
 
 export class PersistenceManager {
   private roomManager: RoomManager;
@@ -23,35 +19,53 @@ export class PersistenceManager {
     this.draftManager = draftManager;
     this.gameManager = gameManager;
     this.redisManager = RedisClientManager.getInstance();
-
-    if (!this.redisManager.db0 && !fs.existsSync(DATA_DIR)) {
-      console.log(`Creating data directory at ${DATA_DIR}`);
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
   }
 
   async save() {
     try {
-      // Accessing private maps via any cast for simplicity without modifying all manager classes to add getters
-      const rooms = Array.from((this.roomManager as any).rooms.entries());
-      const drafts = Array.from((this.draftManager as any).drafts.entries());
-      const games = Array.from((this.gameManager as any).games.entries());
-      // Users handled by Prisma ORM internally
+      // Accessing private maps via any cast
+      const rooms = Array.from((this.roomManager as any).rooms.values());
+      const drafts = Array.from((this.draftManager as any).drafts.values());
+      const games = Array.from((this.gameManager as any).games.values());
 
-      if (this.redisManager.db0) {
-        // Save to Redis
-        const pipeline = this.redisManager.db0.pipeline();
-        pipeline.set('rooms', JSON.stringify(rooms));
-        pipeline.set('drafts', JSON.stringify(drafts));
-        pipeline.set('games', JSON.stringify(games));
-        await pipeline.exec();
-        // console.log('State saved to Redis');
-      } else {
-        // Save to Local File
-        fs.writeFileSync(path.join(DATA_DIR, 'rooms.json'), JSON.stringify(rooms));
-        fs.writeFileSync(path.join(DATA_DIR, 'drafts.json'), JSON.stringify(drafts));
-        fs.writeFileSync(path.join(DATA_DIR, 'games.json'), JSON.stringify(games));
+      // Save to Database
+      for (const room of rooms) {
+        const r = room as any;
+        await prisma.room.upsert({
+          where: { id: r.id },
+          update: { data: JSON.stringify(r) },
+          create: { id: r.id, data: JSON.stringify(r) }
+        });
       }
+
+      for (const draft of drafts) {
+        const d = draft as any;
+        await prisma.draft.upsert({
+          where: { id: d.id },
+          update: { data: JSON.stringify(d) },
+          create: { id: d.id, data: JSON.stringify(d) }
+        });
+      }
+
+      for (const game of games) {
+        const g = game as any;
+        await prisma.game.upsert({
+          where: { id: g.id },
+          update: { data: JSON.stringify(g) },
+          create: { id: g.id, data: JSON.stringify(g) }
+        });
+      }
+
+      // Optional: Sync to Redis if available (Architecture wise, DB is now the SOT)
+      if (this.redisManager.db0) {
+        const pipeline = this.redisManager.db0.pipeline();
+        pipeline.set('rooms', JSON.stringify(Array.from((this.roomManager as any).rooms.entries())));
+        pipeline.set('drafts', JSON.stringify(Array.from((this.draftManager as any).drafts.entries())));
+        pipeline.set('games', JSON.stringify(Array.from((this.gameManager as any).games.entries())));
+        await pipeline.exec();
+      }
+
+      console.log('State saved to Database (and Redis if active)');
 
     } catch (e) {
       console.error('Failed to save state', e);
@@ -60,51 +74,36 @@ export class PersistenceManager {
 
   async load() {
     try {
-      if (this.redisManager.db0) {
-        // Load from Redis
-        const [roomsData, draftsData, gamesData] = await Promise.all([
-          this.redisManager.db0.get('rooms'),
-          this.redisManager.db0.get('drafts'),
-          this.redisManager.db0.get('games')
-        ]);
+      // Start with DB Load
+      const dbRooms = await prisma.room.findMany();
+      const dbDrafts = await prisma.draft.findMany();
+      const dbGames = await prisma.game.findMany();
 
-        if (roomsData) {
-          (this.roomManager as any).rooms = new Map(JSON.parse(roomsData));
-          console.log(`[Redis] Loaded ${(this.roomManager as any).rooms.size} rooms`);
-        }
-        if (draftsData) {
-          (this.draftManager as any).drafts = new Map(JSON.parse(draftsData));
-          console.log(`[Redis] Loaded ${(this.draftManager as any).drafts.size} drafts`);
-        }
-        if (gamesData) {
-          (this.gameManager as any).games = new Map(JSON.parse(gamesData));
-          console.log(`[Redis] Loaded ${(this.gameManager as any).games.size} games`);
-        }
+      // Transform back to Maps
+      // Note: The original JSON save stored [id, obj] entries. 
+      // DB stores the objects directly in 'data' column. We need to reconstruct the Map.
 
-      } else {
-        // Load from Local File
-        const roomFile = path.join(DATA_DIR, 'rooms.json');
-        const draftFile = path.join(DATA_DIR, 'drafts.json');
-        const gameFile = path.join(DATA_DIR, 'games.json');
-
-        if (fs.existsSync(roomFile)) {
-          const roomsData = JSON.parse(fs.readFileSync(roomFile, 'utf-8'));
-          (this.roomManager as any).rooms = new Map(roomsData);
-          console.log(`[Local] Loaded ${roomsData.length} rooms`);
-        }
-
-        if (fs.existsSync(draftFile)) {
-          const draftsData = JSON.parse(fs.readFileSync(draftFile, 'utf-8'));
-          (this.draftManager as any).drafts = new Map(draftsData);
-          console.log(`[Local] Loaded ${draftsData.length} drafts`);
-        }
-
-        if (fs.existsSync(gameFile)) {
-          const gamesData = JSON.parse(fs.readFileSync(gameFile, 'utf-8'));
-          (this.gameManager as any).games = new Map(gamesData);
-          console.log(`[Local] Loaded ${gamesData.length} games`);
-        }
+      if (dbRooms.length > 0) {
+        const roomEntries = dbRooms.map(r => [r.id, JSON.parse(r.data)]);
+        (this.roomManager as any).rooms = new Map(roomEntries as any);
+        console.log(`[DB] Loaded ${dbRooms.length} rooms`);
       }
+
+      if (dbDrafts.length > 0) {
+        const draftEntries = dbDrafts.map(d => [d.id, JSON.parse(d.data)]);
+        (this.draftManager as any).drafts = new Map(draftEntries as any);
+        console.log(`[DB] Loaded ${dbDrafts.length} drafts`);
+      }
+
+      if (dbGames.length > 0) {
+        const gameEntries = dbGames.map(g => [g.id, JSON.parse(g.data)]);
+        (this.gameManager as any).games = new Map(gameEntries as any);
+        console.log(`[DB] Loaded ${dbGames.length} games`);
+      }
+
+      // Note: Existing Redis logic loaded *entire* state blob. 
+      // Since users complained about inefficiencies, DB granular loading (even if all for now) is better.
+      // We skip Redis load to ensure DB SOT is used. Redis can be repopulated on next save.
 
     } catch (e) {
       console.error('Failed to load state', e);

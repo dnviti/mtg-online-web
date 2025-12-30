@@ -39,3 +39,53 @@ model MatchRecord {
   user     User     @relation(fields: [userId], references: [id])
   userId   String
 }
+
+model Card {
+  id               String  @id
+  oracle_id        String?
+  name             String
+  set              String
+  collector_number String
+  rarity           String
+  mana_cost        String?
+  cmc              Float?
+  type_line        String?
+  oracle_text      String?
+  colors           String? // JSON
+  color_identity   String? // JSON
+  image_uris       String? // JSON
+  layout           String?
+  card_faces       String? // JSON
+  
+  @@index([name])
+  @@index([set])
+}
+
+model Set {
+  id         String  @id
+  code       String  @unique
+  name       String
+  uri        String
+  card_count Int?
+}
+
+model Draft {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Game {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Room {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

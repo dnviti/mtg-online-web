@@ -1,5 +1,10 @@
-# Development Central
+# CENTRAL DEVELOPMENT LOG
 
-## Devlog
-- [2025-12-25-013800_update_scryfall_filter.md](./devlog/2025-12-25-013800_update_scryfall_filter.md) - Update Scryfall filter to include basic lands.
-- [2025-12-27-155635_fix_docker_openssl.md](./devlog/2025-12-27-155635_fix_docker_openssl.md) - Fix Docker OpenSSL Issue.
+## Active Development
+- **[2025-12-30] Database Migration**: Completed transition to SQLite/Prisma with automated startup migration. [View Log](./devlog/2025-12-30-143921_database_migration.md)
+
+## Backlog
+- ...
+
+## History
+- ...
