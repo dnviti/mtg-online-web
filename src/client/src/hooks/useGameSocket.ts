@@ -50,9 +50,18 @@ export const useGameSocket = (): GameSocketHook => {
 
   // Listen for Game/Room Updates
   useEffect(() => {
-    const onGameUpdate = (_roomId: string, game: GameState) => {
-      console.log('[useGameSocket] Game Update Received', game.turnCount, game.phase, game.step);
-      setGameState(game);
+    const onGameUpdate = (arg1: any, arg2?: any) => {
+      // Handle both (roomId, game) and (game) signatures to be safe, 
+      // but prioritize (game) as per recent server handler observations.
+      const game = (arg2 && typeof arg2 === 'object') ? arg2 : arg1;
+      // If arg1 is the game, utilize it.
+
+      if (game && game.id) {
+        console.log('[useGameSocket] Game Update Received', game.turnCount, game.phase, game.step);
+        setGameState(game);
+      } else {
+        console.warn('[useGameSocket] Received invalid game update', arg1, arg2);
+      }
     };
 
     const onRoomUpdate = (room: any) => {

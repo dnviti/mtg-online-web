@@ -1,8 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import './styles/main.css';
 import 'mana-font/css/mana.min.css';
+import './styles/main.css';
 import { registerSW } from 'virtual:pwa-register';
 
 // Register Service Worker

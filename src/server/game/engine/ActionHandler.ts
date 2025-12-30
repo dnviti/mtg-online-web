@@ -227,13 +227,22 @@ export class ActionHandler {
   }
 
   static drawCard(state: StrictGameState, playerId: string) {
-    const library = Object.values(state.cards).filter(c => c.ownerId === playerId && c.zone === 'library');
+    const allCards = Object.values(state.cards);
+    // Debug logging for empty library issue
+    const library = allCards.filter(c => c.ownerId === playerId && c.zone === 'library');
+
     if (library.length > 0) {
       const card = library[Math.floor(Math.random() * library.length)];
       this.moveCardToZone(state, card.instanceId, 'hand');
       console.log(`Player ${playerId} draws ${card.name}`);
     } else {
-      console.warn(`[RulesEngine] Player ${playerId} attempts to draw from empty library.`);
+      console.warn(`[RulesEngine] Player ${playerId} attempts to draw from empty library. Total cards in state: ${allCards.length}. Cards owned by player: ${allCards.filter(c => c.ownerId === playerId).length}. Cards in library: 0`);
+      // Log distribution of zones for this player
+      const zones: Record<string, number> = {};
+      allCards.filter(c => c.ownerId === playerId).forEach(c => {
+        zones[c.zone] = (zones[c.zone] || 0) + 1;
+      });
+      console.log(`[RulesEngine] Player ${playerId} card distribution:`, zones);
     }
   }
 

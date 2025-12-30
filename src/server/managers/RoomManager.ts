@@ -263,6 +263,26 @@ export class RoomManager {
       room.lastActive = Date.now();
       await this.saveRoomState(room);
       return room;
+      room.lastActive = Date.now();
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async startTournament(roomId: string, tournament: Tournament): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      room.status = 'tournament';
+      room.tournament = tournament;
+      room.lastActive = Date.now();
+
+      await this.saveRoomState(room);
+      return room;
     } finally {
       await this.releaseLock(roomId);
     }

@@ -43,12 +43,18 @@ export const validateDeck = (deck: any[], sideboard: any[] = [], format: string 
 
     // --- Commander / EDH / Brawl ---
     else if (normalizedFormat.includes('commander') || normalizedFormat.includes('edh')) {
-        const totalCards = deck.length; // Commander usually included in deck array or handled strictly? 
-        // In our system, checking if commanders are in 'deck' or separate is key.
-        // Assuming 'deck' passed here includes the Commander(s) as they are part of the 100.
+        const totalCards = deck.length;
 
         if (totalCards !== 100) {
             errors.push(`Commander decks must have exactly 100 cards (currently ${totalCards}).`);
+        }
+
+        // Check for Commander count
+        const commanderCount = deck.filter(c => c.isCommander).length;
+        if (commanderCount < 1) {
+            errors.push("Your deck must have at least one Commander.");
+        } else if (commanderCount > 2) {
+            errors.push(`You cannot have more than 2 Commanders (currently ${commanderCount}).`);
         }
 
         // Singleton Rule

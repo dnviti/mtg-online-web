@@ -382,6 +382,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
             onToggleCollapse={setIsSidebarCollapsed}
             onResizeStart={(e) => handleResizeStart('sidebar', e)}
             className="hidden lg:flex"
+            showLog={false}
           />
 
           {/* Main Content Area: Handles both Pack and Pool based on layout */}

@@ -14,13 +14,15 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       io.to(room.id).emit('room_update', updatedRoom);
       await gameManager.createGame(room.id, updatedRoom.players, updatedRoom.format);
 
-      updatedRoom.players.forEach(async p => {
+      // Load decks for all players
+      await Promise.all(updatedRoom.players.map(async p => {
         let finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
 
         if (finalDeck && Array.isArray(finalDeck)) {
           console.log(`[GameStart] Loading deck for ${p.name} (${p.id}): ${finalDeck.length} cards.`);
 
-          finalDeck.forEach(async (card: any) => {
+          // Add cards sequentially to avoid race conditions or DB overload
+          for (const card of finalDeck) {
             let setCode = card.setCode || card.set || card.definition?.set;
             let scryfallId = card.scryfallId || card.id || card.definition?.id;
 
@@ -36,12 +38,15 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               }
             }
 
+            // Console log strict validation
+            // console.log(`[DeckLoad] Adding ${card.name} (${scryfallId}) for ${p.name}`);
+
             await gameManager.addCardToGame(room.id, {
               ownerId: p.id,
               controllerId: p.id,
-              oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
-              scryfallId: scryfallId,
-              setCode: setCode,
+              oracleId: card.oracle_id || card.id || card.definition?.oracle_id || `temp-${Math.random()}`,
+              scryfallId: scryfallId || 'unknown',
+              setCode: setCode || 'unknown',
               name: card.name,
               imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
               imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
@@ -54,25 +59,36 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               toughness: card.toughness,
               damageMarked: 0,
               controlledSinceTurn: 0,
-              definition: card.definition // Pass definition for DFC support
+              definition: card.definition
             });
-          });
+          }
+          // Shuffle Library after loading
+          // Actually Utils might shuffle, but currently shuffling happens in Mulligan logic? 
+          // No, usually library is shuffled at start. 
+          // But strict game state doesn't have an explicit shuffle action here yet. 
+          // The RulesEngine.startGame() might handle it if I add it, or just rely on random Draw.
+          // For now, random draw is fine or let startGame handle it.
         } else {
           console.warn(`[GameStart] ⚠️ No deck found for player ${p.name} (${p.id})! IsBot=${p.isBot}`);
         }
-      });
+      }));
 
-      // We need to wait for cards to be added? 
-      // The old code was synchronous loop. 
-      // The async nature of redis means `addCardToGame` is async.
-      // We should probably await all deck loading before starting game engine?
-      // But `createGame` already initialized engine.
-      // The engine startup `startGame()` is called inside `createGame`.
-      // We trigger bot check.
+      // Initialize Game Engine (Draw 7 cards, etc)
+      const initializedGame = await gameManager.startGame(room.id);
 
+      console.log(`[GameStart] Game Initialized. Turn: ${initializedGame?.turnCount}. Players: ${Object.keys(initializedGame?.players || {}).length}`);
+
+      if (initializedGame) {
+        io.to(room.id).emit('game_update', initializedGame);
+      } else {
+        console.error("[GameStart] Failed to initialize game engine (startGame returned null).");
+      }
+
+      // Trigger bot check
       await gameManager.triggerBotCheck(room.id);
 
-      // Fetch latest state to emit
+      // We explicitly emitted initializedGame, so we don't strictly need the fallback `getGame` unless triggerBotCheck changed something immediately.
+      // But let's keep the final sync just in case bot check did something.
       const latestGame = await gameManager.getGame(room.id);
       if (latestGame) {
         io.to(room.id).emit('game_update', latestGame);

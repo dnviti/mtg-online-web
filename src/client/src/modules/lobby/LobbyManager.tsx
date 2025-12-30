@@ -188,6 +188,17 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
       if (response.success) {
         // gameState and room are set by hook
+        if (response.draftState) {
+          // handled by event
+        }
+        // Explicitly set active room with tournament data if provided to avoid race conditions
+        if (response.room) {
+          const roomToSet = { ...response.room };
+          if (response.tournament) {
+            roomToSet.tournament = response.tournament;
+          }
+          setActiveRoom(roomToSet);
+        }
       } else {
         setLocalError(response.message || 'Failed to join room');
       }
@@ -207,9 +218,19 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       rejoinRoom({ roomId: savedRoomId, playerId })
         .then(response => {
           if (response.success) {
-            // draftState set by hook
+            // Server emits 'draft_update' manually to this socket on rejoin. 
+            // Context listener should pick it up.
+            // Ensure we update activeRoom if response returns it, and MERGE tournament data if present
+            if (response.room) {
+              const roomToSet = { ...response.room };
+              if (response.tournament) {
+                roomToSet.tournament = response.tournament;
+              }
+              setActiveRoom(roomToSet);
+            }
           } else {
             if (response.message !== 'Connection error') {
+              // Only clear if confirmed invalid
               localStorage.removeItem('active_room_id');
             }
           }

@@ -18,11 +18,13 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
       if (room.format === 'draft') {
         const draft = await draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
         room.status = 'drafting';
+        await roomManager.saveRoom(room);
 
         io.to(room.id).emit('room_update', room);
         io.to(room.id).emit('draft_update', draft);
       } else {
         room.status = 'deck_building';
+        await roomManager.saveRoom(room);
         io.to(room.id).emit('room_update', room);
       }
     }
@@ -41,6 +43,7 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
 
       if (draft.status === 'deck_building') {
         room.status = 'deck_building';
+        await roomManager.saveRoom(room);
         io.to(room.id).emit('room_update', room);
 
         // Sync Bot Readiness
@@ -81,16 +84,19 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
           return;
         }
 
-        updatedRoom.status = 'tournament';
-        io.to(room.id).emit('room_update', updatedRoom);
-
         const tournament = tournamentManager.createTournament(room.id, updatedRoom.players.map(p => ({
           id: p.id,
           name: p.name,
           isBot: !!p.isBot,
           deck: p.deck
         })));
+
         updatedRoom.tournament = tournament;
+        updatedRoom.status = 'tournament';
+
+        await roomManager.saveRoom(updatedRoom);
+
+        io.to(room.id).emit('room_update', updatedRoom);
         io.to(room.id).emit('tournament_update', tournament);
       }
     }
@@ -115,6 +121,7 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
 
     const draft = await draftManager.createDraft(roomWithBots.id, roomWithBots.players.map(p => ({ id: p.id, isBot: !!p.isBot })), roomWithBots.packs, roomWithBots.basicLands);
     roomWithBots.status = 'drafting';
+    await roomManager.saveRoom(roomWithBots);
 
     if (typeof callback === 'function') {
       callback({ success: true, room: roomWithBots, draftState: draft });

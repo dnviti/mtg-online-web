@@ -66,19 +66,26 @@ export class GameManager extends EventEmitter {
     // Save initial state
     await this.saveGameState(state);
 
-    // Run Logic (Locking not strictly needed for Create if unique, but good practice if reuse ID)
-    if (await this.acquireLock(gameId)) {
-      try {
-        // Initial Start
-        const engine = new RulesEngine(state);
-        engine.startGame();
-        await this.saveGameState(state);
-      } finally {
-        await this.releaseLock(gameId);
-      }
-    }
+    // Initial Start logic moved to explicit startGame method to allow deck loading first
+    // Save initial state is enough
 
     return state;
+  }
+
+  async startGame(roomId: string) {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
+
+      const engine = new RulesEngine(game);
+      engine.startGame(); // This triggers TBA (draw 7 cards)
+
+      await this.saveGameState(game);
+      return game;
+    } finally {
+      await this.releaseLock(roomId);
+    }
   }
 
   async getGame(gameId: string): Promise<StrictGameState | null> {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameContext } from '../../contexts/GameSocketContext';
 import { socketService } from '../../services/SocketService';
-import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText, Loader2 } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameLogProvider, useGameLog } from '../../contexts/GameLogContext';
@@ -98,8 +98,40 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
   const [localTournamentState, setLocalTournamentState] = useState<any>(room.tournament || null);
 
   useEffect(() => {
-    if (room.tournament) setLocalTournamentState(room.tournament);
-  }, [room.tournament]);
+    if (room.tournament) {
+      setLocalTournamentState(room.tournament);
+    } else if (room.status === 'tournament' && !localTournamentState) {
+      // Fallback: Fetch tournament state explicitly if missing
+      socketService.socket.emit('get_tournament_state', { roomId: room.id }, (response: any) => {
+        if (response.success && response.tournament) {
+          setLocalTournamentState(response.tournament);
+        } else {
+          console.error("Failed to load tournament state:", response.message);
+          showToast("Failed to load tournament. Please try refreshing.", 'error');
+        }
+      });
+    }
+  }, [room.tournament, room.status, room.id, localTournamentState, showToast]);
+
+  // Game Start Notification
+  useEffect(() => {
+    if (gameState && gameState.turnCount === 1 && gameState.step === 'mulligan') {
+      // Debounce or check checking logic might be needed if this rerenders often, but toast handles dups usually.
+      // Actually, better to limit it. useGameSocket might update gameState multiple times.
+      // Let's rely on match_start event if possible, OR just use a ref to track if we showed start toast.
+    }
+  }, [gameState]);
+
+  const hasShownStartToast = useRef(false);
+  useEffect(() => {
+    if (gameState && !hasShownStartToast.current) {
+      hasShownStartToast.current = true;
+      const activePlayerName = gameState.players[gameState.activePlayerId || '']?.name || 'Player';
+      showToast(`Game is starting! (${activePlayerName}'s Turn)`, 'game-event', 5000);
+    } else if (!gameState) {
+      hasShownStartToast.current = false;
+    }
+  }, [gameState, showToast]);
 
   const [preparingMatchId, setPreparingMatchId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'game' | 'chat'>('game');
@@ -296,12 +328,29 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
   const renderContent = () => {
     if (gameState) {
-      showToast(`Game is starting! (${(gameState.players[gameState.activePlayerId || '']?.name || 'Player')}'s Turn)`, 'game-event', 5000);
       return <GameView gameState={gameState} currentPlayerId={currentPlayerId} format={room.format} />;
     }
 
-    if (room.status === 'drafting' && draftState) {
-      return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} onExit={onExit} />;
+    // Explicit check for playing status to show loader instead of lobby
+    if (room.status === 'playing' && !gameState) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-800 text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin mb-4 text-blue-500" />
+          <p>Reconnecting to Game...</p>
+        </div>
+      );
+    }
+
+    if (room.status === 'drafting') {
+      if (draftState) {
+        return <DraftView draftState={draftState} roomId={room.id} currentPlayerId={currentPlayerId} onExit={onExit} />;
+      }
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-800 text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin mb-4 text-purple-500" />
+          <p>Restoring Draft State...</p>
+        </div>
+      );
     }
 
     if (room.status === 'deck_building') {
@@ -342,30 +391,40 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
         availableBasicLands={room.basicLands}
         isConstructed={!isLimited}
         initialDeck={selectedDeckCards} // Pass selected deck
+        format={room.format}
       />;
     }
 
-    if (room.status === 'tournament' && localTournamentState) {
-      if (preparingMatchId) {
-        const myTournamentPlayer = localTournamentState.players.find((p: any) => p.id === currentPlayerId);
-        const myPool = draftState?.players[currentPlayerId]?.pool || [];
-        const myDeck = myTournamentPlayer?.deck || [];
+    if (room.status === 'tournament') {
+      if (localTournamentState) {
+        if (preparingMatchId) {
+          const myTournamentPlayer = localTournamentState.players.find((p: any) => p.id === currentPlayerId);
+          const myPool = draftState?.players[currentPlayerId]?.pool || [];
+          const myDeck = myTournamentPlayer?.deck || [];
 
-        return <DeckBuilderView
-          roomId={room.id}
-          currentPlayerId={currentPlayerId}
-          initialPool={myPool}
-          initialDeck={myDeck}
-          availableBasicLands={room.basicLands}
-          onSubmit={(deck) => {
-            socketService.socket.emit('match_ready', { matchId: preparingMatchId, deck });
-            setPreparingMatchId(null);
-            showToast("Deck ready! Waiting for game to start...", 'success');
-          }}
-          submitLabel="Ready for Match"
-        />;
+          return <DeckBuilderView
+            roomId={room.id}
+            currentPlayerId={currentPlayerId}
+            initialPool={myPool}
+            initialDeck={myDeck}
+            availableBasicLands={room.basicLands}
+            onSubmit={(deck) => {
+              socketService.socket.emit('match_ready', { matchId: preparingMatchId, deck });
+              setPreparingMatchId(null);
+              showToast("Deck ready! Waiting for game to start...", 'success');
+            }}
+            submitLabel="Ready for Match"
+            format={room.format}
+          />;
+        }
+        return <TournamentView tournament={localTournamentState} currentPlayerId={currentPlayerId} onJoinMatch={setPreparingMatchId} />;
       }
-      return <TournamentView tournament={localTournamentState} currentPlayerId={currentPlayerId} onJoinMatch={setPreparingMatchId} />;
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-800 text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin mb-4 text-yellow-500" />
+          <p>Loading Tournament...</p>
+        </div>
+      );
     }
 
     return (
@@ -513,6 +572,11 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
                     </div>
                     {isMeHost && !p.isHost && (
                       <button onClick={() => socketService.socket.emit('kick_player', { roomId: room.id, targetId: p.id })} className="text-slate-500 hover:text-red-500"><LogOut className="w-4 h-4" /></button>
+                    )}
+                    {p.id === currentPlayerId && (
+                      <button onClick={onExit} className="text-slate-500 hover:text-red-400" title="Leave Room">
+                        <LogOut className="w-4 h-4" />
+                      </button>
                     )}
                   </div>
                 ))}

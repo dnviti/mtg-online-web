@@ -38,6 +38,30 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
     if (typeof callback === 'function') callback({ success: true, match, gameCreated: !!game });
   });
 
+
+
+  socket.on('get_tournament_state', async ({ roomId }, callback) => {
+    const context = await getContext();
+    if (!context) {
+      if (typeof callback === 'function') callback({ success: false, message: "Context not found" });
+      return;
+    }
+    const { room } = context;
+
+    if (room.id !== roomId) {
+      if (typeof callback === 'function') callback({ success: false, message: "Room mismatch" });
+      return;
+    }
+
+    console.log(`[TournamentHandler] get_tournament_state for ${roomId}. Status: ${room.status}, HasTournament: ${!!room.tournament}`);
+
+    if (room.status === 'tournament' && room.tournament) {
+      if (typeof callback === 'function') callback({ success: true, tournament: room.tournament });
+    } else {
+      if (typeof callback === 'function') callback({ success: false, message: "No active tournament found." });
+    }
+  });
+
   socket.on('match_ready', async ({ matchId, deck }) => {
     const context = await getContext();
     if (!context) return;
@@ -54,33 +78,28 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
       if (readyState.bothReady) {
         console.log(`[Index] Both players ready for match ${matchId}. Starting Game.`);
 
-        const match = tournamentManager.getMatch(room.tournament, matchId);
-        if (match && match.player1 && match.player2) {
-          const p1 = room.players.find(p => p.id === match.player1!.id)!;
-          const p2 = room.players.find(p => p.id === match.player2!.id)!;
+        try {
+          const match = tournamentManager.getMatch(room.tournament, matchId);
+          if (match && match.player1 && match.player2) {
+            const p1 = room.players.find(p => p.id === match.player1!.id)!;
+            const p2 = room.players.find(p => p.id === match.player2!.id)!;
 
-          const deck1 = readyState.decks[p1.id];
-          const deck2 = readyState.decks[p2.id];
+            const deck1 = readyState.decks[p1.id];
+            const deck2 = readyState.decks[p2.id];
 
-          await gameManager.createGame(matchId, [
-            { id: p1.id, name: p1.name, isBot: p1.isBot },
-            { id: p2.id, name: p2.name, isBot: p2.isBot }
-          ]);
+            await gameManager.createGame(matchId, [
+              { id: p1.id, name: p1.name, isBot: p1.isBot },
+              { id: p2.id, name: p2.name, isBot: p2.isBot }
+            ]);
 
-          const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
-          const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);
+            const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
+            const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);
 
-          // Wait for deck loading? 
-          // We'll trust the loop logic is fast enough or use Promise.all if we wanted to be strict.
-          // Reusing logic from game handler...
-          const loadDecks = async () => {
-            const loads = [{ p: p1, d: d1 }, { p: p2, d: d2 }].map(async ({ p, d }) => {
+            // Serialize Deck Loading to prevent lock contention
+            const loadDeck = async (p: any, d: any[]) => {
               if (d && d.length > 0) {
                 console.log(`[GameStart] Match ${matchId}: Loading deck for ${p.name}: ${d.length} cards.`);
-                for (const card of d as any[]) {
-                  // ... (Duplicate card logic for brevity, or we should extract a helper)
-                  // I'll keep it simple: assume same card logic.
-                  // Just calling addCardToGame
+                for (const card of d) {
                   let setCode = card.setCode || card.set || card.definition?.set;
                   let scryfallId = card.scryfallId || card.id || card.definition?.id;
                   if ((!setCode || !scryfallId) && card.imageUrl && card.imageUrl.includes('/cards/images/')) {
@@ -94,6 +113,7 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                       }
                     }
                   }
+
                   await gameManager.addCardToGame(matchId, {
                     ownerId: p.id,
                     controllerId: p.id,
@@ -116,21 +136,20 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                   });
                 }
               }
-            });
-            await Promise.all(loads);
-          };
+            };
 
-          await loadDecks();
+            await loadDeck(p1, d1 as any[]);
+            await loadDeck(p2, d2 as any[]);
 
-          // Start engine? createGame already started it. 
-          // We just added cards.
-          // We should trigger bot check now.
-          await gameManager.triggerBotCheck(matchId);
+            await gameManager.triggerBotCheck(matchId);
 
-          // Emit
-          const latestGame = await gameManager.getGame(matchId);
-          io.to(matchId).emit('game_update', latestGame);
-          io.to(matchId).emit('match_start', { gameId: matchId });
+            const latestGame = await gameManager.getGame(matchId);
+            io.to(matchId).emit('game_update', latestGame);
+            io.to(matchId).emit('match_start', { gameId: matchId });
+          }
+        } catch (e: any) {
+          console.error(`[MatchReady] Error starting game ${matchId}:`, e);
+          socket.emit('game_error', { message: "Failed to start game: " + e.message });
         }
       }
     }
