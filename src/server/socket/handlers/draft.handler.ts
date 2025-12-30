@@ -99,7 +99,7 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
   socket.on('start_solo_test', async ({ playerId, playerName, packs, basicLands }, callback) => {
     console.log(`Starting Solo Draft for ${playerName}`);
 
-    const room = await roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id);
+    const room = await roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id, 'draft');
     socket.join(room.id);
 
     for (let i = 0; i < 7; i++) {

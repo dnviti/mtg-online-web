@@ -181,13 +181,22 @@ export class DraftManager extends EventEmitter {
 
         this.processQueue(draft, neighborId);
       } else {
-        playerState.isWaiting = true;
-        console.log(`[DraftManager] 🏁 Pack exhausted for ${playerId}. Waiting for next round.`);
-        this.checkRoundCompletion(draft);
+        console.log(`[DraftManager] 🏁 Pack exhausted for ${playerId}.`);
       }
 
       // 4. Try to assign new active pack for self from queue
       this.processQueue(draft, playerId);
+
+      // 5. Update Waiting State & Check Round Completion
+      // Player is waiting ONLY if they have no active pack (meaning queue was also empty)
+      playerState.isWaiting = !playerState.activePack;
+
+      if (playerState.isWaiting) {
+        console.log(`[DraftManager] ⏳ Player ${playerId} is waiting for packs.`);
+        this.checkRoundCompletion(draft);
+      } else {
+        playerState.isWaiting = false; // Explicitly ensure false if active
+      }
 
       await this.saveDraftState(draft);
       return draft;
@@ -203,6 +212,7 @@ export class DraftManager extends EventEmitter {
       console.log(`[DraftManager] 📥 Player ${playerId} opened new pack from queue. Cards: ${p.activePack.cards.length}`);
       p.pickedInCurrentStep = 0; // Reset for new pack
       p.pickExpiresAt = Date.now() + 60000; // Reset timer for new pack
+      // Note: isWaiting will be updated by the caller (pickCard or autoPickInternal)
     }
   }
 
@@ -376,9 +386,20 @@ export class DraftManager extends EventEmitter {
       draft.players[neighborId].queue.push(passedPack);
       this.processQueue(draft, neighborId);
     } else {
-      playerState.isWaiting = true;
-      this.checkRoundCompletion(draft);
+      // Pack exhausted
     }
+
+    this.processQueue(draft, playerId);
+
+    // Same fix as pickCard:
+    playerState.isWaiting = !playerState.activePack;
+
+    if (playerState.isWaiting) {
+      this.checkRoundCompletion(draft);
+    } else {
+      playerState.isWaiting = false;
+    }
+
 
     this.processQueue(draft, playerId);
     return true;

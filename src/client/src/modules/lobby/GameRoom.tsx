@@ -37,6 +37,7 @@ interface Room {
   messages: ChatMessage[];
   format?: string;
   tournament?: any;
+  packs?: any[];
 }
 
 interface GameRoomProps {
@@ -109,7 +110,10 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
   // Open deck selection automatically if constructed and just started
   useEffect(() => {
-    if (room.status === 'deck_building' && room.format !== 'draft') {
+    // Robust check: It is Limited if format says so OR if there are packs involved
+    const isLimited = room.format === 'draft' || (room.packs && room.packs.length > 0);
+
+    if (room.status === 'deck_building' && !isLimited) {
       const me = room.players.find(p => p.id === currentPlayerId);
       // 'ready' might be on player object in room
       const isReady = (me as any)?.ready;
@@ -117,7 +121,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
         setIsDeckSelectionOpen(true);
       }
     }
-  }, [room.status, room.format, currentPlayerId, room.players, selectedDeckCards.length]);
+  }, [room.status, room.format, room.packs, currentPlayerId, room.players, selectedDeckCards.length]);
 
   // Derived State
   const host = room.players.find(p => p.isHost);
@@ -329,12 +333,14 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       }
 
       const myPool = draftState?.players[currentPlayerId]?.pool || [];
+      const isLimited = room.format === 'draft' || (room.packs && room.packs.length > 0);
+
       return <DeckBuilderView
         roomId={room.id}
         currentPlayerId={currentPlayerId}
         initialPool={myPool}
         availableBasicLands={room.basicLands}
-        isConstructed={room.format !== 'draft'}
+        isConstructed={!isLimited}
         initialDeck={selectedDeckCards} // Pass selected deck
       />;
     }

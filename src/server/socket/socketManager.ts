@@ -75,7 +75,13 @@ export const initializeSocket = (io: Server) => {
         if (draft.status === 'deck_building') {
           const room = await roomManager.getRoom(roomId);
           if (room) {
-            // roomUpdated removed as unused
+            // Fix: Sync room status if it's still drafting (caused when Bot triggers completion)
+            if (room.status === 'drafting') {
+              console.log(`[Sync] Draft ${roomId} complete (Bot triggered). Updating Room status to deck_building.`);
+              room.status = 'deck_building';
+              await roomManager.saveRoom(room);
+              io.to(roomId).emit('room_update', room);
+            }
 
             Object.values(draft.players).forEach(dp => {
               if (dp.isBot && dp.deck && dp.deck.length > 0) {
@@ -98,7 +104,12 @@ export const initializeSocket = (io: Server) => {
             // In old code, we checked `if (activePlayers.every(p => p.ready))`.
             // We should do that check here or in RoomManager.
 
-            // Let's refetch room to see latest state after bot updates
+            // Let's refetch room to see latest state after bot updates (or use the variable if we updated it)
+            // Ideally we re-fetch briefly to ensure we have latest bot-readiness if setPlayerReady finished?
+            // setPlayerReady is async.
+            // For now, let's keep the existing logic but knowing room might be slightly stale regarding ready-state if we don't await.
+
+            // Re-fetch room to get strictly up to date state before checking tournament
             const freshRoom = await roomManager.getRoom(roomId);
             if (freshRoom) {
               const activePlayers = freshRoom.players.filter(p => p.role === 'player');

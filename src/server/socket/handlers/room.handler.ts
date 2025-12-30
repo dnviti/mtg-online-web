@@ -36,7 +36,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
       }
 
       let currentDraft = null;
-      if (room.status === 'drafting') {
+      if (room.status === 'drafting' || room.status === 'deck_building') {
         currentDraft = await draftManager.getDraft(roomId);
         if (currentDraft) socket.emit('draft_update', currentDraft);
       }
@@ -67,7 +67,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
         }
 
         let currentDraft = null;
-        if (room.status === 'drafting') {
+        if (room.status === 'drafting' || room.status === 'deck_building') {
           currentDraft = await draftManager.getDraft(roomId);
           if (currentDraft) socket.emit('draft_update', currentDraft);
         }
