@@ -16,7 +16,7 @@ export const tournamentManager = new TournamentManager();
 export const userManager = new UserManager();
 
 // Persistence depends on others
-export const persistenceManager = new PersistenceManager(roomManager, draftManager, gameManager);
+export const persistenceManager = new PersistenceManager();
 
 export const cardService = new CardService();
 export const scryfallService = new ScryfallService();

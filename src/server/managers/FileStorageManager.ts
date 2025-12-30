@@ -1,23 +1,17 @@
-
 import fs from 'fs';
 import path from 'path';
-import { RedisClientManager } from './RedisClientManager';
+import { StateStoreManager } from './StateStoreManager';
 
 export class FileStorageManager {
-  private redisManager: RedisClientManager;
+  private storeManager: StateStoreManager;
 
   constructor() {
-    this.redisManager = RedisClientManager.getInstance();
+    this.storeManager = StateStoreManager.getInstance();
   }
 
   async saveFile(filePath: string, data: Buffer | string): Promise<void> {
-    if (this.redisManager.db1) {
-      // Use Redis DB1
-      // Key: Normalize path to be relative to project root or something unique?
-      // Simple approach: Use absolute path (careful with different servers) or relative path key.
-      // Let's assume filePath passed in is absolute. We iterate up to remove common prefix if we want cleaner keys,
-      // but absolute is safest uniqueness.
-      await this.redisManager.db1.set(filePath, typeof data === 'string' ? data : data.toString('binary'));
+    if (this.storeManager.fileStore) {
+      await this.storeManager.fileStore.set(filePath, data);
     } else {
       // Local File System
       const dir = path.dirname(filePath);
@@ -29,10 +23,8 @@ export class FileStorageManager {
   }
 
   async readFile(filePath: string): Promise<Buffer | null> {
-    if (this.redisManager.db1) {
-      // Redis DB1
-      const data = await this.redisManager.db1.getBuffer(filePath);
-      return data;
+    if (this.storeManager.fileStore) {
+      return this.storeManager.fileStore.getBuffer(filePath);
     } else {
       // Local
       if (fs.existsSync(filePath)) {
@@ -43,9 +35,9 @@ export class FileStorageManager {
   }
 
   async exists(filePath: string): Promise<boolean> {
-    if (this.redisManager.db1) {
-      const exists = await this.redisManager.db1.exists(filePath);
-      return exists > 0;
+    if (this.storeManager.fileStore) {
+      const val = await this.storeManager.fileStore.get(filePath);
+      return !!val;
     } else {
       return fs.existsSync(filePath);
     }

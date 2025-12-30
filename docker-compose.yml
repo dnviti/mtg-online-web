@@ -9,15 +9,25 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Database stored in the persisted server-data volume
-      # Path is relative to prisma/schema.prisma inside the container (/app/prisma/schema.prisma)
+      # Database
       - DATABASE_URL=file:/app/server-data/mtgate.db
-      - REDIS_URL=redis://redis:6379
+      # - DATABASE_URL=mysql://user:password@mysql:3306/mtgate
+      # Infrastructure config
+      - USE_REDIS=true
+      - USE_RABBITMQ=true
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MEMCACHED_HOST=memcached
+      - MEMCACHED_PORT=11211
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
     volumes:
       # Persist all server data (images, metadata, database)
       - ./server-data:/app/server-data:z
     depends_on:
       - redis
+      - rabbitmq
+      # - mysql # Uncomment if using mysql
+      # - memcached # Uncomment if using memcached
 
   redis:
     image: redis:alpine
@@ -26,5 +36,38 @@ services:
     volumes:
       - redis-data:/data
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mtgate-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  mysql:
+    image: mysql:8.0
+    container_name: mtgate-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mtgate
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  memcached:
+    image: memcached:alpine
+    container_name: mtgate-memcached
+    restart: always
+    ports:
+      - "11211:11211"
+
 volumes:
   redis-data:
+  rabbitmq-data:
+  mysql-data:

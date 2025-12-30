@@ -9,7 +9,8 @@ class SocketService {
 
   constructor() {
     this.socket = io(URL, {
-      autoConnect: false
+      autoConnect: false,
+      transports: ['websocket']
     });
 
     // Debug Wrapper

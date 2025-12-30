@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import { createServer } from 'http';
@@ -6,112 +7,151 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes'; // Imports index.ts from routes
 import { initializeSocket } from './socket/socketManager';
-import { persistenceManager } from './singletons';
-import { RedisClientManager } from './managers/RedisClientManager';
+import { StateStoreManager } from './managers/StateStoreManager';
 import { fileStorageManager } from './managers/FileStorageManager';
+import cluster from 'cluster';
+import os from 'os';
+import { createAdapter } from '@socket.io/redis-adapter';
+import Redis from 'ioredis';
+import { QueueManager } from './managers/QueueManager';
+import { packGeneratorService } from './singletons';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  maxHttpBufferSize: 1024 * 1024 * 1024,
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
+const numCPUs = os.cpus().length;
+
+if (cluster.isPrimary) {
+  console.log(`[Master] Primary ${process.pid} is running`);
+  console.log(`[Master] Forking ${numCPUs} workers...`);
+
+  // Fork workers.
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
   }
-});
 
-const PORT = process.env.PORT || 3000;
-
-app.use(express.json({ limit: '1000mb' }));
-
-// Persistence
-persistenceManager.load();
-const persistenceInterval = setInterval(() => {
-  persistenceManager.save();
-}, 5000);
-
-// Initialize Socket
-const { draftInterval } = initializeSocket(io);
-
-// Static File Serving
-const redisForFiles = RedisClientManager.getInstance().db1;
-if (redisForFiles) {
-  console.log('[Server] Using Redis for file serving');
-  app.get('/cards/*', async (req: Request, res: Response) => {
-    const relativePath = req.path;
-    const filePath = path.join(__dirname, 'public', relativePath);
-    const buffer = await fileStorageManager.readFile(filePath);
-    if (buffer) {
-      if (filePath.endsWith('.jpg')) res.type('image/jpeg');
-      else if (filePath.endsWith('.png')) res.type('image/png');
-      else if (filePath.endsWith('.json')) res.type('application/json');
-      res.send(buffer);
-    } else {
-      res.status(404).send('Not Found');
-    }
+  cluster.on('exit', (worker, _code, _signal) => {
+    console.log(`[Master] Worker ${worker.process.pid} died. Restarting...`);
+    cluster.fork();
   });
+
 } else {
-  console.log('[Server] Using Local FS for file serving');
-  app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
-}
+  // WORKER PROCESS
+  console.log(`[Worker] Worker ${process.pid} started`);
 
-app.use('/images', express.static(path.join(__dirname, 'public/images')));
-
-// API Routes
-app.use('/api', apiRoutes);
-
-// Frontend Serving
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.resolve(process.cwd(), 'dist');
-  app.use(express.static(distPath));
-
-  app.get('*', (_req: Request, res: Response) => {
-    if (_req.path.startsWith('/api') || _req.path.startsWith('/socket.io')) {
-      return res.status(404).json({ error: 'Not found' });
+  const app = express();
+  const httpServer = createServer(app);
+  const io = new Server(httpServer, {
+    maxHttpBufferSize: 1024 * 1024 * 1024,
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
     }
-    res.sendFile(path.join(distPath, 'index.html'));
   });
-}
 
-// Server Start
-httpServer.listen(Number(PORT), '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-  import('os').then(os => {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-      for (const iface of interfaces[name]!) {
-        if (iface.family === 'IPv4' && !iface.internal) {
-          console.log(`  - Network IP: http://${iface.address}:${PORT}`);
-        }
+  // Setup Redis Adapter (Conditional)
+  if (process.env.USE_REDIS === 'true') {
+    const pubClient = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10),
+      lazyConnect: true
+    });
+    const subClient = pubClient.duplicate();
+
+    Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log(`[Worker ${process.pid}] Redis Adapter configured`);
+    }).catch(err => {
+      // ioredis connects automatically often, but explicit call helps ensure readiness
+      console.log(`[Worker ${process.pid}] Redis Adapter Connection (Explicit) threw error or already connecting`, err);
+      io.adapter(createAdapter(pubClient, subClient));
+    });
+  } else {
+    console.log(`[Worker ${process.pid}] Running without Redis Adapter (Single Node / No Cluster Sync)`);
+  }
+
+  const PORT = process.env.PORT || 3000;
+
+  app.use(express.json({ limit: '1000mb' }));
+
+  // Initialize Socket
+  initializeSocket(io);
+
+  // Static File Serving
+  const fileStore = StateStoreManager.getInstance().fileStore;
+  if (fileStore) {
+    if (process.env.DEBUG_STATIC) console.log(`[Worker ${process.pid}] Using StateStore (Redis DB1) for file serving`);
+    app.get('/cards/*', async (req: Request, res: Response) => {
+      const relativePath = req.path;
+      const filePath = path.join(__dirname, 'public', relativePath);
+      const buffer = await fileStorageManager.readFile(filePath);
+      if (buffer) {
+        if (filePath.endsWith('.jpg')) res.type('image/jpeg');
+        else if (filePath.endsWith('.png')) res.type('image/png');
+        else if (filePath.endsWith('.json')) res.type('application/json');
+        res.send(buffer);
+      } else {
+        res.status(404).send('Not Found');
       }
+    });
+  } else {
+    // console.log(`[Worker ${process.pid}] Using Local FS for file serving`);
+    app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
+  }
+
+  app.use('/images', express.static(path.join(__dirname, 'public/images')));
+
+  // API Routes
+  app.use('/api', apiRoutes);
+
+  // Frontend Serving
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.resolve(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+
+    app.get('*', (_req: Request, res: Response) => {
+      if (_req.path.startsWith('/api') || _req.path.startsWith('/socket.io')) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  // Server Start
+  httpServer.listen(Number(PORT), () => {
+    // console.log(`Worker ${process.pid} listening on port ${PORT}`);
+  });
+
+  // Setup Job Consumer
+  QueueManager.getInstance().consume('generate_packs', async (data) => {
+    if (process.env.DEBUG_QUEUE) console.log(`[Worker ${process.pid}] Processing pack generation job...`);
+    const { pools, sets, settings, numPacks } = data;
+    try {
+      const packs = packGeneratorService.generatePacks(pools, sets, settings, numPacks);
+      return packs;
+    } catch (e) {
+      console.error(`[Worker ${process.pid}] Pack Generation Job Failed`, e);
+      throw e;
     }
   });
-});
 
-// Graceful Shutdown
-const gracefulShutdown = () => {
-  console.log('Received kill signal, shutting down gracefully');
-  clearInterval(draftInterval);
-  clearInterval(persistenceInterval);
-  persistenceManager.save();
+  // Graceful Shutdown
+  const gracefulShutdown = () => {
+    console.log(`[Worker ${process.pid}] Received kill signal`);
+    // cleanup
+    io.close(() => {
+      console.log('Socket.io closed');
+    });
 
-  io.close(() => {
-    console.log('Socket.io closed');
-  });
+    httpServer.close(() => {
+      process.exit(0);
+    });
 
-  httpServer.close(() => {
-    console.log('Closed out remaining connections');
-    process.exit(0);
-  });
+    setTimeout(() => {
+      process.exit(1);
+    }, 10000);
+  };
 
-  setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 10000);
-};
-
-process.on('SIGTERM', gracefulShutdown);
-process.on('SIGINT', gracefulShutdown);
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
+}

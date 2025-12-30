@@ -2,10 +2,10 @@ import { Server, Socket } from 'socket.io';
 import { roomManager, draftManager, tournamentManager, scryfallService } from '../../singletons';
 
 export const registerDraftHandlers = (io: Server, socket: Socket) => {
-  const getContext = () => roomManager.getPlayerBySocket(socket.id);
+  const getContext = async () => roomManager.getPlayerBySocket(socket.id);
 
-  socket.on('start_draft', () => {
-    const context = getContext();
+  socket.on('start_draft', async () => {
+    const context = await getContext();
     if (!context) return;
     const { room } = context;
 
@@ -16,7 +16,7 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
       }
 
       if (room.format === 'draft') {
-        const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
+        const draft = await draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
         room.status = 'drafting';
 
         io.to(room.id).emit('room_update', room);
@@ -28,14 +28,14 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('pick_card', ({ cardId }) => {
-    const context = getContext();
+  socket.on('pick_card', async ({ cardId }) => {
+    const context = await getContext();
     if (!context) return;
     const { room, player } = context;
 
     console.log(`[Socket] 📩 Recv pick_card: Player ${player.name} (ID: ${player.id}) picked ${cardId}`);
 
-    const draft = draftManager.pickCard(room.id, player.id, cardId);
+    const draft = await draftManager.pickCard(room.id, player.id, cardId);
     if (draft) {
       io.to(room.id).emit('draft_update', draft);
 
@@ -44,13 +44,13 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
         io.to(room.id).emit('room_update', room);
 
         // Sync Bot Readiness
-        const currentRoom = roomManager.getRoom(room.id);
+        const currentRoom = await roomManager.getRoom(room.id);
         if (currentRoom) {
-          Object.values(draft.players).forEach(draftPlayer => {
+          Object.values(draft.players).forEach(async (draftPlayer) => {
             if (draftPlayer.isBot && draftPlayer.deck) {
               const roomPlayer = currentRoom.players.find(rp => rp.id === draftPlayer.id);
               if (roomPlayer && (!roomPlayer.ready || !roomPlayer.deck || roomPlayer.deck.length === 0)) {
-                const updatedRoom = roomManager.setPlayerReady(room.id, draftPlayer.id, draftPlayer.deck);
+                const updatedRoom = await roomManager.setPlayerReady(room.id, draftPlayer.id, draftPlayer.deck);
                 if (updatedRoom) {
                   io.to(room.id).emit('room_update', updatedRoom);
                   console.log(`Bot ${draftPlayer.id} marked ready with deck (${draftPlayer.deck.length} cards).`);
@@ -60,15 +60,17 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
           });
         }
       }
+    } else {
+      // Could send error to client: "Pick failed (race condition?)"
     }
   });
 
-  socket.on('player_ready', ({ deck }) => {
-    const context = getContext();
+  socket.on('player_ready', async ({ deck }) => {
+    const context = await getContext();
     if (!context) return;
     const { room, player } = context;
 
-    const updatedRoom = roomManager.setPlayerReady(room.id, player.id, deck);
+    const updatedRoom = await roomManager.setPlayerReady(room.id, player.id, deck);
     if (updatedRoom) {
       io.to(room.id).emit('room_update', updatedRoom);
       const activePlayers = updatedRoom.players.filter(p => p.role === 'player');
@@ -94,23 +96,30 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('start_solo_test', ({ playerId, playerName, packs, basicLands }, callback) => {
+  socket.on('start_solo_test', async ({ playerId, playerName, packs, basicLands }, callback) => {
     console.log(`Starting Solo Draft for ${playerName}`);
 
-    const room = roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id);
+    const room = await roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id);
     socket.join(room.id);
 
     for (let i = 0; i < 7; i++) {
-      roomManager.addBot(room.id);
+      await roomManager.addBot(room.id);
     }
 
-    const draft = draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
-    room.status = 'drafting';
+    // Refresh room after adding bots to get correct player list
+    const roomWithBots = await roomManager.getRoom(room.id);
+    if (!roomWithBots) {
+      if (typeof callback === 'function') callback({ success: false, message: "Failed to create room" });
+      return;
+    }
+
+    const draft = await draftManager.createDraft(roomWithBots.id, roomWithBots.players.map(p => ({ id: p.id, isBot: !!p.isBot })), roomWithBots.packs, roomWithBots.basicLands);
+    roomWithBots.status = 'drafting';
 
     if (typeof callback === 'function') {
-      callback({ success: true, room, draftState: draft });
+      callback({ success: true, room: roomWithBots, draftState: draft });
     }
-    io.to(room.id).emit('room_update', room);
+    io.to(room.id).emit('room_update', roomWithBots);
     io.to(room.id).emit('draft_update', draft);
   });
 

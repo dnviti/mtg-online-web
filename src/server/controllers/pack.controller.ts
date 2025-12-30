@@ -30,6 +30,12 @@ export class PackController {
         }
       }
 
+      const activeSettings = settings || {
+        mode: (sourceMode === 'set') ? 'by_set' : 'mixed',
+        rarityMode: 'standard', // Default
+        withReplacement: (sourceMode === 'set')
+      };
+
       const activeFilters = filters || {
         ignoreBasicLands: false,
         ignoreCommander: false,
@@ -75,7 +81,7 @@ export class PackController {
         }
       }
 
-      const packs = packGeneratorService.generatePacks(pools, sets, settings, numPacks || 108);
+      const packs = await import('../managers/QueueManager').then(m => m.QueueManager.getInstance().sendRPC('generate_packs', { pools, sets, settings: activeSettings, numPacks: numPacks || 108 }));
       res.json({ packs, basicLands: uniqueBasicLands });
     } catch (e: any) {
       console.error("Generation error", e);

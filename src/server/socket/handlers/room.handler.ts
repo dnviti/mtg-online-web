@@ -2,17 +2,27 @@ import { Server, Socket } from 'socket.io';
 import { roomManager, draftManager, gameManager } from '../../singletons';
 
 export const registerRoomHandlers = (io: Server, socket: Socket) => {
-  const getContext = () => roomManager.getPlayerBySocket(socket.id);
+  const getContext = async () => await roomManager.getPlayerBySocket(socket.id);
 
-  socket.on('create_room', ({ hostId, hostName, packs, basicLands, format }, callback) => {
-    const room = roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id, format);
-    socket.join(room.id);
-    console.log(`Room created: ${room.id} by ${hostName}`);
-    callback({ success: true, room });
+  socket.on('create_room', async ({ hostId, hostName, packs, basicLands, format }, callback) => {
+    console.log(`[Handler] create_room request from ${hostName} (${hostId})`);
+    try {
+      const room = await roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id, format);
+      console.log(`[Handler] Room object created: ${room.id}`);
+
+      socket.join(room.id);
+      console.log(`[Handler] Socket joined room: ${room.id}`);
+
+      console.log(`Room created: ${room.id} by ${hostName}`);
+      if (typeof callback === 'function') callback({ success: true, room });
+    } catch (err) {
+      console.error('[Handler] Error handling create_room:', err);
+      if (typeof callback === 'function') callback({ success: false, message: 'Failed to create room' });
+    }
   });
 
-  socket.on('join_room', ({ roomId, playerId, playerName }, callback) => {
-    const room = roomManager.joinRoom(roomId, playerId, playerName, socket.id);
+  socket.on('join_room', async ({ roomId, playerId, playerName }, callback) => {
+    const room = await roomManager.joinRoom(roomId, playerId, playerName, socket.id);
     if (room) {
       console.log(`Player ${playerName} reconnected.`);
 
@@ -22,12 +32,12 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 
       if (room.hostId === playerId) {
         console.log(`Host ${playerName} reconnected. Resuming draft timers.`);
-        draftManager.setPaused(roomId, false);
+        await draftManager.setPaused(roomId, false);
       }
 
       let currentDraft = null;
       if (room.status === 'drafting') {
-        currentDraft = draftManager.getDraft(roomId);
+        currentDraft = await draftManager.getDraft(roomId);
         if (currentDraft) socket.emit('draft_update', currentDraft);
       }
 
@@ -35,17 +45,17 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
         socket.emit('tournament_update', room.tournament);
       }
 
-      callback({ success: true, room, draftState: currentDraft, tournament: room.tournament });
+      if (typeof callback === 'function') callback({ success: true, room, draftState: currentDraft, tournament: room.tournament });
     } else {
-      callback({ success: false, message: 'Room not found or full' });
+      if (typeof callback === 'function') callback({ success: false, message: 'Room not found or full' });
     }
   });
 
-  socket.on('rejoin_room', ({ roomId, playerId }, callback) => {
+  socket.on('rejoin_room', async ({ roomId, playerId }, callback) => {
     socket.join(roomId);
 
     if (playerId) {
-      const room = roomManager.updatePlayerSocket(roomId, playerId, socket.id);
+      const room = await roomManager.updatePlayerSocket(roomId, playerId, socket.id);
 
       if (room) {
         console.log(`Player ${playerId} reconnected via rejoin.`);
@@ -53,25 +63,25 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 
         if (room.hostId === playerId) {
           console.log(`Host ${playerId} reconnected. Resuming draft timers.`);
-          draftManager.setPaused(roomId, false);
+          await draftManager.setPaused(roomId, false);
         }
 
         let currentDraft = null;
         if (room.status === 'drafting') {
-          currentDraft = draftManager.getDraft(roomId);
+          currentDraft = await draftManager.getDraft(roomId);
           if (currentDraft) socket.emit('draft_update', currentDraft);
         }
 
         let currentGame = null;
         if (room.status === 'playing') {
-          currentGame = gameManager.getGame(roomId);
+          currentGame = await gameManager.getGame(roomId);
           if (currentGame) socket.emit('game_update', currentGame);
         } else if (room.status === 'tournament') {
           if (room.tournament) {
             socket.emit('tournament_update', room.tournament);
             const p = room.players.find(rp => rp.id === playerId);
             if (p && p.matchId) {
-              currentGame = gameManager.getGame(p.matchId);
+              currentGame = await gameManager.getGame(p.matchId);
               if (currentGame) {
                 socket.join(p.matchId);
                 socket.emit('game_update', currentGame);
@@ -95,8 +105,8 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('leave_room', ({ roomId, playerId }) => {
-    const room = roomManager.leaveRoom(roomId, playerId);
+  socket.on('leave_room', async ({ roomId, playerId }) => {
+    const room = await roomManager.leaveRoom(roomId, playerId);
     socket.leave(roomId);
     if (room) {
       console.log(`Player ${playerId} left room ${roomId}`);
@@ -106,15 +116,15 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('kick_player', ({ roomId, targetId }) => {
-    const context = getContext();
+  socket.on('kick_player', async ({ roomId, targetId }) => {
+    const context = await getContext();
     if (!context || !context.player.isHost) return;
 
-    const room = roomManager.getRoom(roomId);
+    const room = await roomManager.getRoom(roomId);
     if (room) {
       const target = room.players.find(p => p.id === targetId);
       if (target) {
-        const updatedRoom = roomManager.kickPlayer(roomId, targetId);
+        const updatedRoom = await roomManager.kickPlayer(roomId, targetId);
         if (updatedRoom) {
           io.to(roomId).emit('room_update', updatedRoom);
           if (target.socketId) {
@@ -126,11 +136,11 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('add_bot', ({ roomId }) => {
-    const context = getContext();
+  socket.on('add_bot', async ({ roomId }) => {
+    const context = await getContext();
     if (!context || !context.player.isHost) return;
 
-    const updatedRoom = roomManager.addBot(roomId);
+    const updatedRoom = await roomManager.addBot(roomId);
     if (updatedRoom) {
       io.to(roomId).emit('room_update', updatedRoom);
       console.log(`Bot added to room ${roomId}`);
@@ -139,21 +149,21 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('remove_bot', ({ roomId, botId }) => {
-    const context = getContext();
+  socket.on('remove_bot', async ({ roomId, botId }) => {
+    const context = await getContext();
     if (!context || !context.player.isHost) return;
 
-    const updatedRoom = roomManager.removeBot(roomId, botId);
+    const updatedRoom = await roomManager.removeBot(roomId, botId);
     if (updatedRoom) {
       io.to(roomId).emit('room_update', updatedRoom);
       console.log(`Bot ${botId} removed from room ${roomId}`);
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log('User disconnected', socket.id);
+  socket.on('disconnect', async () => {
+    // console.log('User disconnected', socket.id); // Verbose
 
-    const result = roomManager.setPlayerOffline(socket.id);
+    const result = await roomManager.setPlayerOffline(socket.id);
     if (result) {
       const { room, playerId } = result;
       console.log(`Player ${playerId} disconnected from room ${room.id}`);
@@ -165,7 +175,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
 
         if (hostOffline) {
           console.log("Host is offline. Pausing game (stopping all timers).");
-          draftManager.setPaused(room.id, true);
+          await draftManager.setPaused(room.id, true);
         }
       }
     }

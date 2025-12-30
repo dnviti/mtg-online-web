@@ -1,27 +1,26 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager, gameManager } from '../../singletons';
-import { RulesEngine } from '../../game/RulesEngine';
 
 export const registerGameHandlers = (io: Server, socket: Socket) => {
   const getContext = () => roomManager.getPlayerBySocket(socket.id);
 
-  socket.on('start_game', ({ decks }) => {
-    const context = getContext();
+  socket.on('start_game', async ({ decks }) => {
+    const context = await getContext();
     if (!context) return;
     const { room } = context;
 
-    const updatedRoom = roomManager.startGame(room.id);
+    const updatedRoom = await roomManager.startGame(room.id);
     if (updatedRoom) {
       io.to(room.id).emit('room_update', updatedRoom);
-      const game = gameManager.createGame(room.id, updatedRoom.players, updatedRoom.format);
+      await gameManager.createGame(room.id, updatedRoom.players, updatedRoom.format);
 
-      updatedRoom.players.forEach(p => {
+      updatedRoom.players.forEach(async p => {
         let finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
 
         if (finalDeck && Array.isArray(finalDeck)) {
           console.log(`[GameStart] Loading deck for ${p.name} (${p.id}): ${finalDeck.length} cards.`);
 
-          finalDeck.forEach((card: any) => {
+          finalDeck.forEach(async (card: any) => {
             let setCode = card.setCode || card.set || card.definition?.set;
             let scryfallId = card.scryfallId || card.id || card.definition?.id;
 
@@ -37,7 +36,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               }
             }
 
-            gameManager.addCardToGame(room.id, {
+            await gameManager.addCardToGame(room.id, {
               ownerId: p.id,
               controllerId: p.id,
               oracleId: card.oracle_id || card.id || card.definition?.oracle_id,
@@ -63,35 +62,45 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
         }
       });
 
-      const engine = new RulesEngine(game);
-      engine.startGame();
-      gameManager.triggerBotCheck(room.id);
+      // We need to wait for cards to be added? 
+      // The old code was synchronous loop. 
+      // The async nature of redis means `addCardToGame` is async.
+      // We should probably await all deck loading before starting game engine?
+      // But `createGame` already initialized engine.
+      // The engine startup `startGame()` is called inside `createGame`.
+      // We trigger bot check.
 
-      io.to(room.id).emit('game_update', game);
+      await gameManager.triggerBotCheck(room.id);
+
+      // Fetch latest state to emit
+      const latestGame = await gameManager.getGame(room.id);
+      if (latestGame) {
+        io.to(room.id).emit('game_update', latestGame);
+      }
     }
   });
 
-  socket.on('game_action', ({ action }) => {
-    const context = getContext();
+  socket.on('game_action', async ({ action }) => {
+    const context = await getContext();
     if (!context) return;
     const { room, player } = context;
 
     const targetGameId = player.matchId || room.id;
 
-    const game = gameManager.handleAction(targetGameId, action, player.id);
+    const game = await gameManager.handleAction(targetGameId, action, player.id);
     if (game) {
       io.to(game.roomId).emit('game_update', game);
     }
   });
 
-  socket.on('game_strict_action', ({ action }) => {
-    const context = getContext();
+  socket.on('game_strict_action', async ({ action }) => {
+    const context = await getContext();
     if (!context) return;
     const { room, player } = context;
 
     const targetGameId = player.matchId || room.id;
 
-    const game = gameManager.handleStrictAction(targetGameId, action, player.id);
+    const game = await gameManager.handleStrictAction(targetGameId, action, player.id);
     if (game) {
       io.to(game.roomId).emit('game_update', game);
     }

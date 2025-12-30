@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "{{DATABASE_PROVIDER}}"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique
+  passwordHash String
+  decks        SavedDeck[]
+  matchHistory MatchRecord[]
+  createdAt    DateTime      @default(now())
+}
+
+model SavedDeck {
+  id        String   @id @default(uuid())
+  name      String
+  cards     String   // Stored as JSON string
+  format    String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+}
+
+model MatchRecord {
+  id       String   @id @default(uuid())
+  date     DateTime @default(now())
+  result   String
+  deckId   String?
+  opponent String?
+  user     User     @relation(fields: [userId], references: [id])
+  userId   String
+}
+
+model Card {
+  id               String  @id
+  oracle_id        String?
+  name             String
+  set              String
+  collector_number String
+  rarity           String
+  mana_cost        String?
+  cmc              Float?
+  type_line        String?
+  oracle_text      String?
+  colors           String? // JSON
+  color_identity   String? // JSON
+  image_uris       String? // JSON
+  layout           String?
+  card_faces       String? // JSON
+  
+  @@index([name])
+  @@index([set])
+}
+
+model Set {
+  id         String  @id
+  code       String  @unique
+  name       String
+  uri        String
+  card_count Int?
+}
+
+model Draft {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Game {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Room {
+  id        String   @id
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,4 +1,5 @@
 import { Tournament } from './TournamentManager';
+import { StateStoreManager } from './StateStoreManager';
 
 interface Player {
   id: string;
@@ -35,14 +36,59 @@ interface Room {
 }
 
 export class RoomManager {
-  private rooms: Map<string, Room> = new Map();
+  private get store() {
+    const client = StateStoreManager.getInstance().store;
+    if (!client) throw new Error("State Store not initialized");
+    return client;
+  }
+
+  // --- Redis Helpers ---
+
+  private async getRoomState(roomId: string): Promise<Room | null> {
+    const data = await this.store.get(`room:${roomId}`);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async saveRoom(room: Room) {
+    await this.saveRoomState(room);
+  }
+
+  private async saveRoomState(room: Room) {
+    await this.store.set(`room:${room.id}`, JSON.stringify(room));
+    await this.store.sadd('active_rooms', room.id);
+  }
+
+  private async deleteRoomState(roomId: string) {
+    await this.store.del(`room:${roomId}`);
+    await this.store.srem('active_rooms', roomId);
+  }
+
+  private async mapSocket(socketId: string, roomId: string, playerId: string) {
+    await this.store.set(`socket_map:${socketId}`, JSON.stringify({ roomId, playerId }), 86400); // 24h
+  }
+
+  private async unmapSocket(socketId: string) {
+    await this.store.del(`socket_map:${socketId}`);
+  }
+
+  private async acquireLock(roomId: string): Promise<boolean> {
+    return this.store.acquireLock(`lock:room:${roomId}`, 5);
+  }
+
+  private async releaseLock(roomId: string) {
+    await this.store.releaseLock(`lock:room:${roomId}`);
+  }
 
   constructor() {
-    // Cleanup job: Check every 5 minutes
+    // Cleanup job: Check every 5 minutes in ONE worker only?
+    // Or just let all workers compete.
     setInterval(() => this.cleanupRooms(), 5 * 60 * 1000);
   }
 
-  createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string, format: string = 'standard'): Room {
+  // --- Methods ---
+
+  async createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string, format: string = 'standard'): Promise<Room> {
+    console.log(`[RoomManager] createRoom called for ${hostName}`);
     const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
     const room: Room = {
       id: roomId,
@@ -53,235 +99,315 @@ export class RoomManager {
       format,
       status: 'waiting',
       messages: [],
-      maxPlayers: hostId.startsWith('SOLO_') ? 1 : 8, // Little hack for solo testing, though 8 is fine
+      maxPlayers: hostId.startsWith('SOLO_') ? 1 : 8,
       lastActive: Date.now()
     };
-    this.rooms.set(roomId, room);
-    return room;
-  }
 
-  setPlayerReady(roomId: string, playerId: string, deck: any[]): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
+    console.log(`[RoomManager] Saving room state for ${roomId}`);
+    await this.saveRoomState(room);
+    console.log(`[RoomManager] Room state saved for ${roomId}`);
 
-    room.lastActive = Date.now();
-    const player = room.players.find(p => p.id === playerId);
-    if (player) {
-      player.ready = true;
-      player.deck = deck;
+    if (socketId) {
+      console.log(`[RoomManager] Mapping socket for ${roomId}`);
+      await this.mapSocket(socketId, roomId, hostId);
     }
     return room;
   }
 
-  joinRoom(roomId: string, playerId: string, playerName: string, socketId?: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
+  async setPlayerReady(roomId: string, playerId: string, deck: any[]): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
 
-    room.lastActive = Date.now();
-
-    // Rejoin if already exists
-    const existingPlayer = room.players.find(p => p.id === playerId);
-    if (existingPlayer) {
-      existingPlayer.socketId = socketId;
-      existingPlayer.isOffline = false;
-      return room;
-    }
-
-    // Determine role
-    let role: 'player' | 'spectator' = 'player';
-    if (room.players.filter(p => p.role === 'player').length >= room.maxPlayers || room.status !== 'waiting') {
-      role = 'spectator';
-    }
-
-    room.players.push({ id: playerId, name: playerName, isHost: false, role, socketId, isOffline: false });
-    return room;
-  }
-
-  updatePlayerSocket(roomId: string, playerId: string, socketId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
-
-    room.lastActive = Date.now();
-
-    const player = room.players.find(p => p.id === playerId);
-    if (player) {
-      player.socketId = socketId;
-      player.isOffline = false;
-    }
-    return room;
-  }
-
-  setPlayerOffline(socketId: string): { room: Room, playerId: string } | null {
-    // Find room and player by socketId (inefficient but works for now)
-    for (const room of this.rooms.values()) {
-      const player = room.players.find(p => p.socketId === socketId);
+      room.lastActive = Date.now();
+      const player = room.players.find(p => p.id === playerId);
       if (player) {
-        player.isOffline = true;
-        // Do NOT update lastActive on disconnect, or maybe we should? 
-        // No, lastActive is for "when was the room last used?". Disconnect is an event, but inactivity starts from here.
-        // So keeping lastActive as previous interaction time is safer?
-        // Actually, if everyone disconnects now, room should be kept for 8 hours from NOW.
-        // So update lastActive.
-        room.lastActive = Date.now();
-        return { room, playerId: player.id };
+        player.ready = true;
+        player.deck = deck;
       }
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
     }
-    return null;
   }
 
-  leaveRoom(roomId: string, playerId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
+  async joinRoom(roomId: string, playerId: string, playerName: string, socketId?: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
 
-    room.lastActive = Date.now();
+      room.lastActive = Date.now();
 
-    // Logic change: Explicit leave only removes player from list if waiting.
-    // If playing, mark offline (abandon).
-    // NEVER DELETE ROOM HERE. Rely on cleanup.
-
-    if (room.status === 'waiting') {
-      // Normal logic: Remove player completely
-      room.players = room.players.filter(p => p.id !== playerId);
-
-      // If host leaves, assign new host from remaining players
-      if (room.players.length > 0 && room.hostId === playerId) {
-        const nextPlayer = room.players.find(p => p.role === 'player') || room.players[0];
-        if (nextPlayer) {
-          room.hostId = nextPlayer.id;
-          nextPlayer.isHost = true;
-        }
+      // Rejoin if already exists
+      const existingPlayer = room.players.find(p => p.id === playerId);
+      if (existingPlayer) {
+        existingPlayer.socketId = socketId;
+        existingPlayer.isOffline = false;
+        await this.saveRoomState(room);
+        if (socketId) await this.mapSocket(socketId, roomId, playerId);
+        return room;
       }
-      // If 0 players, room remains in Map until cleanup
-    } else {
-      // Game in progress (Drafting/Playing)
+
+      // Determine role
+      let role: 'player' | 'spectator' = 'player';
+      if (room.players.filter(p => p.role === 'player').length >= room.maxPlayers || room.status !== 'waiting') {
+        role = 'spectator';
+      }
+
+      room.players.push({ id: playerId, name: playerName, isHost: false, role, socketId, isOffline: false });
+      await this.saveRoomState(room);
+      if (socketId) await this.mapSocket(socketId, roomId, playerId);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  // Simplified update without full lock? No, concurrency implies lock.
+  async updatePlayerSocket(roomId: string, playerId: string, socketId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      room.lastActive = Date.now();
+      const player = room.players.find(p => p.id === playerId);
+      if (player) {
+        player.socketId = socketId;
+        player.isOffline = false;
+      }
+      await this.saveRoomState(room);
+      await this.mapSocket(socketId, roomId, playerId);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async setPlayerOffline(socketId: string): Promise<{ room: Room, playerId: string } | null> {
+    // 1. Resolve socket map
+    const mappingStr = await this.store.get(`socket_map:${socketId}`);
+    if (!mappingStr) return null; // Can't find player by socket
+
+    const { roomId, playerId } = JSON.parse(mappingStr);
+
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
       const player = room.players.find(p => p.id === playerId);
       if (player) {
         player.isOffline = true;
-        player.socketId = undefined;
+        // player.socketId = undefined; // Optional: keep last known for reconnect?
+        room.lastActive = Date.now();
+        await this.saveRoomState(room);
+        await this.unmapSocket(socketId);
+        return { room, playerId };
       }
-      console.log(`Player ${playerId} left active game in room ${roomId}. Marked as offline.`);
+      return null; // Should not happen if map exists
+    } finally {
+      await this.releaseLock(roomId);
     }
-    return room;
   }
 
-  startGame(roomId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
+  async leaveRoom(roomId: string, playerId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
 
-    // Logic Branch based on Format
-    if (room.format === 'draft') {
-      room.status = 'drafting';
-    } else {
-      // Commander, Standard, etc. skip drafting and go to deck building
-      room.status = 'deck_building';
-    }
+      room.lastActive = Date.now();
 
-    room.lastActive = Date.now();
-    return room;
-  }
+      if (room.status === 'waiting') {
+        room.players = room.players.filter(p => p.id !== playerId);
 
-  getRoom(roomId: string): Room | undefined {
-    // Refresh activity if accessed? Not necessarily, only write actions.
-    // But rejoining calls getRoom implicitly in join logic or index logic?
-    // Let's assume write actions update lastActive.
-    return this.rooms.get(roomId);
-  }
+        if (room.players.length > 0 && room.hostId === playerId) {
+          const nextPlayer = room.players.find(p => p.role === 'player') || room.players[0];
+          if (nextPlayer) {
+            room.hostId = nextPlayer.id;
+            nextPlayer.isHost = true;
+          }
+        }
+        // If empty, cleanup handles it later
+      } else {
+        const player = room.players.find(p => p.id === playerId);
+        if (player) {
+          player.isOffline = true;
+          player.socketId = undefined;
+        }
+        console.log(`Player ${playerId} left active game in room ${roomId}. Marked as offline.`);
+      }
 
-  kickPlayer(roomId: string, playerId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
-    room.lastActive = Date.now();
-
-    room.players = room.players.filter(p => p.id !== playerId);
-    return room;
-  }
-
-  addMessage(roomId: string, sender: string, text: string): ChatMessage | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
-    room.lastActive = Date.now();
-
-    const message: ChatMessage = {
-      id: Math.random().toString(36).substring(7),
-      sender,
-      text,
-      timestamp: new Date().toISOString()
-    };
-    room.messages.push(message);
-    return message;
-  }
-
-  addBot(roomId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
-
-    room.lastActive = Date.now();
-
-    // Check limits
-    if (room.players.length >= room.maxPlayers) return null;
-
-    const botNumber = room.players.filter(p => p.isBot).length + 1;
-    const botId = `bot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-
-    const botPlayer: Player = {
-      id: botId,
-      name: `Bot ${botNumber}`,
-      isHost: false,
-      role: 'player',
-      ready: true, // Bots are always ready? Or host readies them? Let's say ready for now.
-      isOffline: false,
-      isBot: true
-    };
-
-    room.players.push(botPlayer);
-    return room;
-  }
-
-  removeBot(roomId: string, botId: string): Room | null {
-    const room = this.rooms.get(roomId);
-    if (!room) return null;
-
-    room.lastActive = Date.now();
-    const botIndex = room.players.findIndex(p => p.id === botId && p.isBot);
-    if (botIndex !== -1) {
-      room.players.splice(botIndex, 1);
+      await this.saveRoomState(room);
       return room;
+    } finally {
+      await this.releaseLock(roomId);
     }
-    return null;
   }
 
-  getPlayerBySocket(socketId: string): { player: Player, room: Room } | null {
-    for (const room of this.rooms.values()) {
-      const player = room.players.find(p => p.socketId === socketId);
-      if (player) {
-        return { player, room };
+  async startGame(roomId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      if (room.format === 'draft') {
+        room.status = 'drafting';
+      } else {
+        room.status = 'deck_building';
       }
+      room.lastActive = Date.now();
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
     }
-    return null;
   }
 
-  getAllRooms(): Room[] {
-    return Array.from(this.rooms.values());
+  async getRoom(roomId: string): Promise<Room | null> {
+    return this.getRoomState(roomId);
   }
 
-  private cleanupRooms() {
+  async kickPlayer(roomId: string, playerId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+      room.lastActive = Date.now();
+      room.players = room.players.filter(p => p.id !== playerId);
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async addMessage(roomId: string, sender: string, text: string): Promise<{ message: ChatMessage, room: Room } | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+      room.lastActive = Date.now();
+
+      const message: ChatMessage = {
+        id: Math.random().toString(36).substring(7),
+        sender,
+        text,
+        timestamp: new Date().toISOString()
+      };
+      room.messages.push(message);
+
+      await this.saveRoomState(room);
+      return { message, room };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async addBot(roomId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+      room.lastActive = Date.now();
+
+      if (room.players.length >= room.maxPlayers) return null;
+
+      const botNumber = room.players.filter(p => p.isBot).length + 1;
+      const botId = `bot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      const botPlayer: Player = {
+        id: botId,
+        name: `Bot ${botNumber}`,
+        isHost: false,
+        role: 'player',
+        ready: true,
+        isOffline: false,
+        isBot: true
+      };
+
+      room.players.push(botPlayer);
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async removeBot(roomId: string, botId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+      room.lastActive = Date.now();
+
+      const botIndex = room.players.findIndex(p => p.id === botId && p.isBot);
+      if (botIndex !== -1) {
+        room.players.splice(botIndex, 1);
+        await this.saveRoomState(room);
+        return room;
+      }
+      return null;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async getPlayerBySocket(socketId: string): Promise<{ player: Player, room: Room } | null> {
+    const mappingStr = await this.store.get(`socket_map:${socketId}`);
+    if (!mappingStr) return null;
+
+    const { roomId, playerId } = JSON.parse(mappingStr);
+    const room = await this.getRoomState(roomId);
+    if (!room) return null;
+
+    const player = room.players.find(p => p.id === playerId);
+    if (!player) return null;
+
+    return { player, room };
+  }
+
+  async getAllRooms(): Promise<Room[]> {
+    const keys = await this.store.smembers('active_rooms');
+    const rooms: Room[] = [];
+    for (const key of keys) {
+      const r = await this.getRoomState(key);
+      if (r) rooms.push(r);
+    }
+    return rooms;
+  }
+
+  private async cleanupRooms() {
+    // Only Try to lock 'cleanup' global key?
+    // Or just let everyone cleanup. 
+    // Deleting expired room is safe if atomic check.
     const now = Date.now();
-    const EXPIRATION_MS = 8 * 60 * 60 * 1000; // 8 Hours
+    const EXPIRATION_MS = 8 * 60 * 60 * 1000;
 
-    for (const [roomId, room] of this.rooms.entries()) {
-      // Logic:
-      // 1. If players are online, room is active. -> Don't delete.
-      // 2. If NO players are online (all offline or empty), check lastActive.
+    const keys = await this.store.smembers('active_rooms');
+    for (const roomId of keys) {
+      // Try lock individual room to check expiration
+      if (await this.acquireLock(roomId)) {
+        try {
+          const room = await this.getRoomState(roomId);
+          if (!room) {
+            await this.deleteRoomState(roomId); // Clean dangling key
+            continue;
+          }
 
-      const anyOnline = room.players.some(p => !p.isOffline);
-      if (anyOnline) {
-        continue; // Active
-      }
-
-      // No one online. Check expiration.
-      if (now - room.lastActive > EXPIRATION_MS) {
-        console.log(`Cleaning up expired room ${roomId}. Inactive for > 8 hours.`);
-        this.rooms.delete(roomId);
+          const anyOnline = room.players.some(p => !p.isOffline);
+          if (!anyOnline) {
+            if (now - room.lastActive > EXPIRATION_MS) {
+              console.log(`Cleaning up expired room ${roomId}.`);
+              await this.deleteRoomState(roomId);
+            }
+          }
+        } finally {
+          await this.releaseLock(roomId);
+        }
       }
     }
   }
