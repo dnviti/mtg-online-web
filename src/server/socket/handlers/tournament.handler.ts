@@ -141,6 +141,9 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
             await loadDeck(p1, d1 as any[]);
             await loadDeck(p2, d2 as any[]);
 
+            // Start Game (Draw Hands)
+            await gameManager.startGame(matchId);
+
             await gameManager.triggerBotCheck(matchId);
 
             const latestGame = await gameManager.getGame(matchId);
