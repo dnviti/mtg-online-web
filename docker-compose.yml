@@ -9,9 +9,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Database
-      - DATABASE_URL=file:/app/server-data/mtgate.db
-      # - DATABASE_URL=mysql://user:password@mysql:3306/mtgate
       # Infrastructure config
       - USE_REDIS=true
       - USE_RABBITMQ=true
@@ -21,12 +18,11 @@ services:
       - MEMCACHED_PORT=11211
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
     volumes:
-      # Persist all server data (images, metadata, database)
+      # Persist all server data (images, metadata)
       - ./server-data:/app/server-data:z
     depends_on:
       - redis
       - rabbitmq
-      # - mysql # Uncomment if using mysql
       # - memcached # Uncomment if using memcached
 
   redis:
@@ -48,20 +44,6 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
-  mysql:
-    image: mysql:8.0
-    container_name: mtgate-mysql
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: mtgate
-      MYSQL_USER: user
-      MYSQL_PASSWORD: password
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-
   memcached:
     image: memcached:alpine
     container_name: mtgate-memcached
@@ -72,4 +54,3 @@ services:
 volumes:
   redis-data:
   rabbitmq-data:
-  mysql-data:

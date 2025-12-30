@@ -1,73 +1,181 @@
+import Redis from 'ioredis';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient, User, SavedDeck, MatchRecord } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const SECRET_KEY = process.env.JWT_SECRET || 'dev-secret-key-change-me';
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
+const REDIS_DB_PERSISTENCE = 3;
+
+// --- Types (Formerly from Prisma) ---
+export interface User {
+    id: string;
+    username: string;
+    passwordHash: string;
+    createdAt: Date;
+}
+
+export interface SavedDeck {
+    id: string;
+    name: string;
+    cards: string; // JSON string
+    format?: string;
+    createdAt: Date;
+    userId: string;
+}
+
+export interface MatchRecord {
+    id: string;
+    date: Date;
+    result: string;
+    deckId?: string;
+    opponent?: string;
+    userId: string;
+}
 
 // Helper type for safe user response
 type SafeUser = Omit<User, 'passwordHash'> & {
-    decks: SavedDeck[];
+    decks: (Omit<SavedDeck, 'cards'> & { cards: any[] })[];
     matchHistory: MatchRecord[];
 };
 
 export class UserManager {
-    private prisma: PrismaClient;
+    private redis: Redis;
 
     constructor() {
-        this.prisma = new PrismaClient();
+        console.log(`[UserManager] Initializing Redis Persistence at ${REDIS_HOST}:${REDIS_PORT}/db${REDIS_DB_PERSISTENCE}`);
+        this.redis = new Redis({
+            host: REDIS_HOST,
+            port: REDIS_PORT,
+            db: REDIS_DB_PERSISTENCE
+        });
     }
 
     async register(username: string, password: string): Promise<{ user: SafeUser, token: string }> {
-        const existing = await this.prisma.user.findUnique({
-            where: { username }
-        });
-
-        if (existing) {
+        // 1. Check if username exists
+        const existingId = await this.redis.hget('users:lookup:username', username.toLowerCase());
+        if (existingId) {
             throw new Error('Username already exists');
         }
 
+        // 2. Create User
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
+        const userId = randomUUID();
+        const now = new Date().toISOString();
 
-        const newUser = await this.prisma.user.create({
-            data: {
-                username,
-                passwordHash,
-            },
-            include: {
-                decks: true,
-                matchHistory: true
-            }
+        const user: User = {
+            id: userId,
+            username,
+            passwordHash,
+            createdAt: new Date(now)
+        };
+
+        // Transaction to save user and update lookup
+        const pipeline = this.redis.multi();
+        pipeline.hset(`users:${userId}`, {
+            id: userId,
+            username,
+            passwordHash,
+            createdAt: now
         });
+        pipeline.hset('users:lookup:username', username.toLowerCase(), userId);
+        await pipeline.exec();
 
-        const token = this.generateToken(newUser.id, newUser.username);
-        const { passwordHash: _, ...safeUser } = newUser;
+        // 3. Return Token
+        const token = this.generateToken(userId, username);
 
-        return { user: safeUser, token };
+        return {
+            user: { ...user, decks: [], matchHistory: [] },
+            token
+        };
     }
 
     async login(username: string, password: string): Promise<{ user: SafeUser, token: string }> {
-        const user = await this.prisma.user.findUnique({
-            where: { username },
-            include: {
-                decks: true,
-                matchHistory: true
-            }
-        });
-
-        if (!user) {
+        // 1. Lookup ID
+        const userId = await this.redis.hget('users:lookup:username', username.toLowerCase());
+        if (!userId) {
             throw new Error('Invalid credentials');
         }
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
+        // 2. Get User
+        const userData = await this.redis.hgetall(`users:${userId}`);
+        if (!userData || !userData.username) { // Basic check
+            throw new Error('User data corrupted');
+        }
+
+        // 3. Verify Password
+        const valid = await bcrypt.compare(password, userData.passwordHash);
         if (!valid) {
             throw new Error('Invalid credentials');
         }
 
+        const user: User = {
+            id: userData.id,
+            username: userData.username,
+            passwordHash: userData.passwordHash,
+            createdAt: new Date(userData.createdAt)
+        };
+
+        // 4. Fetch Details (Decks, Match History)
+        const safeUser = await this.assembleSafeUser(user);
         const token = this.generateToken(user.id, user.username);
-        const { passwordHash: _, ...safeUser } = user;
 
         return { user: safeUser, token };
+    }
+
+    private async assembleSafeUser(user: User): Promise<SafeUser> {
+        // History and Decks
+        const deckIds = await this.redis.smembers(`users:${user.id}:decks`);
+        const decks: SavedDeck[] = [];
+
+        for (const deckId of deckIds) {
+            const deckData = await this.redis.hgetall(`decks:${deckId}`);
+            if (deckData && deckData.id) {
+                decks.push({
+                    id: deckData.id,
+                    name: deckData.name,
+                    cards: deckData.cards,
+                    format: deckData.format,
+                    userId: deckData.userId,
+                    createdAt: new Date(deckData.createdAt)
+                } as any); // Cast to handle Date correctly being string in Redis
+            }
+        }
+
+        const matchIds = await this.redis.smembers(`users:${user.id}:matches`);
+        const history: MatchRecord[] = [];
+        for (const mId of matchIds) {
+            const mData = await this.redis.hgetall(`matches:${mId}`);
+            if (mData && mData.id) {
+                history.push({
+                    id: mData.id,
+                    date: new Date(mData.date),
+                    result: mData.result,
+                    deckId: mData.deckId,
+                    opponent: mData.opponent,
+                    userId: mData.userId
+                });
+            }
+        }
+
+        // Parse JSON cards immediately for safe user response? 
+        // The original code did parsing in `getSafeUser`.
+        // We should match that behavior for the frontend.
+
+        const parsedDecks = decks.map(d => ({
+            ...d,
+            cards: typeof d.cards === 'string' ? JSON.parse(d.cards) : d.cards
+        }));
+
+        return {
+            id: user.id,
+            username: user.username,
+            createdAt: user.createdAt,
+            decks: parsedDecks,
+            matchHistory: history
+        };
     }
 
     generateToken(userId: string, username: string): string {
@@ -82,90 +190,81 @@ export class UserManager {
         }
     }
 
-    // Changed to Async
     async getUser(id: string): Promise<User | null> {
-        return this.prisma.user.findUnique({ where: { id } });
-    }
-
-    // Changed to Async
-    async getSafeUser(id: string): Promise<SafeUser | null> {
-        const user = await this.prisma.user.findUnique({
-            where: { id },
-            include: {
-                decks: true,
-                matchHistory: true
-            }
-        });
-
-        if (!user) return null;
-        const { passwordHash, ...safe } = user;
-
-        // Parse cards JSON for each deck
-        const parsedDecks = safe.decks.map(d => ({
-            ...d,
-            cards: JSON.parse(d.cards)
-        }));
-
+        const userData = await this.redis.hgetall(`users:${id}`);
+        if (!userData || !userData.username) return null;
         return {
-            ...safe,
-            decks: parsedDecks
+            id: userData.id,
+            username: userData.username,
+            passwordHash: userData.passwordHash,
+            createdAt: new Date(userData.createdAt)
         };
     }
 
-    // Changed to Async
+    async getSafeUser(id: string): Promise<SafeUser | null> {
+        const user = await this.getUser(id);
+        if (!user) return null;
+        return this.assembleSafeUser(user);
+    }
+
     async saveDeck(userId: string, deckName: string, cards: any[], format?: string): Promise<SavedDeck> {
-
-        // Validate cards are JSON serializable
         const cardsJson = JSON.stringify(cards);
+        const deckId = randomUUID();
+        const now = new Date().toISOString();
 
-        const newDeck = await this.prisma.savedDeck.create({
-            data: {
-                name: deckName,
-                cards: cardsJson,
-                userId,
-                format: format || 'Standard'
-            }
-        });
+        const deck: any = {
+            id: deckId,
+            name: deckName,
+            cards: cardsJson,
+            format: format || 'Standard',
+            userId,
+            createdAt: now
+        };
 
-        return { ...newDeck, cards: cards } as any; // Return with parsed cards
+        const pipeline = this.redis.multi();
+        pipeline.hset(`decks:${deckId}`, deck);
+        pipeline.sadd(`users:${userId}:decks`, deckId);
+        await pipeline.exec();
+
+        return { ...deck, cards: cards }; // Return with parsed cards object for frontend convenience
     }
 
     async updateDeck(userId: string, deckId: string, deckName: string, cards: any[], format?: string): Promise<SavedDeck> {
-        const deck = await this.prisma.savedDeck.findUnique({
-            where: { id: deckId }
-        });
-
-        if (!deck || deck.userId !== userId) {
+        // Validate Ownership
+        const existing = await this.redis.hgetall(`decks:${deckId}`);
+        if (!existing || existing.userId !== userId) {
             throw new Error("Deck not found or unauthorized");
         }
 
         const cardsJson = JSON.stringify(cards);
 
-        const updated = await this.prisma.savedDeck.update({
-            where: { id: deckId },
-            data: {
-                name: deckName,
-                cards: cardsJson,
-                format: format
-            }
+        await this.redis.hset(`decks:${deckId}`, {
+            name: deckName,
+            cards: cardsJson,
+            format: format || existing.format
         });
 
-        return { ...updated, cards: cards } as any;
+        // Reconstruct
+        return {
+            id: existing.id,
+            userId: existing.userId,
+            createdAt: new Date(existing.createdAt),
+            name: deckName,
+            cards: cards,
+            format: format || existing.format
+        } as unknown as SavedDeck;
     }
 
-    // Changed to Async
     async deleteDeck(userId: string, deckId: string): Promise<void> {
-        // Ensure the deck belongs to the user
-        const deck = await this.prisma.savedDeck.findUnique({
-            where: { id: deckId }
-        });
-
-        if (!deck || deck.userId !== userId) {
+        const existing = await this.redis.hgetall(`decks:${deckId}`);
+        if (!existing || existing.userId !== userId) {
             throw new Error("Deck not found or unauthorized");
         }
 
-        await this.prisma.savedDeck.delete({
-            where: { id: deckId }
-        });
+        const pipeline = this.redis.multi();
+        pipeline.del(`decks:${deckId}`);
+        pipeline.srem(`users:${userId}:decks`, deckId);
+        await pipeline.exec();
     }
 }
+
