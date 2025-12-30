@@ -100,6 +100,7 @@ export interface StackObject {
 }
 
 export interface StrictGameState {
+  id: string; // Game/Room ID
   roomId: string;
   format?: string; // e.g., 'commander' | 'standard'
   players: Record<string, PlayerState>;
