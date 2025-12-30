@@ -260,6 +260,10 @@ export class RoomManager {
     return null;
   }
 
+  getAllRooms(): Room[] {
+    return Array.from(this.rooms.values());
+  }
+
   private cleanupRooms() {
     const now = Date.now();
     const EXPIRATION_MS = 8 * 60 * 60 * 1000; // 8 Hours
