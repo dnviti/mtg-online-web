@@ -173,23 +173,30 @@ export class PhaseManager {
   }
 
   static passPriority(state: StrictGameState, playerId: string) {
-    if (state.priorityPlayerId !== playerId) return false;
+    if (state.priorityPlayerId !== playerId) {
+      console.warn(`[PhaseManager] Priority mismatch. Expected: ${state.priorityPlayerId}, Got: ${playerId}`);
+      return false;
+    }
 
     state.players[playerId].hasPassed = true;
     state.passedPriorityCount++;
 
     const totalPlayers = state.turnOrder.length;
+    console.log(`[PhaseManager] Player ${playerId} passed. (${state.passedPriorityCount}/${totalPlayers})`);
 
     if (state.passedPriorityCount >= totalPlayers) {
       if (state.stack.length > 0) {
+        console.log(`[PhaseManager] All passed. Resolving stack item.`);
         ActionHandler.resolveTopStack(state);
       } else {
+        console.log(`[PhaseManager] All passed. Stack empty. Advancing Step.`);
         this.advanceStep(state);
       }
     } else {
       const currentIndex = state.turnOrder.indexOf(state.priorityPlayerId);
       const nextIndex = (currentIndex + 1) % state.turnOrder.length;
       state.priorityPlayerId = state.turnOrder[nextIndex];
+      console.log(`[PhaseManager] Priority passed to ${state.priorityPlayerId}`);
     }
     return true;
   }

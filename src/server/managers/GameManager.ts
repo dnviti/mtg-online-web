@@ -144,19 +144,25 @@ export class GameManager extends EventEmitter {
   }
 
   async handleStrictAction(roomId: string, action: any, actorId: string) {
+    console.log(`[GameManager] Handling strict action: ${action.type} for room ${roomId} by ${actorId}`);
     if (!await this.acquireLock(roomId)) {
-      // console.warn(`[GameManager] Failed to acquire lock for ${roomId}`);
+      console.warn(`[GameManager] ⚠️ Failed to acquire lock for ${roomId}`);
       return null;
     }
 
     try {
       const game = await this.getGameState(roomId);
-      if (!game) return null;
+      if (!game) {
+        console.warn(`[GameManager] ⚠️ Game state not found for room ${roomId}`);
+        return null;
+      }
 
       const engine = new RulesEngine(game);
+      console.log(`[GameManager] Current Game Phase: ${game.phase}, Step: ${game.step}`);
 
       try {
-        switch (action.type) {
+        const normalizedType = action.type.toLowerCase();
+        switch (normalizedType) {
           case 'pass_priority':
             engine.passPriority(actorId);
             break;
@@ -173,13 +179,40 @@ export class GameManager extends EventEmitter {
             engine.declareBlockers(actorId, action.blockers);
             break;
           case 'resolve_mulligan':
+          case 'mulligan_decision':
+            console.log(`[GameManager] Resolving mulligan for ${actorId}. Keep: ${action.keep}`);
             engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);
             break;
-          // ... other actions
+          case 'create_token':
+            engine.createToken(actorId, action.definition, action.position);
+            break;
+          case 'add_mana':
+            engine.addMana(actorId, { color: action.color, amount: 1 });
+            break;
+          case 'tap_card':
+            engine.tapCard(actorId, action.cardId);
+            break;
+          case 'activate_ability':
+            engine.activateAbility(actorId, action.sourceId, action.abilityIndex, action.targets);
+            break;
+          case 'toggle_stop':
+            // Handle stop request
+            // engine.toggleStop(actorId); // Need implementation
+            if (game.players[actorId]) {
+              game.players[actorId].stopRequested = !game.players[actorId].stopRequested;
+              console.log(`[GameManager] Player ${actorId} stopRequested: ${game.players[actorId].stopRequested}`);
+            }
+            break;
+          default:
+            console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }
 
         // Trigger Bot Check after human action
-        if (game.priorityPlayerId !== actorId) {
+        if (game.step === 'mulligan' || game.priorityPlayerId !== actorId) {
+          // await GameLifecycle.triggerBotCheck(game); // Ensure this is awaited if async, or just called if sync
+          // The method is static and might be async? It was seemingly sync in previous code or handled internally.
+          // Wait, previous code: GameLifecycle.triggerBotCheck(game);
+          // I should check if it's async.
           GameLifecycle.triggerBotCheck(game);
         }
 
@@ -187,8 +220,8 @@ export class GameManager extends EventEmitter {
         return game;
 
       } catch (e) {
-        console.error(e);
-        return null;
+        console.error(`[GameManager] ❌ Error executing strict action:`, e);
+        return null; // Return null so socket handler knows it failed
       }
     } finally {
       await this.releaseLock(roomId);

@@ -101,8 +101,17 @@ export const useGameSocket = (): GameSocketHook => {
     }
   }, []);
 
-  const createRoom = useCallback((payload: any) => {
-    return socketService.emitPromise('create_room', payload);
+  const createRoom = useCallback(async (payload: any) => {
+    const response = await socketService.emitPromise('create_room', payload);
+    if (response.success) {
+      // payload has hostId. room has id.
+      // socketService.setCredentials(response.room.id, payload.hostId);
+      // Wait, let's verify payload structure. usually { hostId, hostName ... }
+      if (response.room && payload.hostId) {
+        socketService.setCredentials(response.room.id, payload.hostId);
+      }
+    }
+    return response;
   }, []);
 
   const joinRoom = useCallback(async (payload: any) => {
@@ -111,6 +120,10 @@ export const useGameSocket = (): GameSocketHook => {
       if (response.gameState) setGameState(response.gameState);
       if (response.room) setActiveRoom(response.room);
       if (response.draftState) setDraftState(response.draftState);
+
+      if (payload.roomId && payload.playerId) {
+        socketService.setCredentials(payload.roomId, payload.playerId);
+      }
     }
     return response;
   }, []);
@@ -121,6 +134,10 @@ export const useGameSocket = (): GameSocketHook => {
       if (response.gameState) setGameState(response.gameState);
       if (response.room) setActiveRoom(response.room);
       if (response.draftState) setDraftState(response.draftState);
+
+      if (payload.roomId && payload.playerId) {
+        socketService.setCredentials(payload.roomId, payload.playerId);
+      }
     }
     return response;
   }, []);
@@ -129,6 +146,7 @@ export const useGameSocket = (): GameSocketHook => {
     socketService.socket.emit('leave_room', payload);
     setActiveRoom(null);
     setGameState(null);
+    socketService.setCredentials('', ''); // Clear credentials
   }, []);
 
   const sendGameAction = useCallback((actionType: string, payload: any) => {

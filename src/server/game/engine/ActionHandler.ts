@@ -315,10 +315,53 @@ export class ActionHandler {
     StateBasedEffects.process(state);
   }
 
+  static tapCard(state: StrictGameState, playerId: string, cardId: string) {
+    const card = state.cards[cardId];
+    if (!card) throw new Error("Card not found");
+    // Basic validation? Tapping usually doesn't use stack unless ability.
+    // This is "manual tap" often used in sandbox or visual cues.
+    // If strict rules enforced, might restrict. For now, allow toggle.
+    card.tapped = !card.tapped;
+    // Tapping doesn't use stack or priority reset usually in manual mode. 
+    // But if used for ability, `activateAbility` handles it.
+    // This is likely visual toggle.
+  }
+
+  static activateAbility(state: StrictGameState, playerId: string, sourceId: string, abilityIndex: number, targets: string[] = []) {
+    if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
+
+    const source = state.cards[sourceId];
+    if (!source) throw new Error("Source card not found");
+
+    // Equip Logic (Hardcoded for now as per previous RulesEngine)
+    if (CardUtils.isEquipment(source) && source.zone === 'battlefield') {
+      if (state.stack.length > 0 || (state.phase !== 'main1' && state.phase !== 'main2')) {
+        throw new Error("Equip can only be used as a sorcery.");
+      }
+      if (targets.length !== 1) throw new Error("Equip requires exactly one target.");
+
+      state.stack.push({
+        id: Math.random().toString(36).substr(2, 9),
+        sourceId: sourceId,
+        controllerId: playerId,
+        type: 'ability',
+        name: `Equip ${source.name}`,
+        text: `Attach to target`,
+        targets
+      });
+      ActionHandler.resetPriority(state, playerId);
+      return;
+    }
+
+    // TODO: Generic Activated Ability support
+    throw new Error("Ability not implemented/supported for this card.");
+  }
+
   static resetPriority(state: StrictGameState, playerId: string) {
     StateBasedEffects.process(state);
     state.priorityPlayerId = playerId;
     state.passedPriorityCount = 0;
     Object.values(state.players).forEach(p => p.hasPassed = false);
+    console.log(`[ActionHandler] Priority reset to ${playerId}`);
   }
 }

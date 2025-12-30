@@ -110,15 +110,27 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
   });
 
   socket.on('game_strict_action', async ({ action }) => {
+    console.log(`[Socket] 📥 Received game_strict_action from ${socket.id}`, action);
     const context = await getContext();
-    if (!context) return;
+    if (!context) {
+      console.warn(`[Socket] ⚠️ No context found for socket ${socket.id} in game_strict_action`);
+      return;
+    }
     const { room, player } = context;
 
     const targetGameId = player.matchId || room.id;
+    console.log(`[Socket] Processing strict action for game ${targetGameId} (Player: ${player.id})`);
 
-    const game = await gameManager.handleStrictAction(targetGameId, action, player.id);
-    if (game) {
-      io.to(game.roomId).emit('game_update', game);
+    try {
+      const game = await gameManager.handleStrictAction(targetGameId, action, player.id);
+      if (game) {
+        console.log(`[Socket] ✅ Strict action handled. Emitting update to room ${game.roomId}`);
+        io.to(game.roomId).emit('game_update', game);
+      } else {
+        console.warn(`[Socket] ⚠️ handleStrictAction returned null/undefined for game ${targetGameId}`);
+      }
+    } catch (error) {
+      console.error(`[Socket] ❌ Error handling strict action:`, error);
     }
   });
 };

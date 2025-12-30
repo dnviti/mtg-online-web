@@ -36,39 +36,12 @@ export class RulesEngine {
     return ActionHandler.castSpell(this.state, playerId, cardId, targets, position, faceIndex);
   }
 
-  public activateAbility(playerId: string, sourceId: string, _abilityIndex: number, targets: string[] = []) {
-    // Legacy support via ActionHandler (not fully implemented yet but placeholder exists)
-    // Actually ActionHandler doesn't have activateAbility fully exposed yet, let's add it.
-    // Wait, I missed extracted activateAbility in ActionHandler? 
-    // I see resolveTopStack handles ability, but extraction might have missed the public method.
-    // I will inline it or add it to ActionHandler. 
-    // Let's add it to ActionHandler in next step if missing.
-    // For now, I'll copy logic here or error.
-    // Ah, I missed 'public activateAbility' in ActionHandler in previous write!
-    // I will throw unimplemented here and fix ActionHandler in next step.
-    if (this.state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
+  public tapCard(playerId: string, cardId: string) {
+    ActionHandler.tapCard(this.state, playerId, cardId);
+  }
 
-    // Quick inline delegation for now:
-    const source = this.state.cards[sourceId];
-    if (CardUtils.isEquipment(source) && source.zone === 'battlefield') {
-      if (this.state.stack.length > 0 || (this.state.phase !== 'main1' && this.state.phase !== 'main2')) {
-        throw new Error("Equip can only be used as a sorcery.");
-      }
-      if (targets.length !== 1) throw new Error("Equip requires exactly one target.");
-
-      this.state.stack.push({
-        id: Math.random().toString(36).substr(2, 9),
-        sourceId: sourceId,
-        controllerId: playerId,
-        type: 'ability',
-        name: `Equip ${source.name}`,
-        text: `Attach to target`,
-        targets
-      });
-      ActionHandler.resetPriority(this.state, playerId);
-      return true;
-    }
-    throw new Error("Ability not implemented.");
+  public activateAbility(playerId: string, sourceId: string, abilityIndex: number, targets: string[] = []) {
+    return ActionHandler.activateAbility(this.state, playerId, sourceId, abilityIndex, targets);
   }
 
   public declareAttackers(playerId: string, attackers: { attackerId: string, targetId: string }[]) {
