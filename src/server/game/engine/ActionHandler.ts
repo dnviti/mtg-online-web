@@ -182,7 +182,13 @@ export class ActionHandler {
     if (item.type === 'spell') {
       const card = state.cards[item.sourceId];
       if (card) {
-        const isPermanent = card.types.some(t =>
+        // Ensure types is populated
+        if (!card.types && card.typeLine) {
+          card.types = card.typeLine.split('—')[0].trim().split(' ');
+        }
+        const types = card.types || [];
+
+        const isPermanent = types.some(t =>
           ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'].includes(t)
         );
 
@@ -273,6 +279,17 @@ export class ActionHandler {
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }
     };
     state.cards[token.instanceId] = token;
+    StateBasedEffects.process(state);
+  }
+
+  static changeLife(state: StrictGameState, playerId: string, amount: number) {
+    const player = state.players[playerId];
+    if (!player) throw new Error("Player not found");
+
+    player.life += amount;
+    console.log(`[ActionHandler] Player ${playerId} life changed by ${amount}. New life: ${player.life}`);
+
+    // Check for state-based effects like losing the game
     StateBasedEffects.process(state);
   }
 

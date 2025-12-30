@@ -89,4 +89,12 @@ export class RulesEngine {
   public moveCardToZone(cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }, faceIndex?: number) {
     ActionHandler.moveCardToZone(this.state, cardId, toZone, faceDown, position, faceIndex);
   }
+
+  public drawCard(playerId: string) {
+    ActionHandler.drawCard(this.state, playerId);
+  }
+
+  public changeLife(playerId: string, amount: number) {
+    ActionHandler.changeLife(this.state, playerId, amount);
+  }
 }

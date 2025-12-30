@@ -203,6 +203,13 @@ export class GameManager extends EventEmitter {
               console.log(`[GameManager] Player ${actorId} stopRequested: ${game.players[actorId].stopRequested}`);
             }
             break;
+          case 'draw_card':
+            engine.drawCard(actorId);
+            break;
+          case 'change_life':
+          case 'life_change':
+            engine.changeLife(actorId, action.amount);
+            break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }

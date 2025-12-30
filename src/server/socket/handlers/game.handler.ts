@@ -52,6 +52,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
               zone: 'library',
               typeLine: card.typeLine || card.type_line || '',
+              types: card.types || (card.typeLine || card.type_line || '').split('—')[0].trim().split(' '),
               oracleText: card.oracleText || card.oracle_text || '',
               manaCost: card.manaCost || card.mana_cost || '',
               keywords: card.keywords || [],
