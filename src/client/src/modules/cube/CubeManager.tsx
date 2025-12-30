@@ -6,6 +6,7 @@ import { PackCard } from '../../components/PackCard';
 import { socketService } from '../../services/SocketService';
 import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { ApiService } from '../../services/ApiService';
 
 interface CubeManagerProps {
   packs: Pack[];
@@ -155,9 +156,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   }, [filters, rawScryfallData]);
 
   useEffect(() => {
-    fetch('/api/sets')
-      .then(res => res.json())
-      .then((sets: ScryfallSet[]) => {
+    ApiService.get<ScryfallSet[]>('/api/sets')
+      .then((sets) => {
         setAvailableSets(sets.sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime()));
       })
       .catch(console.error);
@@ -280,10 +280,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           setProgress(`Fetching set ${currentMain.toUpperCase()} ${currentRelated.length > 0 ? `(+ ${currentRelated.join(', ').toUpperCase()})` : ''}...`);
 
           const queryParams = currentRelated.length > 0 ? `?related=${currentRelated.join(',')}` : '';
-          const response = await fetch(`/api/sets/${currentMain}/cards${queryParams}`);
+          const cards = await ApiService.get<ScryfallCard[]>(`/api/sets/${currentMain}/cards${queryParams}`);
 
-          if (!response.ok) throw new Error(`Failed to fetch set ${currentMain}`);
-          const cards: ScryfallCard[] = await response.json();
           setRawScryfallData(prev => [...(prev || []), ...cards]);
           totalCards += cards.length;
         }
@@ -291,18 +289,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       } else {
         // Parse Text
         setProgress('Parsing and fetching from server...');
-        const response = await fetch('/api/cards/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: inputText })
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || "Failed to parse cards");
-        }
-
-        currentCards = await response.json();
+        currentCards = await ApiService.post<ScryfallCard[]>('/api/cards/parse', { text: inputText });
 
       }
 
@@ -339,18 +326,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
         payload.cards = [];
       }
 
-      const response = await fetch('/api/packs/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Generation failed");
-      }
-
-      const data = await response.json();
+      const data = await ApiService.post<any>('/api/packs/generate', payload);
 
       let newPacks: Pack[] = [];
       let newLands: any[] = [];

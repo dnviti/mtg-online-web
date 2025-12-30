@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
-import { socketService } from '../../services/SocketService';
+import React, { useState, useEffect } from 'react';
+import { useGameContext } from '../../contexts/GameSocketContext';
 import { GameRoom } from './GameRoom';
 import { Pack } from '../../services/PackGeneratorService';
 import { Users, PlusCircle, LogIn, AlertCircle, Loader2, Package, Check } from 'lucide-react';
-import { Modal } from '../../components/Modal';
 import { useUser } from '../../contexts/UserContext';
+import { Modal } from '../../components/Modal';
+import { ApiService } from '../../services/ApiService';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
@@ -13,18 +14,30 @@ interface LobbyManagerProps {
 }
 
 export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, availableLands = [] }) => {
-  const { user } = useUser(); // Get user from context
-  const [activeRoom, setActiveRoom] = useState<any>(null);
+  const { user } = useUser();
+  const {
+    activeRoom,
+    gameState,
+    isConnected,
+    error: socketError,
+    connect,
+    createRoom,
+    joinRoom,
+    rejoinRoom,
+    leaveRoom,
+    setActiveRoom, // We might need to clear it manually on loading
+    setGameState,
+    draftState
+  } = useGameContext();
+
   const [playerName, setPlayerName] = useState(() => {
     if (user && user.username) return user.username;
     return localStorage.getItem('player_name') || '';
   });
-  const [selectedFormat, setSelectedFormat] = useState('commander'); // Default to Commander
+  const [selectedFormat, setSelectedFormat] = useState('commander');
   const [joinRoomId, setJoinRoomId] = useState('');
-  const [error, setError] = useState('');
+  const [localError, setLocalError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initialDraftState, setInitialDraftState] = useState<any>(null);
-  const [initialGameState, setInitialGameState] = useState<any>(null);
 
   const [playerId] = useState(() => {
     const saved = localStorage.getItem('player_id');
@@ -34,8 +47,8 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     return newId;
   });
 
-  // Persist player name (only if guest)
-  React.useEffect(() => {
+  // Persist player name
+  useEffect(() => {
     if (user?.username) {
       setPlayerName(user.username);
     } else {
@@ -46,55 +59,36 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
   const [showBoxSelection, setShowBoxSelection] = useState(false);
   const [availableBoxes, setAvailableBoxes] = useState<{ id: string, title: string, packs: Pack[], setCode: string, packCount: number }[]>([]);
 
-  const connect = () => {
-    if (!socketService.socket.connected) {
-      socketService.connect();
-    }
-  };
+  // Sync socket error to local error
+  useEffect(() => {
+    if (socketError) setLocalError(socketError);
+  }, [socketError]);
 
   const executeCreateRoom = async (packsToUse: Pack[]) => {
     setLoading(true);
-    setError('');
+    setLocalError('');
     connect();
 
     try {
       // Collect all cards for caching (packs + basic lands)
       const allCards = packsToUse.flatMap(p => p.cards);
       const allCardsAndLands = [...allCards, ...availableLands];
-
-      // Deduplicate by Scryfall ID
       const uniqueCards = Array.from(new Map(allCardsAndLands.map(c => [c.scryfallId, c])).values());
 
-      // Prepare payload for server (generic structure expected by CardService)
       const cardsToCache = uniqueCards.map(c => ({
         id: c.scryfallId,
-        set: c.setCode, // Required for folder organization
+        set: c.setCode,
         image_uris: { normal: c.image }
       }));
 
-      // Cache images on server
-      const cacheResponse = await fetch('/api/cards/cache', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: cardsToCache })
-      });
+      // Cache images on server (API call)
+      await ApiService.post('/api/cards/cache', { cards: cardsToCache });
 
-      if (!cacheResponse.ok) {
-        throw new Error('Failed to cache images');
-      }
-
-      const cacheResult = await cacheResponse.json();
-      console.log('Cached result:', cacheResult);
-
-      // Transform packs and lands to use local URLs
-      // Note: For multiplayer, clients need to access this URL.
       const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
-
       const updatedPacks = packsToUse.map(pack => ({
         ...pack,
         cards: pack.cards.map(c => ({
           ...c,
-          // Update the single image property used by DraftCard
           image: `${baseUrl}/${c.setCode}/${c.scryfallId}.jpg`
         }))
       }));
@@ -104,7 +98,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         image: `${baseUrl}/${l.setCode}/${l.scryfallId}.jpg`
       }));
 
-      const response = await socketService.emitPromise('create_room', {
+      const response = await createRoom({
         hostId: playerId,
         hostName: playerName,
         packs: updatedPacks,
@@ -112,14 +106,15 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         format: selectedFormat
       });
 
-      if (response.success) {
-        setActiveRoom(response.room);
-      } else {
-        setError(response.message || 'Failed to create room');
+      if (!response.success) {
+        setLocalError(response.message || 'Failed to create room');
       }
+      // Hook updates activeRoom automatically on success via state update or listener
+      if (response.room) setActiveRoom(response.room);
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Connection error');
+      setLocalError(err.message || 'Connection error');
     } finally {
       setLoading(false);
       setShowBoxSelection(false);
@@ -128,16 +123,14 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
   const handleCreateRoom = async () => {
     if (!playerName) {
-      setError('Please enter your name');
+      setLocalError('Please enter your name');
       return;
     }
     if (selectedFormat === 'draft' && generatedPacks.length === 0) {
-      setError('No packs generated! Please go to Draft Management and generate packs first.');
+      setLocalError('No packs generated! Please go to Draft Management and generate packs first.');
       return;
     }
 
-    // Logic to detect Multiple Boxes
-    // 1. Group by Set Name
     const packsBySet: Record<string, Pack[]> = {};
     generatedPacks.forEach(p => {
       const key = p.setName;
@@ -146,20 +139,15 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     });
 
     const boxes: { id: string, title: string, packs: Pack[], setCode: string, packCount: number }[] = [];
-
-    // Sort sets alphabetically
     Object.keys(packsBySet).sort().forEach(setName => {
       const setPacks = packsBySet[setName];
       const BOX_SIZE = 36;
-
-      // Split into chunks of 36
       for (let i = 0; i < setPacks.length; i += BOX_SIZE) {
         const chunk = setPacks.slice(i, i + BOX_SIZE);
         const boxNum = Math.floor(i / BOX_SIZE) + 1;
         const setCode = (chunk[0].cards[0]?.setCode || 'unk').toLowerCase();
-
         boxes.push({
-          id: `${setCode}-${boxNum}-${Date.now()}`, // Unique ID
+          id: `${setCode}-${boxNum}-${Date.now()}`,
           title: `${setName} - Box ${boxNum}`,
           packs: chunk,
           setCode: setCode,
@@ -168,164 +156,96 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       }
     });
 
-    // Strategy: If we have multiple boxes, or if we have > 36 packs but maybe not multiple "boxes" (e.g. 50 packs of mixed),
-    // we should interpret them.
-    // The prompt says: "more than 1 box has been generated".
-    // If I generate 2 boxes (72 packs), `boxes` array will have length 2.
-    // If I generate 1 box (36 packs), `boxes` array will have length 1.
-
     if (boxes.length > 1) {
       setAvailableBoxes(boxes);
       setShowBoxSelection(true);
       return;
     }
 
-    // If only 1 box (or partial), just use all packs
     executeCreateRoom(generatedPacks);
   };
 
   const handleJoinRoom = async () => {
     if (!playerName) {
-      setError('Please enter your name');
+      setLocalError('Please enter your name');
       return;
     }
     if (!joinRoomId) {
-      setError('Please enter a Room ID');
+      setLocalError('Please enter a Room ID');
       return;
     }
 
     setLoading(true);
-    setError('');
+    setLocalError('');
     connect();
 
     try {
-      const response = await socketService.emitPromise('join_room', {
+      const response = await joinRoom({
         roomId: joinRoomId.toUpperCase(),
         playerId,
         playerName
       });
 
       if (response.success) {
-        setInitialDraftState(response.draftState || null);
-        setInitialGameState(response.gameState || null);
-        setActiveRoom(response.room);
+        // gameState and room are set by hook
       } else {
-        setError(response.message || 'Failed to join room');
+        setLocalError(response.message || 'Failed to join room');
       }
     } catch (err: any) {
-      setError(err.message || 'Connection error');
+      setLocalError(err.message || 'Connection error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Persist session logic
-  React.useEffect(() => {
+  // Reconnection Logic using Hook
+  useEffect(() => {
+    const savedRoomId = localStorage.getItem('active_room_id');
+    if (savedRoomId && !activeRoom && playerId && isConnected) {
+      console.log(`[LobbyManager] Found saved session ${savedRoomId}. Rejoining...`);
+      setLoading(true);
+      rejoinRoom({ roomId: savedRoomId, playerId })
+        .then(response => {
+          if (response.success) {
+            // draftState set by hook
+          } else {
+            if (response.message !== 'Connection error') {
+              localStorage.removeItem('active_room_id');
+            }
+          }
+        })
+        .catch(console.warn)
+        .finally(() => setLoading(false));
+    } else if (savedRoomId && !isConnected) {
+      connect();
+      // Effect will re-run when isConnected becomes true
+    }
+  }, [isConnected, playerId, activeRoom, rejoinRoom, connect]);
+
+  // Persist session
+  useEffect(() => {
     if (activeRoom) {
       localStorage.setItem('active_room_id', activeRoom.id);
     }
   }, [activeRoom]);
 
-  // Reconnection logic (Initial Mount)
-  React.useEffect(() => {
-    const savedRoomId = localStorage.getItem('active_room_id');
-
-    if (savedRoomId && !activeRoom && playerId) {
-      console.log(`[LobbyManager] Found saved session ${savedRoomId}. Attempting to reconnect...`);
-      setLoading(true);
-
-      const handleRejoin = async () => {
-        try {
-          console.log(`[LobbyManager] Emitting rejoin_room...`);
-          const response = await socketService.emitPromise('rejoin_room', { roomId: savedRoomId, playerId });
-
-          if (response.success) {
-            console.log("[LobbyManager] Rejoined session successfully");
-            setActiveRoom(response.room);
-            if (response.draftState) {
-              setInitialDraftState(response.draftState);
-            }
-            if (response.gameState) {
-              setInitialGameState(response.gameState);
-            }
-          } else {
-            console.warn("[LobbyManager] Rejoin failed by server: ", response.message);
-            // Only clear if explicitly rejected (e.g. Room closed), not connection error
-            if (response.message !== 'Connection error') {
-              localStorage.removeItem('active_room_id');
-            }
-            setLoading(false);
-          }
-        } catch (err: any) {
-          console.warn("[LobbyManager] Reconnection failed", err);
-          // Do not clear ID immediately on network error, allow retry
-          setLoading(false);
-        }
-      };
-
-      if (!socketService.socket.connected) {
-        console.log(`[LobbyManager] Socket not connected. Connecting...`);
-        connect();
-        socketService.socket.once('connect', handleRejoin);
-      } else {
-        handleRejoin();
-      }
-
-      return () => {
-        socketService.socket.off('connect', handleRejoin);
-      };
-    }
-  }, []); // Run once on mount
-
-  // Auto-Rejoin on Socket Reconnect (e.g. Server Restart)
-  React.useEffect(() => {
-    const socket = socketService.socket;
-
-    const onConnect = () => {
-      if (activeRoom && playerId) {
-        console.log("Socket reconnected. Attempting to restore session for room:", activeRoom.id);
-        socketService.emitPromise('rejoin_room', { roomId: activeRoom.id, playerId })
-          .then((response: any) => {
-            if (response.success) {
-              console.log("Session restored successfully.");
-            } else {
-              console.warn("Failed to restore session:", response.message);
-            }
-          })
-          .catch(err => console.error("Session restore error:", err));
-      }
-    };
-
-    socket.on('connect', onConnect);
-    return () => { socket.off('connect', onConnect); };
-  }, [activeRoom, playerId]);
-
-  // Listener for room updates to switch view
-  React.useEffect(() => {
-    const socket = socketService.socket;
-    const onRoomUpdate = (room: any) => {
-      if (room && room.players.find((p: any) => p.id === playerId)) {
-        setActiveRoom(room);
-        setLoading(false);
-      }
-    };
-    socket.on('room_update', onRoomUpdate);
-    return () => { socket.off('room_update', onRoomUpdate); };
-  }, [playerId]);
-
-
   const handleExitRoom = () => {
     if (activeRoom) {
-      socketService.socket.emit('leave_room', { roomId: activeRoom.id, playerId });
+      leaveRoom({ roomId: activeRoom.id, playerId });
     }
-    setActiveRoom(null);
-    setInitialDraftState(null);
-    setInitialGameState(null);
     localStorage.removeItem('active_room_id');
+    setGameState(null); // Clear game state from hook
+    setActiveRoom(null); // Clear room from hook
   };
 
   if (activeRoom) {
-    return <GameRoom room={activeRoom} currentPlayerId={playerId} onExit={handleExitRoom} initialDraftState={initialDraftState} initialGameState={initialGameState} />;
+    return <GameRoom
+      room={activeRoom}
+      currentPlayerId={playerId}
+      onExit={handleExitRoom}
+      initialGameState={gameState} // Pass hook state 
+      initialDraftState={draftState}
+    />;
   }
 
   return (
@@ -336,10 +256,10 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         </h2>
         <p className="text-slate-400 mb-8">Create a private room for your draft or join an existing one.</p>
 
-        {error && (
+        {localError && (
           <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-xl mb-6 flex items-center gap-3">
             <AlertCircle className="w-5 h-5" />
-            {error}
+            {localError}
           </div>
         )}
 
@@ -378,25 +298,13 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
             <div className={`space-y-4 ${generatedPacks.length === 0 ? 'opacity-50' : ''}`}>
               <div className="flex justify-between items-start">
                 <h3 className="text-xl font-bold text-white">Create Room</h3>
-                <h3 className="text-xl font-bold text-white">Create Room</h3>
                 {selectedFormat === 'draft' && (
                   <div className="group relative">
                     <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
                     <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
-                      <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules (3 packs/player)</strong>
+                      <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules</strong>
                       <ul className="space-y-1">
-                        <li className={generatedPacks.length < 12 ? 'text-red-400' : 'text-slate-500'}>
-                          • &lt; 12 Packs: Not enough for draft
-                        </li>
-                        <li className={(generatedPacks.length >= 12 && generatedPacks.length < 18) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 12-17 Packs: 4 Players
-                        </li>
-                        <li className={(generatedPacks.length >= 18 && generatedPacks.length < 24) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 18-23 Packs: 4 or 6 Players
-                        </li>
-                        <li className={generatedPacks.length >= 24 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 24+ Packs: 4, 6 or 8 Players
-                        </li>
+                        <li>Check pack counts for player support.</li>
                       </ul>
                     </div>
                   </div>
@@ -405,16 +313,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
               <div className="text-sm text-slate-400">
                 {selectedFormat === 'draft' ? (
-                  <>
-                    Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.
-                    <div className="mt-1 text-xs">
-                      Supported Players: {' '}
-                      {generatedPacks.length < 12 && <span className="text-red-400 font-bold">None (Generate more packs)</span>}
-                      {generatedPacks.length >= 12 && generatedPacks.length < 18 && <span className="text-emerald-400 font-bold">4 Only</span>}
-                      {generatedPacks.length >= 18 && generatedPacks.length < 24 && <span className="text-emerald-400 font-bold">4 or 6</span>}
-                      {generatedPacks.length >= 24 && <span className="text-emerald-400 font-bold">4, 6 or 8</span>}
-                    </div>
-                  </>
+                  <>Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.</>
                 ) : (
                   <>Create a lobby for Constructed play. No packs required.</>
                 )}
@@ -428,9 +327,6 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
                 {loading ? 'Creating...' : 'Create Private Room'}
               </button>
-              {selectedFormat === 'draft' && generatedPacks.length === 0 && (
-                <p className="text-xs text-amber-500 text-center font-bold">Requires packs from Draft Management tab.</p>
-              )}
             </div>
 
             {/* Join Room */}
@@ -457,6 +353,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
           </div>
         </div>
       </div>
+
       {/* Box Selection Modal */}
       <Modal
         isOpen={showBoxSelection}
@@ -482,7 +379,6 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               {/* Box Graphic simulation */}
               <div className="w-24 h-32 mb-4 relative perspective-1000 group-hover:scale-105 transition-transform duration-300">
                 <div className="absolute inset-0 bg-slate-800 rounded border border-slate-600 transform rotate-y-12 translate-z-4 shadow-2xl flex items-center justify-center overflow-hidden">
-                  {/* Set Icon as Box art */}
                   <img
                     src={`https://svgs.scryfall.io/sets/${box.setCode}.svg?1734307200`}
                     alt={box.setCode}

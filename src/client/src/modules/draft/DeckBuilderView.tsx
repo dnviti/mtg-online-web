@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { socketService } from '../../services/SocketService';
+import { ApiService } from '../../services/ApiService';
 import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2, SlidersHorizontal } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
@@ -709,8 +710,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/cards/search?q=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
+      const data = await ApiService.get<any[]>(`/api/cards/search?q=${encodeURIComponent(searchQuery)}`);
       setSearchResults(data);
     } catch (err) {
       console.error(err);
@@ -732,8 +732,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     if (!q.trim()) return;
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/cards/search?q=${encodeURIComponent(q)}`);
-      const data = await res.json();
+      const data = await ApiService.get<any[]>(`/api/cards/search?q=${encodeURIComponent(q)}`);
       setSearchResults(data);
     } catch (err) {
       console.error(err);
@@ -745,11 +744,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   const handleConstructedAdd = async (card: any) => {
     // Cache on pick
     try {
-      await fetch('/api/cards/cache', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: [card] })
-      });
+      await ApiService.post('/api/cards/cache', { cards: [card] });
     } catch (e) { console.error("Cache failed", e); }
 
     // Add to deck

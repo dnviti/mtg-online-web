@@ -2,7 +2,8 @@ import React from 'react';
 import { DraftCard, Pack } from '../services/PackGeneratorService';
 import { Copy, Check } from 'lucide-react';
 import { StackView } from './StackView';
-import { CardHoverWrapper, FoilOverlay } from './CardPreview';
+import { CardHoverWrapper } from './CardPreview';
+import { CardVisual } from './CardVisual';
 
 interface PackCardProps {
   pack: Pack;
@@ -105,30 +106,24 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
           <div className="flex flex-wrap gap-3">
             {pack.cards.map((card) => {
               const useArtCrop = cardWidth < 130 && !!card.imageArtCrop;
-              const displayImage = useArtCrop ? card.imageArtCrop : card.image;
 
               return (
                 <CardHoverWrapper key={card.id} card={card} preventPreview={cardWidth >= 130}>
                   <div style={{ width: cardWidth }} className="relative group bg-slate-900 rounded-lg shrink-0">
-                    {/* Visual Card */}
-                    <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
-                      {isFoil(card) && <FoilOverlay />}
-                      {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
-
-                      {displayImage ? (
-                        <img src={displayImage} alt={card.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-center p-1 text-slate-500 font-bold border-2 border-slate-700 m-1 rounded">
-                          {card.name}
-                        </div>
-                      )}
+                    <CardVisual
+                      card={card}
+                      viewMode={useArtCrop ? 'cutout' : 'normal'}
+                      className={`rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 cursor-pointer ${isFoil(card) ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}
+                      isFoil={isFoil(card)}
+                    >
                       {/* Rarity Stripe */}
                       <div className={`absolute bottom-0 left-0 right-0 h-1.5 ${card.rarity === 'mythic' ? 'bg-gradient-to-r from-orange-500 to-red-600' :
                         card.rarity === 'rare' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
                           card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
                             'bg-black'
                         }`} />
-                    </div>
+                      {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
+                    </CardVisual>
                   </div>
                 </CardHoverWrapper>
               );

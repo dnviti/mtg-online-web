@@ -5,12 +5,12 @@ import { LobbyManager } from './modules/lobby/LobbyManager';
 
 import { Pack } from './services/PackGeneratorService';
 import { ToastProvider } from './components/Toast';
-import { GameToastProvider } from './components/GameToast';
 import { GlobalContextMenu } from './components/GlobalContextMenu';
 import { ConfirmDialogProvider } from './components/ConfirmDialog';
 
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { UserProvider, useUser } from './contexts/UserContext';
+import { GameSocketProvider } from './contexts/GameSocketContext';
 import { AuthModule } from './modules/auth/AuthModule';
 import { ProfileModule } from './modules/profile/ProfileModule';
 
@@ -154,15 +154,15 @@ const MainLayout: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ToastProvider>
-      <GameToastProvider>
-        <ConfirmDialogProvider>
-          <UserProvider>
+      <ConfirmDialogProvider>
+        <UserProvider>
+          <GameSocketProvider>
             <GlobalContextMenu />
             <PWAInstallPrompt />
             <MainLayout />
-          </UserProvider>
-        </ConfirmDialogProvider>
-      </GameToastProvider>
+          </GameSocketProvider>
+        </UserProvider>
+      </ConfirmDialogProvider>
     </ToastProvider>
   );
 };

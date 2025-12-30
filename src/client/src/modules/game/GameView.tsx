@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useGameToast } from '../../components/GameToast';
+import { useToast } from '../../components/Toast';
 import { ManaIcon } from '../../components/ManaIcon';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -512,8 +512,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
     setPendingPlayCard(null);
   };
-  //  const { showToast } = useToast();
-  const { showGameToast } = useGameToast();
+  const { showToast } = useToast();
   const { confirm } = useConfirm();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -523,9 +522,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   // --- Blocker Notification ---
   useEffect(() => {
     if (gameState.step === 'declare_blockers' && hasPriority) {
-      showGameToast("Your Turn to Block!", 'info');
+      showToast("Your Turn to Block!", 'info');
     }
-  }, [gameState.step, hasPriority, showGameToast]);
+  }, [gameState.step, hasPriority, showToast]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const cardId = event.active.id as string;
@@ -683,7 +682,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
               zoneName={viewingZone}
               cards={getCards(currentPlayerId, viewingZone)}
               onClose={() => setViewingZone(null)}
-              onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId)}
             />
           )
         }
@@ -1127,7 +1125,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                     if (isSick) {
                                       // TODO: Toast or Alert
                                       // alert(`${card.name} has Summoning Sickness!`);
-                                      showGameToast(`${card.name} has Summoning Sickness!`, 'warning');
+                                      showToast(`${card.name} has Summoning Sickness!`, 'warning');
                                       return;
                                     }
 
