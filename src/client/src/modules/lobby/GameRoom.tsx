@@ -381,8 +381,10 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
         );
       }
 
-      const myPool = draftState?.players[currentPlayerId]?.pool || [];
+      const myPool = draftState?.players[currentPlayerId]?.pool || (room.players.find(p => p.id === currentPlayerId) as any)?.pool || [];
       const isLimited = room.format === 'draft' || (room.packs && room.packs.length > 0);
+
+
 
       return <DeckBuilderView
         roomId={room.id}
@@ -390,7 +392,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
         initialPool={myPool}
         availableBasicLands={room.basicLands}
         isConstructed={!isLimited}
-        initialDeck={selectedDeckCards} // Pass selected deck
+        initialDeck={selectedDeckCards.length > 0 ? selectedDeckCards : me?.deck || []}
         format={room.format}
       />;
     }

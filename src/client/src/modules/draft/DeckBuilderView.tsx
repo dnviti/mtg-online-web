@@ -534,8 +534,8 @@ const SearchToolbar = React.memo(({
 ));
 
 export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
-  // roomId,
-  // currentPlayerId,
+  roomId,
+
   initialPool,
   initialDeck = [],
   availableBasicLands = [],
@@ -638,6 +638,19 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
   useEffect(() => localStorage.setItem('deck_cardWidth', cardWidth.toString()), [cardWidth]);
 
   const [deck, setDeck] = useState<any[]>(initialDeck);
+
+  // ** AUTOSAVE DECK **
+  useEffect(() => {
+    if (!roomId) return;
+
+    // Debounce save
+    const timeout = setTimeout(() => {
+      console.log("Autosaving deck...", deck.length);
+      socketService.socket.emit('save_deck', { roomId, deck });
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [deck, roomId]);
   const [pool, setPool] = useState<any[]>(() => {
     if (initialDeck && initialDeck.length > 0) {
       // Need to be careful about IDs. 

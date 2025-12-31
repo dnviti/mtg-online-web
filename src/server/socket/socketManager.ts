@@ -65,6 +65,31 @@ export const initializeSocket = (io: Server) => {
     }
   });
 
+  // Draft Completion Listener (Persistence)
+  draftManager.on('draft_complete', async ({ roomId, draft }) => {
+    console.log(`[SocketManager] Draft ${roomId} Completed. Persisting pools...`);
+
+    // 1. Sync Room Status
+    const room = await roomManager.getRoom(roomId);
+    if (room && room.status !== 'deck_building') {
+      room.status = 'deck_building';
+      await roomManager.saveRoom(room);
+      io.to(roomId).emit('room_update', room);
+    }
+
+    if (room) {
+      // 2. Persist Pools
+      for (const playerId of Object.keys(draft.players)) {
+        const draftPlayer = draft.players[playerId];
+        await roomManager.updatePlayerPool(roomId, playerId, draftPlayer.pool);
+        // Update local ref if we were to reuse 'room' obj, but we re-fetch usually.
+        // But let's verify bots here too?
+      }
+
+      console.log(`[SocketManager] Pools persisted for room ${roomId}`);
+    }
+  });
+
   // Draft Timer Loop
   const runDraftTimer = async () => {
     try {
@@ -75,13 +100,10 @@ export const initializeSocket = (io: Server) => {
         if (draft.status === 'deck_building') {
           const room = await roomManager.getRoom(roomId);
           if (room) {
-            // Fix: Sync room status if it's still drafting (caused when Bot triggers completion)
-            if (room.status === 'drafting') {
-              console.log(`[Sync] Draft ${roomId} complete (Bot triggered). Updating Room status to deck_building.`);
-              room.status = 'deck_building';
-              await roomManager.saveRoom(room);
-              io.to(roomId).emit('room_update', room);
-            }
+            // Sync Draft Pools to Room Players (Persistence)
+            // This logic is now handled by the 'draft_complete' listener.
+            // The 'draft_complete' event is emitted by draftManager when a draft transitions to 'deck_building' or 'complete'.
+            // This ensures persistence happens once and reliably.
 
             Object.values(draft.players).forEach(dp => {
               if (dp.isBot && dp.deck && dp.deck.length > 0) {

@@ -160,6 +160,18 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
+  socket.on('save_deck', async ({ roomId, deck }) => {
+    // Autosave deck state (without setting ready)
+    if (!roomId || !deck) return;
+    const context = await getContext();
+    if (!context || context.room.id !== roomId) return;
+
+    const updatedRoom = await roomManager.saveDeckState(roomId, context.player.id, deck);
+    if (updatedRoom) {
+      socket.emit('deck_saved', { success: true });
+    }
+  });
+
   socket.on('disconnect', async () => {
     // console.log('User disconnected', socket.id); // Verbose
 

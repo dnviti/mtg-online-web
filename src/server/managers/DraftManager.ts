@@ -369,6 +369,9 @@ export class DraftManager extends EventEmitter {
             p.deck = deck;
           }
         });
+
+        // Emit event for persistence
+        this.emit('draft_complete', { roomId: draft.roomId, draft });
       }
     }
   }

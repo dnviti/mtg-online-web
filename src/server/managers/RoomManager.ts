@@ -1,5 +1,6 @@
 import { Tournament } from './TournamentManager';
 import { StateStoreManager } from './StateStoreManager';
+import { Card } from '../interfaces/DraftInterfaces';
 
 interface Player {
   id: string;
@@ -7,11 +8,12 @@ interface Player {
   isHost: boolean;
   role: 'player' | 'spectator';
   ready?: boolean;
-  deck?: any[];
+  deck?: Card[];
   socketId?: string; // Current or last known socket
   isOffline?: boolean;
   isBot?: boolean;
   matchId?: string; // Current match in tournament
+  pool?: Card[]; // Drafted cards
 }
 
 interface ChatMessage {
@@ -125,6 +127,43 @@ export class RoomManager {
       if (player) {
         player.ready = true;
         player.deck = deck;
+      }
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async saveDeckState(roomId: string, playerId: string, deck: Card[]): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      room.lastActive = Date.now();
+      const player = room.players.find(p => p.id === playerId);
+      if (player) {
+        player.deck = deck;
+        // Do NOT set ready=true
+      }
+      await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async updatePlayerPool(roomId: string, playerId: string, pool: Card[]): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      room.lastActive = Date.now();
+      const player = room.players.find(p => p.id === playerId);
+      if (player) {
+        player.pool = pool;
       }
       await this.saveRoomState(room);
       return room;
