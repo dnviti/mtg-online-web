@@ -2,47 +2,8 @@ import { EventEmitter } from 'events';
 import { StateStoreManager } from './StateStoreManager';
 import { BotDeckBuilderService } from '../services/BotDeckBuilderService';
 
-interface Card {
-  id: string; // instanceid or scryfall id
-  name: string;
-  image_uris?: { normal: string };
-  card_faces?: { image_uris: { normal: string } }[];
-  colors?: string[];
-  rarity?: string;
-  edhrecRank?: number;
-  // ... other props
-}
-
-interface Pack {
-  id: string;
-  cards: Card[];
-}
-
-interface DraftState {
-  roomId: string;
-  seats: string[]; // PlayerIDs in seating order
-  packNumber: number; // 1, 2, 3
-
-  // State per player
-  players: Record<string, {
-    id: string;
-    queue: Pack[]; // Packs passed to this player waiting to be viewed
-    activePack: Pack | null; // The pack currently being looked at
-    pool: Card[]; // Picked cards
-    unopenedPacks: Pack[]; // Pack 2 and 3 kept aside
-    isWaiting: boolean; // True if finished current pack round
-    pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
-    pickExpiresAt: number; // Timestamp when auto-pick occurs
-    isBot: boolean;
-    deck?: Card[]; // Store constructed deck here
-  }>;
-
-  basicLands?: Card[]; // Store reference to available basic lands
-
-  status: 'drafting' | 'deck_building' | 'complete';
-  isPaused: boolean;
-  startTime?: number; // For timer
-}
+import { DraftState, Pack, Card } from '../interfaces/DraftInterfaces';
+import { selectBestCard } from '../algorithms/DraftPickAlgorithm';
 
 export class DraftManager extends EventEmitter {
   private botBuilder = new BotDeckBuilderService();
@@ -326,42 +287,22 @@ export class DraftManager extends EventEmitter {
     const playerState = draft.players[playerId];
     if (!playerState || !playerState.activePack || playerState.activePack.cards.length === 0) return false;
 
-    // Score cards
-    const scoredCards = playerState.activePack.cards.map(c => {
-      let score = 0;
-      if (c.rarity === 'mythic') score += 5;
-      else if (c.rarity === 'rare') score += 4;
-      else if (c.rarity === 'uncommon') score += 2;
-      else score += 1;
+    // 1. Select Best Card (using extracted algorithm)
+    const selection = selectBestCard(playerState.activePack.cards, playerState.pool);
+    if (!selection) return false;
 
-      const poolColors = playerState.pool.flatMap(p => p.colors || []);
-      if (poolColors.length > 0 && c.colors) {
-        c.colors.forEach(col => {
-          const count = poolColors.filter(pc => pc === col).length;
-          score += (count * 0.1);
-        });
-      }
+    const { card, score, topColors } = selection;
 
-      if (c.edhrecRank !== undefined && c.edhrecRank !== null) {
-        const rank = c.edhrecRank;
-        if (rank < 10000) {
-          score += (5 * (1 - (rank / 10000)));
-        }
-      }
-      return { card: c, score };
-    });
+    console.log(`[DraftManager] 🤖 Auto-pick for ${playerId}: ${card.name} (Score: ${score.toFixed(1)}, Colors: ${topColors.join('/')})`);
 
-    scoredCards.sort((a, b) => b.score - a.score);
-    const card = scoredCards[0].card;
+    // 4. Update State (Sync)
 
-    // Reuse pick logic - BUT pickCard is async and locks. We need internal pick logic.
-    // We duplicate pick logic here for synchronous in-memory update on the passed draft object.
-
-    // 1. Add to pool
+    // Add to pool
     playerState.pool.push(card);
 
-    // 2. Remove from pack
-    playerState.activePack.cards = playerState.activePack.cards.filter(c => c.id !== card.id);
+    // Remove from pack (By Reference Identity!)
+    playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);
+
     playerState.pickedInCurrentStep = (playerState.pickedInCurrentStep || 0) + 1;
 
     const picksRequired = draft.seats.length === 4 ? 2 : 1;
@@ -369,7 +310,7 @@ export class DraftManager extends EventEmitter {
 
     if (!shouldPass) return true;
 
-    // PASSED
+    // PASS PACK
     const passedPack = playerState.activePack;
     playerState.activePack = null;
     playerState.pickedInCurrentStep = 0;
@@ -385,13 +326,12 @@ export class DraftManager extends EventEmitter {
       const neighborId = draft.seats[nextSeatIndex];
       draft.players[neighborId].queue.push(passedPack);
       this.processQueue(draft, neighborId);
-    } else {
-      // Pack exhausted
     }
 
+    // Checking own queue
     this.processQueue(draft, playerId);
 
-    // Same fix as pickCard:
+    // Update Waiting Logic
     playerState.isWaiting = !playerState.activePack;
 
     if (playerState.isWaiting) {
@@ -400,8 +340,7 @@ export class DraftManager extends EventEmitter {
       playerState.isWaiting = false;
     }
 
-
-    this.processQueue(draft, playerId);
+    this.processQueue(draft, playerId); // Double check queue? Redundant but harmless.
     return true;
   }
 
