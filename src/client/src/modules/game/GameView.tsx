@@ -347,6 +347,32 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
       return;
     }
 
+    if (actionType === 'REQUEST_PLAY') {
+      const cardId = payload.cardId;
+      const card = gameState.cards[cardId];
+      if (!card) return;
+
+      // 1. DFC Check
+      const faces = card.definition?.card_faces || card.card_faces;
+      if (card.isDoubleFaced && faces && faces.length > 1) {
+        setPendingPlayCard({ cardId });
+        setIsDFCModalOpen(true);
+        return;
+      }
+
+      // 2. Land Check
+      const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+        (card.typeLine?.toLowerCase().includes('land'));
+
+      if (isLand) {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId } });
+      } else {
+        // 3. Spell Check
+        socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: [] } });
+      }
+      return;
+    }
+
     // Handle Radial Menu trigger (MANA)
     if (actionType === 'MANA') {
       const card = gameState.cards[payload.cardId];
@@ -588,7 +614,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
           return;
         }
 
-        if (card.typeLine?.includes('Land') || card.types?.includes('Land')) {
+        const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+          (card.typeLine?.toLowerCase().includes('land'));
+
+        if (isLand) {
           socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId } });
         } else {
           socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: [] } });
@@ -629,6 +658,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
       // Default Cast with Target
       if (card.zone === 'hand') {
+        const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+          (card.typeLine?.toLowerCase().includes('land'));
+
+        if (isLand) {
+          console.warn("Cannot cast Land as spell with target.");
+          return;
+        }
+
         // DFC Check for targeted cast
         const faces = card.definition?.card_faces || card.card_faces;
         if (card.isDoubleFaced && faces && faces.length > 1) {

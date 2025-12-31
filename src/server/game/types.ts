@@ -42,6 +42,8 @@ export interface CardObject {
   toughness: number;
   basePower: number;
   baseToughness: number;
+  defense?: number;
+  baseDefense?: number;
   damageMarked: number;
 
   // Counters & Mods

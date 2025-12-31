@@ -60,7 +60,8 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
             <MenuItem
               label={card.typeLine?.toLowerCase().includes('land') ? "Play Land" : "Cast Commander"}
               onClick={() => {
-                const isLand = card.typeLine?.toLowerCase().includes('land');
+                const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+                  (card.typeLine?.toLowerCase().includes('land'));
                 if (isLand) {
                   handleAction('PLAY_LAND', { cardId: card.instanceId });
                 } else {
@@ -77,7 +78,7 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
         {/* Hand Menu */}
         {zone === 'hand' && (
           <>
-            <MenuItem label="Play (Battlefield)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield', position: { x: 50, y: 50 } })} />
+            <MenuItem label="Play (Battlefield)" onClick={() => handleAction('REQUEST_PLAY', { cardId: card.instanceId })} />
             <MenuItem label="Discard" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'graveyard' })} />
             <MenuItem label="Exile" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'exile' })} />
             <div className="h-px bg-slate-800 my-1 mx-2"></div>

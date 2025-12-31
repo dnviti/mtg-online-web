@@ -57,6 +57,8 @@ export class ActionHandler {
           card.manaCost = card.definition.mana_cost;
           card.typeLine = card.definition.type_line;
           card.oracleText = card.definition.oracle_text;
+          card.defense = parseFloat(card.definition.defense || '0');
+          card.baseDefense = card.defense;
         }
 
         card.attachedTo = undefined;
@@ -90,6 +92,10 @@ export class ActionHandler {
             if (face.toughness !== undefined) {
               card.baseToughness = parseFloat(face.toughness);
               card.toughness = card.baseToughness;
+            }
+            if (face.defense !== undefined) {
+              card.baseDefense = parseFloat(face.defense);
+              card.defense = card.baseDefense;
             }
           }
         }
@@ -154,10 +160,16 @@ export class ActionHandler {
       }
     }
 
+    // Ensure types is populated if missing
+    if ((!types || types.length === 0) && typeLine) {
+      types = typeLine.split('—')[0].trim().split(' ');
+    }
+
     // STRICT RULE: Lands cannot be cast. They must be played.
-    // Check if the face we are trying to cast is a Land.
+    // However, if the frontend sends 'cast_spell' for a Land, we should redirect to 'playLand'.
     if (types.includes('Land') || typeLine.includes('Land')) {
-      throw new Error("Lands cannot be cast. Use the 'Play Land' action.");
+      console.log(`[ActionHandler] Redirecting castSpell to playLand for ${card.name}`);
+      return this.playLand(state, playerId, cardId, position, faceIndex);
     }
 
     const isInstant = types.includes('Instant') || typeLine.includes('Instant');
@@ -225,13 +237,13 @@ export class ActionHandler {
         if (!card.types && card.typeLine) {
           card.types = card.typeLine.split('—')[0].trim().split(' ');
         }
-        const types = card.types || [];
+        const isPermanent = CardUtils.isPermanent(card);
 
-        const isPermanent = types.some(t =>
-          ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Land'].includes(t)
-        );
+        // Extra safety: If it's a Land, it MUST go to battlefield.
+        // (Lands shouldn't be on stack, but if they are, don't graveyard them)
+        const isLand = (card.types?.includes('Land')) || (card.typeLine?.includes('Land'));
 
-        if (isPermanent) {
+        if (isPermanent || isLand) {
           if (CardUtils.isAura(card)) {
             const targetId = item.targets[0];
             const target = state.cards[targetId];
@@ -246,6 +258,11 @@ export class ActionHandler {
           } else {
             const faceIndex = (item as any).faceIndex;
             this.moveCardToZone(state, card.instanceId, 'battlefield', false, item.resolutionPosition, faceIndex);
+
+            // Battles enter with defense counters
+            if (CardUtils.isBattle(card) && card.baseDefense) {
+              this.addCounter(state, state.activePlayerId, card.instanceId, 'defense', card.baseDefense);
+            }
           }
         } else {
           this.moveCardToZone(state, card.instanceId, 'graveyard');

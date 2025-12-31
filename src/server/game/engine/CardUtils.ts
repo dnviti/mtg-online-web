@@ -25,4 +25,23 @@ export class CardUtils {
     }
     return true;
   }
+
+  static isBattle(card: any): boolean {
+    return card.types && card.types.includes('Battle');
+  }
+
+  static isPermanent(card: any): boolean {
+    if (card.types && card.types.length > 0) {
+      return card.types.some((t: string) =>
+        ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Land', 'Battle'].includes(t)
+      );
+    }
+    // Fallback to typeLine check if types array is empty/missing
+    if (card.typeLine) {
+      // Simple string inclusion is risky for things like "Creature token" or "Non-creature", but Standard types are capitalized in typeLine generally.
+      // However, safest is to check for presence of the words.
+      return /Creature|Artifact|Enchantment|Planeswalker|Land|Battle/i.test(card.typeLine);
+    }
+    return false;
+  }
 }
