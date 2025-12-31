@@ -913,7 +913,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                   <input
                     type="range"
                     min="60"
-                    max="200"
+                    max="300"
                     step="1"
                     value={localCardWidth}
                     onChange={(e) => {

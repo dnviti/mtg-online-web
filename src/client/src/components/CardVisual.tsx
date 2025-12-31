@@ -39,7 +39,7 @@ export type VisualCard = {
 
 interface CardVisualProps {
   card: VisualCard;
-  viewMode?: 'normal' | 'cutout' | 'large';
+  viewMode?: 'normal' | 'cutout' | 'large' | 'squared';
   isFoil?: boolean; // Explicit foil styling override
   className?: string;
   style?: React.CSSProperties;
@@ -82,7 +82,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     const activeFace = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
     const faceImageUris = activeFace?.image_uris;
 
-    if (viewMode === 'cutout') {
+    if (viewMode === 'cutout' || viewMode === 'squared') {
       if (setCode && cardId) {
         // If back face, usually we don't have a simple cache path for back face crop unless we specifically index it.
         // But our crop logic (server) might not support back faces yet.
