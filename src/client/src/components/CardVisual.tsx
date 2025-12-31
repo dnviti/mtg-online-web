@@ -277,7 +277,12 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
       {/* Foil Overlay */}
       {(isFoil || card.finish === 'foil') && !card.faceDown && (
-        <div className="absolute inset-0 pointer-events-none mix-blend-overlay bg-gradient-to-tr from-purple-500/30 via-transparent to-emerald-500/30 opacity-50" />
+        <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden z-20">
+          {/* CSS-based Holographic Pattern */}
+          <div className="absolute inset-0 foil-holo" />
+          {/* Gaussian Circular Glare - Spinning Radial Gradient */}
+          <div className="absolute inset-[-50%] bg-[radial-gradient(circle_at_50%_50%,_rgba(255,255,255,0.25)_0%,_transparent_60%)] mix-blend-overlay opacity-25 animate-spin-slow" />
+        </div>
       )}
 
       {/* Counters */}

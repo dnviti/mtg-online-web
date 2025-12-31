@@ -123,7 +123,7 @@ export const PackCard: React.FC<PackCardProps> = ({ pack, viewMode, cardWidth = 
                           card.rarity === 'uncommon' ? 'bg-gradient-to-r from-gray-300 to-gray-500' :
                             'bg-black'
                         }`} />
-                      {isFoil(card) && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1 rounded backdrop-blur-sm">FOIL</div>}
+
                     </CardVisual>
                   </div>
                 </CardHoverWrapper>
