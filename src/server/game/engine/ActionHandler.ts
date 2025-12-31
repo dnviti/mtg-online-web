@@ -388,7 +388,7 @@ export class ActionHandler {
     StateBasedEffects.process(state);
   }
 
-  static tapCard(state: StrictGameState, playerId: string, cardId: string) {
+  static tapCard(state: StrictGameState, _playerId: string, cardId: string) {
     const card = state.cards[cardId];
     if (!card) throw new Error("Card not found");
     // Basic validation? Tapping usually doesn't use stack unless ability.

@@ -2,7 +2,7 @@ import { StrictGameState } from './types';
 import { ActionHandler } from './engine/ActionHandler';
 import { PhaseManager } from './engine/PhaseManager';
 import { CombatManager } from './engine/CombatManager';
-import { CardUtils } from './engine/CardUtils';
+
 import { ManaUtils } from './engine/ManaUtils';
 
 /**

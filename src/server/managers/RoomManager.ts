@@ -263,9 +263,7 @@ export class RoomManager {
       room.lastActive = Date.now();
       await this.saveRoomState(room);
       return room;
-      room.lastActive = Date.now();
-      await this.saveRoomState(room);
-      return room;
+
     } finally {
       await this.releaseLock(roomId);
     }
