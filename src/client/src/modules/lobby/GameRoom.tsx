@@ -401,7 +401,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       if (localTournamentState) {
         if (preparingMatchId) {
           const myTournamentPlayer = localTournamentState.players.find((p: any) => p.id === currentPlayerId);
-          const myPool = draftState?.players[currentPlayerId]?.pool || [];
+          const myPool = draftState?.players[currentPlayerId]?.pool || (room.players.find(p => p.id === currentPlayerId) as any)?.pool || [];
           const myDeck = myTournamentPlayer?.deck || [];
 
           return <DeckBuilderView
