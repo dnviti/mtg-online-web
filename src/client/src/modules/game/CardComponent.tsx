@@ -54,6 +54,7 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
       onContextMenu={(e) => {
         if (onContextMenu) {
           e.preventDefault();
+          e.stopPropagation();
           onContextMenu(card.instanceId, e);
         }
       }}

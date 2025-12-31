@@ -132,6 +132,45 @@ export class ActionHandler {
     const card = state.cards[cardId];
     if (!card || (card.zone !== 'hand' && card.zone !== 'command')) throw new Error("Invalid card source (must be Hand or Command Zone).");
 
+    // Determine types and Flash status
+    let typeLine = card.typeLine || "";
+    let types = card.types || [];
+    let keywords = card.keywords || [];
+
+    if (faceIndex !== undefined) {
+      const faces = card.definition?.card_faces;
+      if (faces && faces[faceIndex]) {
+        typeLine = faces[faceIndex].type_line || "";
+        types = typeLine.split('—')[0].trim().split(' ');
+        // Oracle text often contains keywords like Flash
+        if (faces[faceIndex].oracle_text?.toLowerCase().includes('flash')) {
+          keywords = [...keywords, 'Flash'];
+        }
+      }
+    } else {
+      // Double check keywords from text if not populated
+      if (card.oracleText?.toLowerCase().includes('flash')) {
+        keywords = [...(card.keywords || []), 'Flash'];
+      }
+    }
+
+    // STRICT RULE: Lands cannot be cast. They must be played.
+    // Check if the face we are trying to cast is a Land.
+    if (types.includes('Land') || typeLine.includes('Land')) {
+      throw new Error("Lands cannot be cast. Use the 'Play Land' action.");
+    }
+
+    const isInstant = types.includes('Instant') || typeLine.includes('Instant');
+    const hasFlash = keywords.some(k => k.toLowerCase() === 'flash');
+
+    // Timing Rules
+    if (!isInstant && !hasFlash) {
+      // Sorcery Speed: Main Phase, Stack Empty, Active Player
+      if (state.activePlayerId !== playerId) throw new Error("Can only cast Sorcery-speed spells on your turn.");
+      if (state.phase !== 'main1' && state.phase !== 'main2') throw new Error("Can only cast Sorcery-speed spells during Main Phase.");
+      if (state.stack.length > 0) throw new Error("Stack must be empty to cast Sorcery-speed spells.");
+    }
+
     let name = card.name;
     let text = card.oracleText || "";
 
@@ -349,6 +388,25 @@ export class ActionHandler {
 
     const source = state.cards[sourceId];
     if (!source) throw new Error("Source card not found");
+
+    // Land Mana Ability Support
+    if (source.zone === 'battlefield' && (source.types.includes('Land') || source.typeLine?.includes('Land'))) {
+      if (source.tapped) throw new Error("Land is already tapped.");
+
+      // Determine color to produce
+      const availableColors = ManaUtils.getAvailableManaColors(source);
+      if (availableColors.length === 0) throw new Error("This land cannot produce mana.");
+
+      let colorToProduce = availableColors[0];
+      if (abilityIndex >= 0 && abilityIndex < availableColors.length) {
+        colorToProduce = availableColors[abilityIndex];
+      }
+
+      source.tapped = true;
+      ManaUtils.addMana(state, playerId, { color: colorToProduce, amount: 1 });
+      // Mana abilities do not use the stack.
+      return;
+    }
 
     // Equip Logic (Hardcoded for now as per previous RulesEngine)
     if (CardUtils.isEquipment(source) && source.zone === 'battlefield') {

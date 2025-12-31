@@ -210,6 +210,10 @@ export class GameManager extends EventEmitter {
           case 'life_change':
             engine.changeLife(actorId, action.amount);
             break;
+          case 'move_card':
+            // Allow manual movement of cards between zones
+            engine.moveCardToZone(action.cardId, action.toZone, false, action.position, action.faceIndex);
+            break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }

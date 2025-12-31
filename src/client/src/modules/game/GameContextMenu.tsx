@@ -125,9 +125,11 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
         {/* Graveyard Menu */}
         {zone === 'graveyard' && (
           <>
-            <MenuItem label="Exile" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'exile' })} />
             <MenuItem label="Return to Hand" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'hand' })} />
             <MenuItem label="Return to Battlefield" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield' })} />
+            <MenuItem label="Exile" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'exile' })} />
+            <div className="h-px bg-slate-800 my-1 mx-2"></div>
+            <MenuItem label="To Library (Top)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'library', position: 'top' })} />
             <MenuItem label="To Library (Bottom)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'library', position: 'bottom' })} />
           </>
         )}
@@ -135,16 +137,22 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
         {/* Exile Menu */}
         {zone === 'exile' && (
           <>
-            <MenuItem label="Return to Graveyard" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'graveyard' })} />
-            <MenuItem label="Return to Battlefield" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield' })} />
             <MenuItem label="Return to Hand" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'hand' })} />
+            <MenuItem label="Return to Battlefield" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield' })} />
+            <MenuItem label="Return to Graveyard" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'graveyard' })} />
+            <div className="h-px bg-slate-800 my-1 mx-2"></div>
+            <MenuItem label="To Library (Top)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'library', position: 'top' })} />
+            <MenuItem label="To Library (Bottom)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'library', position: 'bottom' })} />
           </>
         )}
 
-        {/* Library Menu (if we ever show context menu for cards IN library view?) */}
+        {/* Library Menu */}
         {zone === 'library' && (
           <>
-            <MenuItem label="Draw" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'hand' })} />
+            <MenuItem label="Draw (To Hand)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'hand' })} />
+            <MenuItem label="Play (Battlefield)" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield' })} />
+            <MenuItem label="Put in Graveyard" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'graveyard' })} />
+            <MenuItem label="Exile" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'exile' })} />
           </>
         )}
 

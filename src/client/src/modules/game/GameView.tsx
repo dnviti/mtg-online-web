@@ -682,6 +682,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
               zoneName={viewingZone}
               cards={getCards(currentPlayerId, viewingZone)}
               onClose={() => setViewingZone(null)}
+              onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId, viewingZone)}
             />
           )
         }

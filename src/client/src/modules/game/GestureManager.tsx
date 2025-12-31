@@ -32,6 +32,10 @@ export const GestureManager: React.FC<GestureManagerProps> = ({ children, onGest
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // Only capture LEFT CLICK (0) for gestures
+    // Allow Right Click (2) to propagate for Context Menu
+    if (e.button !== 0) return;
+
     // Only start gesture if clicking on background or specific handle?
     // For now, let's assume Right Click or Middle Drag is Gesture Mode?
     // Or just "Drag on Background".
