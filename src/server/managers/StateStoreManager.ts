@@ -6,7 +6,7 @@ import { MemcachedStateStore } from './state/MemcachedStateStore';
 export class StateStoreManager {
   private static instance: StateStoreManager;
   public store: IStateStore;
-  public fileStore: IStateStore | null = null; // Used for DB1 equivalent if supported
+  public metadataStore: IStateStore | null = null; // DB 1: Metadata Index
 
   private constructor() {
     const useRedis = process.env.USE_REDIS === 'true';
@@ -17,10 +17,10 @@ export class StateStoreManager {
       console.log(`[StateStoreManager] Initializing Redis State Store at ${host}:${port}`);
 
       this.store = new RedisStateStore(host, port, 0);
-      this.fileStore = new RedisStateStore(host, port, 1);
+      this.metadataStore = new RedisStateStore(host, port, 1);
 
       this.store.connect();
-      this.fileStore.connect();
+      this.metadataStore.connect();
     } else {
       console.log('[StateStoreManager] Initializing Memcached State Store (No Redis)');
       // Default Memcached port 11211
@@ -31,9 +31,7 @@ export class StateStoreManager {
       this.store = new MemcachedStateStore(host, port);
       this.store.connect();
 
-      // File Store in Memcached? Limits are tight (1MB). 
-      // Better to disable fileStore for Memcached and rely on Local FS.
-      this.fileStore = null;
+      this.metadataStore = null;
     }
   }
 

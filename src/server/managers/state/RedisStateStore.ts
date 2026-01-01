@@ -52,6 +52,18 @@ export class RedisStateStore implements IStateStore {
     return this.client.smembers(key);
   }
 
+  async hget(key: string, field: string): Promise<string | null> {
+    return this.client.hget(key, field);
+  }
+
+  async hset(key: string, field: string, value: string): Promise<void> {
+    await this.client.hset(key, field, value);
+  }
+
+  async hgetall(key: string): Promise<Record<string, string>> {
+    return this.client.hgetall(key);
+  }
+
   async acquireLock(key: string, ttl: number): Promise<boolean> {
     // Use EX, ttl, NX order which is standard
     // Casting to any to avoid strict overload mismatch if types are outdated

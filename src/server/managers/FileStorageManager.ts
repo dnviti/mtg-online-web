@@ -1,46 +1,33 @@
 import fs from 'fs';
 import path from 'path';
-import { StateStoreManager } from './StateStoreManager';
 
+/**
+ * Manages file system operations.
+ * Now strictly Local FS (images are NOT stored in Redis binaries).
+ */
 export class FileStorageManager {
-  private storeManager: StateStoreManager;
 
   constructor() {
-    this.storeManager = StateStoreManager.getInstance();
+    // No Redis dependency
   }
 
   async saveFile(filePath: string, data: Buffer | string): Promise<void> {
-    if (this.storeManager.fileStore) {
-      await this.storeManager.fileStore.set(filePath, data);
-    } else {
-      // Local File System
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      fs.writeFileSync(filePath, data);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
+    fs.writeFileSync(filePath, data);
   }
 
   async readFile(filePath: string): Promise<Buffer | null> {
-    if (this.storeManager.fileStore) {
-      return this.storeManager.fileStore.getBuffer(filePath);
-    } else {
-      // Local
-      if (fs.existsSync(filePath)) {
-        return fs.readFileSync(filePath);
-      }
-      return null;
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath);
     }
+    return null;
   }
 
   async exists(filePath: string): Promise<boolean> {
-    if (this.storeManager.fileStore) {
-      const val = await this.storeManager.fileStore.get(filePath);
-      return !!val;
-    } else {
-      return fs.existsSync(filePath);
-    }
+    return fs.existsSync(filePath);
   }
 }
 

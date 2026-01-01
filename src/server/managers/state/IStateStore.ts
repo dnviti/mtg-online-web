@@ -11,7 +11,13 @@ export interface IStateStore {
   // Sets (Simulated or Native)
   sadd(key: string, value: string): Promise<void>;
   srem(key: string, value: string): Promise<void>;
+  srem(key: string, value: string): Promise<void>;
   smembers(key: string): Promise<string[]>;
+
+  // Hashes
+  hget(key: string, field: string): Promise<string | null>;
+  hset(key: string, field: string, value: string): Promise<void>;
+  hgetall(key: string): Promise<Record<string, string>>;
 
   // Locking
   acquireLock(key: string, ttl: number): Promise<boolean>;

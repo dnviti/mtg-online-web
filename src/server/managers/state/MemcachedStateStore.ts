@@ -94,6 +94,28 @@ export class MemcachedStateStore implements IStateStore {
     }
   }
 
+  // Naive Hash Simulation using JSON (Not Atomic)
+  async hget(key: string, field: string): Promise<string | null> {
+    const current = await this.get(key);
+    if (!current) return null;
+    try {
+      const obj = JSON.parse(current);
+      return obj[field] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async hset(key: string, field: string, value: string): Promise<void> {
+    const current = await this.get(key);
+    let obj: any = {};
+    if (current) {
+      try { obj = JSON.parse(current); } catch { }
+    }
+    obj[field] = value;
+    await this.set(key, JSON.stringify(obj));
+  }
+
   async acquireLock(key: string, ttl: number): Promise<boolean> {
     return new Promise((resolve, _reject) => {
       // memcached 'add' is atomic: fails if key exists

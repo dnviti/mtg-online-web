@@ -7,7 +7,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import apiRoutes from './routes'; // Imports index.ts from routes
 import { initializeSocket } from './socket/socketManager';
-import { StateStoreManager } from './managers/StateStoreManager';
 import { fileStorageManager } from './managers/FileStorageManager';
 import cluster from 'cluster';
 import os from 'os';
@@ -15,6 +14,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import { QueueManager } from './managers/QueueManager';
 import { packGeneratorService } from './singletons';
+import { imageCacheService } from './services/ImageCacheService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,27 +77,52 @@ if (cluster.isPrimary) {
   // Initialize Socket
   initializeSocket(io);
 
-  // Static File Serving
-  const fileStore = StateStoreManager.getInstance().fileStore;
-  if (fileStore) {
-    if (process.env.DEBUG_STATIC) console.log(`[Worker ${process.pid}] Using StateStore (Redis DB1) for file serving`);
-    app.get('/cards/*', async (req: Request, res: Response) => {
-      const relativePath = req.path;
-      const filePath = path.join(__dirname, 'public', relativePath);
-      const buffer = await fileStorageManager.readFile(filePath);
+  // Middleware for Image Caching (Redis DB1 Metadata + Local FS)
+  // Intercept /cards/images/:set/:type/:id.jpg
+  // This must be BEFORE the generic file serving or static middleware if they overlap.
+  // The generic one is app.get('/cards/*', ...) which is what we want to replace/augment.
+
+  app.get('/cards/images/:set/:type/:filename', async (req: Request, res: Response) => {
+    const { set, type, filename } = req.params;
+    const cardId = filename.replace(/\.(jpg|png|jpeg)$/, '');
+    const relativePath = req.path;
+    const absPath = path.join(__dirname, 'public', relativePath);
+
+    // Only handle 'full' and 'crop' for efficiency
+    if (type !== 'full' && type !== 'crop') return res.status(404).send('Invalid image type');
+
+    try {
+      // Use ImageCacheService to ensure it's in Redis Metadata and Local FS
+      const buffer = await imageCacheService.ensureImageCached(absPath, cardId, set, type as 'full' | 'crop');
       if (buffer) {
-        if (filePath.endsWith('.jpg')) res.type('image/jpeg');
-        else if (filePath.endsWith('.png')) res.type('image/png');
-        else if (filePath.endsWith('.json')) res.type('application/json');
+        res.type('image/jpeg');
         res.send(buffer);
       } else {
-        res.status(404).send('Not Found');
+        res.status(404).send('Not found');
       }
-    });
-  } else {
-    // console.log(`[Worker ${process.pid}] Using Local FS for file serving`);
-    app.use('/cards', express.static(path.join(__dirname, 'public/cards')));
-  }
+    } catch (e) {
+      console.error("Error serving image", e);
+      res.status(500).send('Error');
+    }
+  });
+
+  // Generic File Serving (Local FS via FileStorageManager)
+  // This catches things in /cards/ that are NOT matched above,
+  // OR if the regex/params above didn't match (though :set/:type/:filename is broad).
+  app.get('/cards/*', async (req: Request, res: Response) => {
+    const relativePath = req.path;
+    const filePath = path.join(__dirname, 'public', relativePath);
+    // Fallback to static serving or FileStorageManager (which is FS now)
+    const buffer = await fileStorageManager.readFile(filePath);
+    if (buffer) {
+      if (filePath.endsWith('.jpg')) res.type('image/jpeg');
+      else if (filePath.endsWith('.png')) res.type('image/png');
+      else if (filePath.endsWith('.json')) res.type('application/json');
+      res.send(buffer);
+    } else {
+      res.status(404).send('Not Found');
+    }
+  });
 
   app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
