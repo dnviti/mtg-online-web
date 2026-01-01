@@ -10,20 +10,53 @@ interface ZoneOverlayProps {
 }
 
 export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClose, onCardContextMenu }) => {
+  const [searchQuery, setSearchQuery] = React.useState('');
+
   // Sort cards by Z index (Highest Z = Top of Pile = First in list)
   const sortedCards = [...cards].sort((a, b) => (b.position?.z || 0) - (a.position?.z || 0));
+
+  const filteredCards = sortedCards.filter(c =>
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl w-3/4 h-3/4 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950">
-          <h2 className="text-2xl font-bold text-slate-200 capitalize flex items-center gap-3">
-            <span>{zoneName}</span>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-bold text-slate-200 capitalize">
+              {zoneName}
+            </h2>
             <span className="text-sm font-normal text-slate-500 bg-slate-900 px-2 py-1 rounded-full border border-slate-800">
               {cards.length} Cards
             </span>
-          </h2>
+          </div>
+
+          <div className="relative mx-4 flex-1 max-w-md">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search cards..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-full py-1.5 pl-10 pr-4 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
+              autoFocus
+            />
+          </div>
+
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-full"
@@ -41,9 +74,13 @@ export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClo
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
               <p className="text-lg">This zone is empty.</p>
             </div>
+          ) : filteredCards.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500">
+              <p className="text-lg">No cards found matching "{searchQuery}"</p>
+            </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {sortedCards.map((card) => (
+              {filteredCards.map((card) => (
                 <div key={card.instanceId} className="relative group perspective-1000">
                   <div
                     className="relative aspect-[2.5/3.5] bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700 transition-transform duration-200 hover:scale-105 hover:z-10 hover:shadow-xl hover:shadow-cyan-900/20 cursor-context-menu"
