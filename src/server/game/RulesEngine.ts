@@ -21,6 +21,8 @@ export class RulesEngine {
 
   public startGame() {
     console.log("RulesEngine: Starting Game...");
+    // Shuffle all players' libraries
+    Object.keys(this.state.players).forEach(pid => this.shuffleLibrary(pid));
     PhaseManager.performTurnBasedActions(this.state);
   }
 
@@ -65,13 +67,36 @@ export class RulesEngine {
       // ... logic ...
       player.handKept = true;
       cardsToBottom.forEach(cid => ActionHandler.moveCardToZone(this.state, cid, 'library'));
+      this.shuffleLibrary(playerId); // Shuffle after bottoming cards? Or server enforces order? Usually shuffle IS NOT performed after mulligan bottom.
+      // Wait, rules say: "Put them on the bottom of your library in any order." No shuffle.
+      // But standard "Start Game" shuffle happens BEFORE drawing hand.
+      // So here we only need to shuffle if explicitly requested or at start.
       PhaseManager.performTurnBasedActions(this.state);
     } else {
       const hand = Object.values(this.state.cards).filter(c => c.ownerId === playerId && c.zone === 'hand');
       hand.forEach(c => ActionHandler.moveCardToZone(this.state, c.instanceId, 'library'));
+      this.shuffleLibrary(playerId); // Reshuffle entire library on Mulligan
       for (let i = 0; i < 7; i++) ActionHandler.drawCard(this.state, playerId);
       player.mulliganCount = (player.mulliganCount || 0) + 1;
     }
+  }
+
+  public shuffleLibrary(playerId: string) {
+    const library = Object.values(this.state.cards).filter(c => c.zone === 'library' && c.ownerId === playerId);
+
+    // Fisher-Yates Shuffle
+    for (let i = library.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [library[i], library[j]] = [library[j], library[i]];
+    }
+
+    // Assign Z-Index to strictly define order
+    // Higher Z = Top of Library
+    library.forEach(card => {
+      card.position = { x: 0, y: 0, z: ++this.state.maxZ };
+    });
+
+    console.log(`[RulesEngine] Shuffled library for ${playerId}. Size: ${library.length}`);
   }
 
   public createToken(playerId: string, definition: any, position?: { x: number, y: number }) {

@@ -178,6 +178,9 @@ export class GameManager extends EventEmitter {
           case 'declare_blockers':
             engine.declareBlockers(actorId, action.blockers);
             break;
+          case 'shuffle_library':
+            engine.shuffleLibrary(actorId);
+            break;
           case 'resolve_mulligan':
           case 'mulligan_decision':
             console.log(`[GameManager] Resolving mulligan for ${actorId}. Keep: ${action.keep}`);

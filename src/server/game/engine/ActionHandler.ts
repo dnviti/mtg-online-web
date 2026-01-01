@@ -294,7 +294,10 @@ export class ActionHandler {
     const library = allCards.filter(c => c.ownerId === playerId && c.zone === 'library');
 
     if (library.length > 0) {
-      const card = library[Math.floor(Math.random() * library.length)];
+      // Sort by Z index descending (Highest Z is top card)
+      library.sort((a, b) => (b.position?.z || 0) - (a.position?.z || 0));
+
+      const card = library[0]; // Take top card
       this.moveCardToZone(state, card.instanceId, 'hand');
       console.log(`Player ${playerId} draws ${card.name}`);
     } else {

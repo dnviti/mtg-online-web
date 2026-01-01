@@ -10,6 +10,9 @@ interface ZoneOverlayProps {
 }
 
 export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClose, onCardContextMenu }) => {
+  // Sort cards by Z index (Highest Z = Top of Pile = First in list)
+  const sortedCards = [...cards].sort((a, b) => (b.position?.z || 0) - (a.position?.z || 0));
+
   return (
     <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-2xl w-3/4 h-3/4 flex flex-col overflow-hidden">
@@ -40,7 +43,7 @@ export const ZoneOverlay: React.FC<ZoneOverlayProps> = ({ zoneName, cards, onClo
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {cards.map((card) => (
+              {sortedCards.map((card) => (
                 <div key={card.instanceId} className="relative group perspective-1000">
                   <div
                     className="relative aspect-[2.5/3.5] bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700 transition-transform duration-200 hover:scale-105 hover:z-10 hover:shadow-xl hover:shadow-cyan-900/20 cursor-context-menu"
