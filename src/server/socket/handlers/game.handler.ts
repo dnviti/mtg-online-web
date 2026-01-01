@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { roomManager, gameManager } from '../../singletons';
+import { roomManager, gameManager, scryfallService } from '../../singletons';
 
 export const registerGameHandlers = (io: Server, socket: Socket) => {
   const getContext = () => roomManager.getPlayerBySocket(socket.id);
@@ -14,6 +14,25 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       io.to(room.id).emit('room_update', updatedRoom);
       await gameManager.createGame(room.id, updatedRoom.players, updatedRoom.format);
 
+      // 1. Gather all Scryfall IDs from all decks
+      const allIdentifiers: { id: string }[] = [];
+      updatedRoom.players.forEach(p => {
+        const finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
+        if (finalDeck && Array.isArray(finalDeck)) {
+          finalDeck.forEach((card: any) => {
+            // Prioritize explicit scryfallId, then id, then try to parse from metadata
+            let id = card.scryfallId || card.id || card.definition?.id;
+            if (id) allIdentifiers.push({ id });
+          });
+        }
+      });
+
+      // 2. Bulk fetch authoritative data
+      console.log(`[GameStart] Fetching authoritative data for ${allIdentifiers.length} cards...`);
+      const authoritativeCards = await scryfallService.fetchCollection(allIdentifiers);
+      const cardMap = new Map(authoritativeCards.map(c => [c.id, c]));
+      console.log(`[GameStart] Resolved ${cardMap.size} unique cards from service.`);
+
       // Load decks for all players
       await Promise.all(updatedRoom.players.map(async p => {
         let finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
@@ -23,6 +42,8 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
           // Add cards sequentially to avoid race conditions or DB overload
           for (const card of finalDeck) {
+
+            // Resolve ID
             let setCode = card.setCode || card.set || card.definition?.set;
             let scryfallId = card.scryfallId || card.id || card.definition?.id;
 
@@ -38,6 +59,52 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               }
             }
 
+            // --- AUTHORITATIVE DATA MERGE ---
+            // Use the fetched Scryfall data to populate definition
+            const authCard = cardMap.get(scryfallId);
+            if (authCard) {
+              // If we found the card in Scryfall Service, use it as the source of truth
+              // We construct a definition on the fly from the reliable data if one doesn't exist 
+              // OR we prioritize the auth data over the potentially weak client data
+              card.definition = {
+                name: authCard.name,
+                id: authCard.id,
+                oracle_id: authCard.oracle_id,
+                type_line: authCard.type_line,
+                oracle_text: authCard.oracle_text || (authCard.card_faces ? authCard.card_faces[0].oracle_text : ''),
+                mana_cost: authCard.mana_cost || (authCard.card_faces ? authCard.card_faces[0].mana_cost : ''),
+                power: authCard.power,
+                toughness: authCard.toughness,
+                colors: authCard.colors,
+                card_faces: authCard.card_faces,
+                image_uris: authCard.image_uris,
+                keywords: authCard.keywords || [],
+                set: authCard.set,
+                ...card.definition // Keep extra props if any, but above should prevail? Actually spread last
+              };
+            }
+
+            // Normalize definition if STILL missing (fallback to old logic)
+            if (!card.definition) {
+              card.definition = {
+                name: card.name,
+                id: card.id,
+                oracle_id: card.oracle_id || card.oracleId,
+                type_line: card.type_line || card.typeLine,
+                oracle_text: card.oracle_text || card.oracleText,
+                mana_cost: card.mana_cost || card.manaCost,
+                power: card.power?.toString(),
+                toughness: card.toughness?.toString(),
+                colors: card.colors,
+                card_faces: card.card_faces || card.cardFaces,
+                image_uris: card.image_uris,
+                keywords: card.keywords,
+                set: card.set || card.setCode
+              };
+            }
+
+
+
             // Console log strict validation
             // console.log(`[DeckLoad] Adding ${card.name} (${scryfallId}) for ${p.name}`);
 
@@ -47,17 +114,17 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               oracleId: card.oracle_id || card.id || card.definition?.oracle_id || `temp-${Math.random()}`,
               scryfallId: scryfallId || 'unknown',
               setCode: setCode || 'unknown',
-              name: card.name,
+              name: card.name || card.definition?.name || "Unknown Card",
               imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
               imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
               zone: 'library',
-              typeLine: card.typeLine || card.type_line || '',
-              types: card.types || (card.typeLine || card.type_line || '').split('—')[0].trim().split(' '),
-              oracleText: card.oracleText || card.oracle_text || '',
-              manaCost: card.manaCost || card.mana_cost || '',
-              keywords: card.keywords || [],
-              power: card.power,
-              toughness: card.toughness,
+              typeLine: card.typeLine || card.type_line || card.definition?.type_line || '',
+              types: card.types || (card.typeLine || card.type_line || card.definition?.type_line || '').split('—')[0].trim().split(' '),
+              oracleText: card.oracleText || card.oracle_text || card.definition?.oracle_text || '',
+              manaCost: card.manaCost || card.mana_cost || card.definition?.mana_cost || '',
+              keywords: card.keywords || card.definition?.keywords || [],
+              power: (typeof card.power === 'number' ? card.power : parseFloat(card.power || card.definition?.power || '0')) || 0,
+              toughness: (typeof card.toughness === 'number' ? card.toughness : parseFloat(card.toughness || card.definition?.toughness || '0')) || 0,
               damageMarked: 0,
               controlledSinceTurn: 0,
               definition: card.definition

@@ -46,18 +46,18 @@ export class ActionHandler {
         card.isDoubleFaced = (card.definition?.card_faces?.length || 0) > 1;
 
         if (card.definition) {
-          card.name = card.definition.name;
-          card.power = parseFloat(card.definition.power || '0');
-          card.toughness = parseFloat(card.definition.toughness || '0');
+          card.name = card.definition.name || card.name;
+          card.power = parseFloat(card.definition.power || card.power || '0');
+          card.toughness = parseFloat(card.definition.toughness || card.toughness || '0');
           card.basePower = card.power;
           card.baseToughness = card.toughness;
-          card.types = card.definition.types;
-          card.subtypes = card.definition.subtypes;
-          card.colors = card.definition.colors;
-          card.manaCost = card.definition.mana_cost;
-          card.typeLine = card.definition.type_line;
-          card.oracleText = card.definition.oracle_text;
-          card.defense = parseFloat(card.definition.defense || '0');
+          card.types = card.definition.types || card.types;
+          card.subtypes = card.definition.subtypes || card.subtypes;
+          card.colors = card.definition.colors || card.colors;
+          card.manaCost = card.definition.mana_cost || card.manaCost;
+          card.typeLine = card.definition.type_line || card.typeLine;
+          card.oracleText = card.definition.oracle_text || card.oracleText;
+          card.defense = parseFloat(card.definition.defense || card.defense || '0');
           card.baseDefense = card.defense;
         }
 
@@ -112,8 +112,8 @@ export class ActionHandler {
     const card = state.cards[cardId];
     if (!card || card.controllerId !== playerId || card.zone !== 'hand') throw new Error("Invalid card.");
 
-    let typeLine = card.typeLine || "";
-    let types = card.types || [];
+    let typeLine = card.typeLine || card.definition?.type_line || "";
+    let types = card.types || card.definition?.types || [];
 
     if (faceIndex !== undefined) {
       const faces = card.definition?.card_faces;
@@ -128,6 +128,8 @@ export class ActionHandler {
     this.moveCardToZone(state, card.instanceId, 'battlefield', false, position, faceIndex);
     state.landsPlayedThisTurn++;
 
+    console.log(`[ActionHandler] Player ${playerId} played land: "${card.name}" (Type: ${typeLine})`);
+
     ActionHandler.resetPriority(state, playerId);
     return true;
   }
@@ -139,9 +141,9 @@ export class ActionHandler {
     if (!card || (card.zone !== 'hand' && card.zone !== 'command')) throw new Error("Invalid card source (must be Hand or Command Zone).");
 
     // Determine types and Flash status
-    let typeLine = card.typeLine || "";
-    let types = card.types || [];
-    let keywords = card.keywords || [];
+    let typeLine = card.typeLine || card.definition?.type_line || "";
+    let types = card.types || card.definition?.types || [];
+    let keywords = card.keywords || card.definition?.keywords || [];
 
     if (faceIndex !== undefined) {
       const faces = card.definition?.card_faces;
@@ -165,11 +167,9 @@ export class ActionHandler {
       types = typeLine.split('—')[0].trim().split(' ');
     }
 
-    // STRICT RULE: Lands cannot be cast. They must be played.
-    // However, if the frontend sends 'cast_spell' for a Land, we should redirect to 'playLand'.
+    // STRICT RULE: Lands cannot be cast. They must be played using PLAY_LAND.
     if (types.includes('Land') || typeLine.includes('Land')) {
-      console.log(`[ActionHandler] Redirecting castSpell to playLand for ${card.name}`);
-      return this.playLand(state, playerId, cardId, position, faceIndex);
+      throw new Error("Lands cannot be cast as spells. Use PLAY_LAND action.");
     }
 
     const isInstant = types.includes('Instant') || typeLine.includes('Instant');
@@ -183,7 +183,7 @@ export class ActionHandler {
       if (state.stack.length > 0) throw new Error("Stack must be empty to cast Sorcery-speed spells.");
     }
 
-    let name = card.name;
+    let name = card.name || card.definition?.name || "Unknown Card";
     let text = card.oracleText || "";
 
     if (faceIndex !== undefined) {
@@ -219,6 +219,8 @@ export class ActionHandler {
       resolutionPosition: position,
       faceIndex: faceIndex
     } as any);
+
+    console.log(`[ActionHandler] Player ${playerId} cast spell: "${name}" (Type: ${typeLine})`);
 
     ActionHandler.resetPriority(state, playerId);
     return true;
@@ -278,7 +280,7 @@ export class ActionHandler {
             // Simplified Equip logic
             if (CardUtils.canAttach(source, target)) {
               source.attachedTo = target.instanceId;
-              console.log(`Equipped ${source.name} to ${target.name}`);
+              console.log(`[ActionHandler] Equipped ${source.name} to ${target.name}`);
             }
           }
         }
@@ -338,6 +340,7 @@ export class ActionHandler {
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }
     };
     state.cards[token.instanceId] = token;
+    console.log(`[ActionHandler] Player ${playerId} created token: ${definition.name}`);
     StateBasedEffects.process(state);
   }
 
@@ -388,6 +391,7 @@ export class ActionHandler {
       }
     }
 
+    console.log(`[ActionHandler] Player ${_playerId} added ${count} ${type} counter(s) to ${card.name}`);
     StateBasedEffects.process(state);
   }
 
@@ -398,6 +402,7 @@ export class ActionHandler {
     // This is "manual tap" often used in sandbox or visual cues.
     // If strict rules enforced, might restrict. For now, allow toggle.
     card.tapped = !card.tapped;
+    console.log(`[ActionHandler] Player ${_playerId} ${card.tapped ? 'tapped' : 'untapped'} ${card.name}`);
     // Tapping doesn't use stack or priority reset usually in manual mode. 
     // But if used for ability, `activateAbility` handles it.
     // This is likely visual toggle.
@@ -424,6 +429,7 @@ export class ActionHandler {
 
       source.tapped = true;
       ManaUtils.addMana(state, playerId, { color: colorToProduce, amount: 1 });
+      console.log(`[ActionHandler] Player ${playerId} activated mana ability of ${source.name} producing ${colorToProduce}`);
       // Mana abilities do not use the stack.
       return;
     }

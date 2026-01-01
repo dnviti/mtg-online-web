@@ -47,7 +47,8 @@ export class CombatManager {
       card.attacking = targetId;
     });
 
-    console.log(`Player ${playerId} declared ${attackers.length} attackers.`);
+    const attackerNames = attackers.map(a => state.cards[a.attackerId]?.name || a.attackerId).join(", ");
+    console.log(`[CombatManager] Player ${playerId} declared ${attackers.length} attackers: ${attackerNames}`);
     state.attackersDeclared = true;
 
     // Reset priority happens in ActionHandler calling this.
@@ -71,7 +72,12 @@ export class CombatManager {
       blocker.blocking.push(attackerId);
     });
 
-    console.log(`Player ${playerId} declared ${declaredBlockers.length} blockers.`);
+    const blockerDetails = declaredBlockers.map(b => {
+      const blockerName = state.cards[b.blockerId]?.name || b.blockerId;
+      const attackerName = state.cards[b.attackerId]?.name || b.attackerId;
+      return `${blockerName} blocking ${attackerName}`;
+    }).join(", ");
+    console.log(`[CombatManager] Player ${playerId} declared ${declaredBlockers.length} blockers: ${blockerDetails}`);
     state.blockersDeclared = true;
   }
 
