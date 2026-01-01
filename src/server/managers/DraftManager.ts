@@ -4,6 +4,7 @@ import { BotDeckBuilderService } from '../services/BotDeckBuilderService';
 
 import { DraftState, Pack, Card } from '../interfaces/DraftInterfaces';
 import { selectBestCard } from '../algorithms/DraftPickAlgorithm';
+import { CardOptimization } from '../game/engine/CardOptimization';
 
 export class DraftManager extends EventEmitter {
   private botBuilder = new BotDeckBuilderService();
@@ -41,7 +42,7 @@ export class DraftManager extends EventEmitter {
     const sanitizedPacks = allPacks.map((p, idx) => ({
       ...p,
       id: `draft-pack-${idx}-${Math.random().toString(36).substr(2, 5)}`,
-      cards: p.cards.map(c => ({ ...c }))
+      cards: p.cards.map(c => CardOptimization.optimize(c) as any) // Cast as any because Pack interface might expect full card?
     }));
 
     // Shuffle packs

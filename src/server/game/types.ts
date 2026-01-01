@@ -14,6 +14,38 @@ export type Step =
 
 export type Zone = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'stack' | 'exile' | 'command';
 
+export interface MinimalCardFace {
+  name: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  colors?: string[];
+  power?: string;
+  toughness?: string;
+  defense?: string;
+  image_uris?: { normal?: string; art_crop?: string; };
+}
+
+export interface MinimalScryfallCard {
+  id: string;
+  name: string;
+  set: string;
+  type_line: string;
+  mana_cost?: string;
+  oracle_text?: string;
+  colors?: string[];
+  power?: string;
+  toughness?: string;
+  defense?: string;
+  keywords?: string[];
+  layout?: string;
+  card_faces?: MinimalCardFace[];
+  image_uris?: { normal?: string; art_crop?: string; };
+  // Pre-parsed for performance
+  types?: string[];
+  subtypes?: string[];
+}
+
 export interface CardObject {
   instanceId: string;
   oracleId: string;

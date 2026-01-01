@@ -1,6 +1,7 @@
 import { Tournament } from './TournamentManager';
 import { StateStoreManager } from './StateStoreManager';
 import { Card } from '../interfaces/DraftInterfaces';
+import { CardOptimization } from '../game/engine/CardOptimization';
 
 interface Player {
   id: string;
@@ -126,7 +127,8 @@ export class RoomManager {
       const player = room.players.find(p => p.id === playerId);
       if (player) {
         player.ready = true;
-        player.deck = deck;
+        // Optimize deck cards before saving
+        player.deck = deck.map(c => CardOptimization.optimize(c) as any);
       }
       await this.saveRoomState(room);
       return room;
@@ -144,7 +146,7 @@ export class RoomManager {
       room.lastActive = Date.now();
       const player = room.players.find(p => p.id === playerId);
       if (player) {
-        player.deck = deck;
+        player.deck = deck.map(c => CardOptimization.optimize(c) as any);
         // Do NOT set ready=true
       }
       await this.saveRoomState(room);
@@ -163,7 +165,7 @@ export class RoomManager {
       room.lastActive = Date.now();
       const player = room.players.find(p => p.id === playerId);
       if (player) {
-        player.pool = pool;
+        player.pool = pool.map(c => CardOptimization.optimize(c) as any);
       }
       await this.saveRoomState(room);
       return room;
