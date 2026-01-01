@@ -50,29 +50,12 @@ export class ImageCacheService {
 
         if (!safeUris) return null;
 
-        // Construct Metadata Object
-        metadata = {
-          id: card.id,
-          name: card.name,
-          set: card.set,
-          set_uri: card.set_uri,
-          image_uris: {
-            normal: safeUris.normal || safeUris.large || safeUris.png,
-            art_crop: safeUris.art_crop
-          },
-          local_path_full: `/cards/images/${card.set}/full/${card.id}.jpg`,
-          local_path_crop: `/cards/images/${card.set}/crop/${card.id}.jpg`
-        };
-
         // Parse URI for download
         scryfallUri = (type === 'crop') ? safeUris.art_crop : (safeUris.normal || safeUris.large || safeUris.png);
 
-        // Save Metadata to Redis
-        if (store) {
-          await store.hset(`set:${setCode}`, cardId, JSON.stringify(metadata));
-          await store.hset(`sets`, setCode, JSON.stringify({ code: card.set, name: card.set_name, scryfall_uri: card.scryfall_set_uri }));
-          console.log(`[ImageCacheService] Updated Redis Metadata for ${cardId} in set ${setCode}`);
-        }
+        // Metadata Indexing is handled by ScryfallService.saveCard(), called within fetchCollection.
+        // We do not overwrite it here to preserve full metadata.
+        console.log(`[ImageCacheService] Indexing triggered via ScryfallService for ${cardId}`);
 
       } catch (e) {
         console.error(`[ImageCacheService] Failed to fetch scryfall data for ${cardId}`, e);

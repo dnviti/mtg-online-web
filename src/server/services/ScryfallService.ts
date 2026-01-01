@@ -2,6 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { StateStoreManager } from '../managers/StateStoreManager';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,8 +14,6 @@ const SETS_DIR = path.join(CARDS_DIR, 'sets');
 if (!fs.existsSync(METADATA_DIR)) {
   fs.mkdirSync(METADATA_DIR, { recursive: true });
 }
-
-// Ensure sets dir exists
 if (!fs.existsSync(SETS_DIR)) {
   fs.mkdirSync(SETS_DIR, { recursive: true });
 }
@@ -28,7 +27,7 @@ export interface ScryfallCard {
   layout: string;
   type_line: string;
   colors?: string[];
-  edhrec_rank?: number; // Add EDHREC rank
+  edhrec_rank?: number;
   image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
   card_faces?: {
     name: string;
@@ -37,6 +36,9 @@ export interface ScryfallCard {
     mana_cost?: string;
     oracle_text?: string;
   }[];
+  // Local Path Extensions
+  local_path_full?: string;
+  local_path_crop?: string;
   [key: string]: any;
 }
 
@@ -50,9 +52,12 @@ export interface ScryfallSet {
 
 export class ScryfallService {
   private cacheById = new Map<string, ScryfallCard>();
-  private cacheByName = new Map<string, ScryfallCard[]>(); // Index by name (lowercase) -> List of cards (prints)
-  // Map ID to Set Code to locate the file efficiently
+  private cacheByName = new Map<string, ScryfallCard[]>();
   private idToSet = new Map<string, string>();
+
+  private get metadataStore() {
+    return StateStoreManager.getInstance().metadataStore;
+  }
 
   constructor() {
     this.hydrateCache();
@@ -61,63 +66,43 @@ export class ScryfallService {
   private async hydrateCache() {
     console.time('ScryfallService:hydrateCache');
     try {
-      if (!fs.existsSync(METADATA_DIR)) {
-        fs.mkdirSync(METADATA_DIR, { recursive: true });
-      }
-
-      const entries = fs.readdirSync(METADATA_DIR, { withFileTypes: true });
-
-      // We will perform a migration if we find flat files
-      // and index existing folders
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          // This is a set folder
-          const setCode = entry.name;
-          const setDir = path.join(METADATA_DIR, setCode);
-          try {
-            const cardFiles = fs.readdirSync(setDir);
-            for (const file of cardFiles) {
-              if (file.endsWith('.json')) {
-                const id = file.replace('.json', '');
-                this.idToSet.set(id, setCode);
-
-                // For name index, we ideally need the name. 
-                // Opening every file is too slow for 30k+ cards.
-                // We will populate name cache lazily or progressively? 
-                // User requirement: "prioritize use of cached cards".
-                // To search efficiently, we need names loaded.
-                // Let's rely on set caches if available, or just index strictly necessary ones?
-                // Actually, reading 30k small files IS slow.
-                // But we have Set Caches (large JSONs).
-                // Let's iterate Set Caches in `SETS_DIR` to populate the name index efficiently!
+      // Hydrate ID->Set Map from FS (Fastest reliable startup)
+      // We could ideally start with Redis if persistent, but FS is the ultimate backup.
+      if (fs.existsSync(METADATA_DIR)) {
+        const entries = fs.readdirSync(METADATA_DIR, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const setCode = entry.name;
+            const setDir = path.join(METADATA_DIR, setCode);
+            try {
+              const files = fs.readdirSync(setDir);
+              for (const f of files) {
+                if (f.endsWith('.json')) {
+                  const id = f.replace('.json', '');
+                  this.idToSet.set(id, setCode);
+                }
               }
-            }
-          } catch (err) {
-            console.error(`[ScryfallService] Error reading set dir ${setCode}`, err);
+            } catch { }
           }
-        } else if (entry.isFile() && entry.name.endsWith('.json')) {
-          // ... legacy handling ...
         }
       }
 
-      // Populate Name Index from Set Caches (Much faster)
+      // Also index Sets Caches for names (fastest name hydration)
       if (fs.existsSync(SETS_DIR)) {
         const setFiles = fs.readdirSync(SETS_DIR);
         for (const file of setFiles) {
-          if (file.endsWith('.json') && !file.startsWith('t')) { // Skip tokens for main name index? or include?
+          if (file.endsWith('.json') && !file.startsWith('t') && !file.endsWith('_info.json') && file !== 'all_sets.json') {
             try {
               const content = fs.readFileSync(path.join(SETS_DIR, file), 'utf-8');
               const cards = JSON.parse(content) as ScryfallCard[];
               cards.forEach(c => {
                 this.indexCardByName(c);
-                // Also ensure ID mapping
                 if (c.id && c.set) this.idToSet.set(c.id, c.set);
               });
-            } catch (e) { /* ignore corrupt */ }
+            } catch (e) { }
           }
         }
       }
-
       console.log(`[ScryfallService] Cache hydration complete. Indexed ${this.idToSet.size} IDs.`);
     } catch (e) {
       console.error("Failed to hydrate cache", e);
@@ -129,105 +114,111 @@ export class ScryfallService {
     if (!card.name) return;
     const key = card.name.toLowerCase();
     const existing = this.cacheByName.get(key) || [];
-    // Avoid dups by ID
     if (!existing.find(e => e.id === card.id)) {
       existing.push(card);
       this.cacheByName.set(key, existing);
     }
   }
 
-  private getCachedCard(id: string): ScryfallCard | null {
+  /**
+   * Retrieves a card. Prioritizes Redis Cache.
+   */
+  async getCachedCard(id: string): Promise<ScryfallCard | null> {
+    // 1. In-Memory Cache (Fastest)
     if (this.cacheById.has(id)) return this.cacheById.get(id)!;
 
-    // Check Index to find Set
-    let setCode = this.idToSet.get(id);
+    const setCode = this.idToSet.get(id);
+    const store = this.metadataStore;
 
-    // If we have an index hit, look there
+    // 2. Redis Cache
+    if (store && setCode) {
+      try {
+        const json = await store.hget(`set:${setCode}`, id);
+        if (json) {
+          const card = JSON.parse(json);
+          this.cacheById.set(id, card);
+          return card;
+        }
+      } catch (e) {
+        console.warn(`[ScryfallService] Redis read failed for ${id}`, e);
+      }
+    }
+
+    // 3. Local FS Cache (Fallback)
     if (setCode) {
       const p = path.join(METADATA_DIR, setCode, `${id}.json`);
       if (fs.existsSync(p)) {
         try {
-          const raw = fs.readFileSync(p, 'utf-8');
-          const card = JSON.parse(raw);
+          const card = JSON.parse(fs.readFileSync(p, 'utf-8'));
           this.cacheById.set(id, card);
+          // Repair Redis if missing
+          if (store) this.saveCardToRedis(card).catch(console.error);
           return card;
-        } catch (e) {
-          console.error(`Error reading cached card ${id}`, e);
-        }
+        } catch { }
       }
-    } else {
-      // Fallback: Check flat dir just in case hydration missed it or new file added differently
-      const flatPath = path.join(METADATA_DIR, `${id}.json`);
-      if (fs.existsSync(flatPath)) {
-        try {
-          const raw = fs.readFileSync(flatPath, 'utf-8');
-          const card = JSON.parse(raw);
-
-          // Auto-migrate on read?
-          if (card.set) {
-            this.saveCard(card); // This effectively migrates it by saving to new structure
-            try { fs.unlinkSync(flatPath); } catch { } // Cleanup old file
-          }
-
-          this.cacheById.set(id, card);
-          return card;
-        } catch (e) {
-          console.error(`Error reading flat cached card ${id}`, e);
-        }
-      }
-      // One last check: try to find it in ANY subdir if index missing?
-      // No, that is too slow. hydration should have caught it.
     }
 
     return null;
   }
 
-  private saveCard(card: ScryfallCard) {
+  private async saveCard(card: ScryfallCard) {
     if (!card.id || !card.set) return;
 
+    // Enhance with Local paths
+    card.local_path_full = `/cards/images/${card.set}/full/${card.id}.jpg`;
+    card.local_path_crop = `/cards/images/${card.set}/crop/${card.id}.jpg`;
+
+    // Memory
     this.cacheById.set(card.id, card);
     this.idToSet.set(card.id, card.set);
     this.indexCardByName(card);
 
+    // Redis
+    await this.saveCardToRedis(card);
+
+    // File System (Persistence)
     const setDir = path.join(METADATA_DIR, card.set);
-    if (!fs.existsSync(setDir)) {
-      fs.mkdirSync(setDir, { recursive: true });
-    }
+    if (!fs.existsSync(setDir)) fs.mkdirSync(setDir, { recursive: true });
 
-    const p = path.join(setDir, `${card.id}.json`);
-
-    // Async write
-    fs.writeFile(p, JSON.stringify(card, null, 2), (err) => {
-      if (err) console.error(`Error saving metadata for ${card.id}`, err);
+    fs.writeFile(path.join(setDir, `${card.id}.json`), JSON.stringify(card, null, 2), (err) => {
+      if (err) console.error(`Error saving FS metadata for ${card.id}`, err);
     });
+  }
+
+  private async saveCardToRedis(card: ScryfallCard) {
+    const store = this.metadataStore;
+    if (store) {
+      // Index by Set (Main Metadata)
+      await store.hset(`set:${card.set}`, card.id, JSON.stringify(card));
+      // Index ID->Set Mapping (for lookups without known set)
+      await store.hset(`card_indexes`, card.id, card.set);
+    }
   }
 
   async cacheCards(cards: ScryfallCard[]): Promise<void> {
     let newCount = 0;
+    // We should check existence first to avoid redundant writes?
+    // For bulk speed, maybe just write all efficiently?
+    // Parallel writes?
     for (const card of cards) {
       if (!this.idToSet.has(card.id)) {
-        this.saveCard(card);
+        await this.saveCard(card);
         newCount++;
+      } else {
+        // Even if known, update Redis to ensure indexing?
+        // Only if we want to ensure consistency.
+        // Let's rely on idToSet map to gate repeated writes.
       }
     }
-    if (newCount > 0) {
-      console.log(`[ScryfallService] Cached ${newCount} new cards found in search.`);
-    }
+    if (newCount > 0) console.log(`[ScryfallService] Cached ${newCount} new cards.`);
   }
 
   searchLocal(query: string): ScryfallCard[] {
     const q = query.toLowerCase().trim();
     if (!q) return [];
-
-    // Exact name match optimization?
-    // User probably wants partial match.
-    // Iterating Map keys can be slow if map is huge.
-    // But map sizes for names are ~25k. It's fine for V8.
-
     const results: ScryfallCard[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Check exact tokens or startsWith
     for (const [name, cards] of this.cacheByName.entries()) {
       if (name.includes(q)) {
         cards.forEach(c => {
@@ -238,31 +229,47 @@ export class ScryfallService {
         });
       }
     }
-
-    // Sort? Scryfall usually sorts by name, release date.
-    // We can just return mixed, client might sort.
     return results;
   }
 
   async cacheSetsMetadata(setCodes: string[]): Promise<void> {
     const uniqueSets = Array.from(new Set(setCodes.map(s => s.toLowerCase())));
+    const store = this.metadataStore;
     let setsCached = 0;
 
     for (const code of uniqueSets) {
+      // Check Redis
+      if (store) {
+        try {
+          const cached = await store.hget('sets', code);
+          if (cached) continue; // Already have metadata
+        } catch { }
+      }
+
+      // Check FS
       const setInfoPath = path.join(SETS_DIR, `${code}_info.json`);
       if (!fs.existsSync(setInfoPath)) {
-        // Fetch specific set info? 
-        // Or simpler: We fetch ALL sets and filter, because single set endpoint is rate limited same as all sets?
-        // Actually Scryfall has /sets/:code
         try {
           const resp = await fetch(`https://api.scryfall.com/sets/${code}`);
           if (resp.ok) {
             const data = await resp.json();
             fs.writeFileSync(setInfoPath, JSON.stringify(data, null, 2));
+            // Save to Redis
+            if (store) {
+              await store.hset('sets', code, JSON.stringify(data));
+            }
             setsCached++;
           }
         } catch (e) {
           console.error(`[ScryfallService] Failed to cache set info for ${code}`, e);
+        }
+      } else {
+        // FS exists, maybe hydrate Redis?
+        if (store) {
+          try {
+            const raw = fs.readFileSync(setInfoPath, 'utf-8');
+            await store.hset('sets', code, raw);
+          } catch { }
         }
       }
     }
@@ -273,7 +280,17 @@ export class ScryfallService {
   }
 
   async fetchSets(): Promise<ScryfallSet[]> {
-    console.log('[ScryfallService] Fetching sets...');
+    const store = this.metadataStore;
+    // Try Redis
+    if (store) {
+      try {
+        const all = await store.hgetall('sets');
+        const sets = Object.values(all).map(s => JSON.parse(s));
+        if (sets.length > 50) return sets; // Assume valid cache if substantial
+      } catch (e) { }
+    }
+
+    console.log('[ScryfallService] Fetching sets from API...');
     try {
       const resp = await fetch('https://api.scryfall.com/sets');
       if (!resp.ok) throw new Error(`Scryfall API error: ${resp.statusText}`);
@@ -291,7 +308,14 @@ export class ScryfallService {
           card_count: s.card_count
         }));
 
-      // Auto-cache this global list too?
+      // Cache to Redis
+      if (store) {
+        for (const s of sets) {
+          await store.hset('sets', s.code, JSON.stringify(s));
+        }
+      }
+
+      // Cache to FS
       const setsListPath = path.join(SETS_DIR, 'all_sets.json');
       fs.writeFileSync(setsListPath, JSON.stringify(sets, null, 2));
 
@@ -303,191 +327,110 @@ export class ScryfallService {
   }
 
   async fetchSetCards(setCode: string, relatedSets: string[] = []): Promise<ScryfallCard[]> {
+    const store = this.metadataStore;
+
+    // 1. Try Redis
+    if (store) {
+      try {
+        const allMap = await store.hgetall(`set:${setCode}`);
+        const cards = Object.values(allMap).map(s => JSON.parse(s));
+        if (cards.length > 0) {
+          console.log(`[ScryfallService] Loaded set ${setCode} from Redis (${cards.length} cards).`);
+          // Hydrate memory maps
+          cards.forEach(c => {
+            this.cacheById.set(c.id, c);
+            this.idToSet.set(c.id, c.set);
+            this.indexCardByName(c);
+          });
+          return cards;
+        }
+      } catch (e) { }
+    }
+
+    // 2. Try FS Cache key
+    // ... (Existing logic adapted to use saveCard -> Redis)
     const setHash = setCode.toLowerCase();
     const setCachePath = path.join(SETS_DIR, `${setHash}.json`);
-    const tokensCachePath = path.join(SETS_DIR, `t${setHash}.json`);
 
-    // Check Local Set Cache
-    const isSetCached = fs.existsSync(setCachePath);
-    const isTokensCached = fs.existsSync(tokensCachePath);
-
-    if (isSetCached && isTokensCached) {
-      console.log(`[ScryfallService] Loading set ${setCode} and tokens from local cache...`);
+    if (fs.existsSync(setCachePath)) {
       try {
-        const raw = fs.readFileSync(setCachePath, 'utf-8');
-        const data = JSON.parse(raw);
-        console.log(`[ScryfallService] Loaded ${data.length} cards from cache for ${setCode}.`);
-        return data;
-      } catch (e) {
-        console.error(`[ScryfallService] Corrupt set cache for ${setCode}, refetching...`);
-      }
+        const cards = JSON.parse(fs.readFileSync(setCachePath, 'utf-8'));
+        console.log(`[ScryfallService] Loaded set ${setCode} from FS cache.`);
+
+        // Ensure paths are populated
+        const enrichedCards = cards.map((c: ScryfallCard) => {
+          if (!c.local_path_full && c.set && c.id) {
+            c.local_path_full = `/cards/images/${c.set}/full/${c.id}.jpg`;
+            c.local_path_crop = `/cards/images/${c.set}/crop/${c.id}.jpg`;
+          }
+          return c;
+        });
+
+        // Populate Redis
+        if (store) {
+          for (const c of enrichedCards) await this.saveCardToRedis(c);
+        }
+        enrichedCards.forEach((c: ScryfallCard) => {
+          this.cacheById.set(c.id, c);
+          this.idToSet.set(c.id, c.set);
+          this.indexCardByName(c);
+        });
+        return enrichedCards;
+      } catch { }
     }
 
-    console.log(`[ScryfallService] Fetching set ${setCode} (Set cached: ${isSetCached}, Tokens cached: ${isTokensCached})...`);
-
-    // ... continue to fetching
-    // We need to be careful: if set is cached but tokens are not, we don't want to re-fetch the set from Scryfall if we don't have to, 
-    // BUT the current logic below fetches BOTH or nothing given the structure.
-    // Refactoring to fetch independently or skip if cached.
-
+    // 3. API Fetch
+    console.log(`[ScryfallService] Fetching set ${setCode} from API...`);
     let allCards: ScryfallCard[] = [];
+    const setsToFetch = [setCode, ...relatedSets];
+    // Note: "is:booster" might limit special cards, but assuming existing logic was correct for intent
+    const setQuery = setsToFetch.map(s => `(set:${s} (is:booster or (type:land type:basic)))`).join(' or ');
+    let url = `https://api.scryfall.com/cards/search?q=(${setQuery}) unique=prints`;
 
     try {
-      // 1. Fetch Main Set Cards
-      if (isSetCached) {
-        const raw = fs.readFileSync(setCachePath, 'utf-8');
-        allCards = JSON.parse(raw);
-      } else {
-        // Construct Composite Query...
-        const setsToFetch = [setCode, ...relatedSets];
-        const setQuery = setsToFetch.map(s => `(set:${s} (is:booster or (type:land type:basic)))`).join(' or ');
-        let url = `https://api.scryfall.com/cards/search?q=(${setQuery}) unique=prints`;
-
-        // ... fetching loop ...
-        try {
-          while (url) {
-            console.log(`[ScryfallService] [API CALL] Requesting: ${url}`);
-            const resp = await fetch(url);
-
-            if (!resp.ok) {
-              if (resp.status === 404) {
-                break;
-              }
-              const errBody = await resp.text();
-              throw new Error(`Failed to fetch set: ${resp.statusText} (${resp.status}) - ${errBody}`);
-            }
-
-            const d = await resp.json();
-            if (d.data) allCards.push(...d.data);
-
-            if (d.has_more && d.next_page) {
-              url = d.next_page;
-              await new Promise(res => setTimeout(res, 100));
-            } else {
-              url = '';
-            }
-          }
-
-          // Save Set Cache
-          if (allCards.length > 0) {
-            if (!fs.existsSync(path.dirname(setCachePath))) fs.mkdirSync(path.dirname(setCachePath), { recursive: true });
-            fs.writeFileSync(setCachePath, JSON.stringify(allCards, null, 2));
-
-            // Smartly save individuals: only if missing from cache
-            let newCount = 0;
-            allCards.forEach(c => {
-              if (!this.getCachedCard(c.id)) {
-                this.saveCard(c);
-                newCount++;
-              }
-            });
-            console.log(`[ScryfallService] Saved set ${setCode}. New individual cards cached: ${newCount}/${allCards.length}`);
-          }
-        } catch (e) {
-          console.error("Error fetching set", e);
-          throw e;
-        }
+      while (url) {
+        const resp = await fetch(url);
+        if (!resp.ok) break;
+        const d = await resp.json();
+        if (d.data) allCards.push(...d.data);
+        url = d.has_more ? d.next_page : '';
+        await new Promise(r => setTimeout(r, 100)); // Rate limit
       }
-
-      // 2. Fetch Tokens (e:tCODE) - Only if not cached
-      if (!isTokensCached) {
-        const tokenSetCode = `t${setCode}`.toLowerCase();
-        console.log(`[ScryfallService] Fetching tokens for set (trying set:${tokenSetCode})...`);
-
-        let tokenUrl = `https://api.scryfall.com/cards/search?q=set:${tokenSetCode} unique=prints`;
-        let allTokens: ScryfallCard[] = [];
-
-        try {
-          while (tokenUrl) {
-            const tResp = await fetch(tokenUrl);
-            if (!tResp.ok) {
-              if (tResp.status === 404) break;
-              console.warn(`[ScryfallService] Token fetch warning: ${tResp.statusText}`);
-              break;
-            }
-
-            const td = await tResp.json();
-            if (td.data) allTokens.push(...td.data);
-
-            if (td.has_more && td.next_page) {
-              tokenUrl = td.next_page;
-              await new Promise(res => setTimeout(res, 100));
-            } else {
-              tokenUrl = '';
-            }
-          }
-        } catch (tokenErr) {
-          console.warn("[ScryfallService] Failed to fetch tokens (non-critical)", tokenErr);
-        }
-
-        console.log(`[ScryfallService] Found ${allTokens.length} tokens for ${setCode}.`);
-
-        // Save Token Cache
-        if (allTokens.length > 0 || !isTokensCached) { // Should we save empty token file if none found to prevent refetch? Yes.
-          if (!fs.existsSync(METADATA_DIR)) fs.mkdirSync(METADATA_DIR, { recursive: true });
-          fs.writeFileSync(tokensCachePath, JSON.stringify(allTokens, null, 2));
-
-          // Also cache individual tokens for metadata lookup
-          allTokens.forEach(c => {
-            // We might want to force save them even if cached to ensure we have them?
-            // Tokens often share IDs across reprints? No, Scryfall IDs are unique.
-            this.saveCard(c);
-          });
-          console.log(`[ScryfallService] Cached ${allTokens.length} tokens at ${tokensCachePath}`);
-        }
-      }
-
-      return allCards;
-
     } catch (e) {
-      console.error("Error fetching set", e);
-      throw e;
+      console.error("Fetch set failed", e);
     }
-  }
 
-  // New method to retrieve cached tokens
-  async getTokensForSet(setCode: string): Promise<ScryfallCard[]> {
-    const tokenSetCode = `t${setCode.toLowerCase()}`;
-    const tokensCachePath = path.join(SETS_DIR, `${tokenSetCode}.json`);
-
-    if (fs.existsSync(tokensCachePath)) {
-      try {
-        const raw = fs.readFileSync(tokensCachePath, 'utf-8');
-        return JSON.parse(raw);
-      } catch (e) {
-        console.error(`[ScryfallService] Error reading token cache for ${setCode}`, e);
+    if (allCards.length > 0) {
+      // Save using saveCard to populate Redis & FS
+      fs.writeFileSync(setCachePath, JSON.stringify(allCards, null, 2));
+      for (const c of allCards) {
+        await this.saveCard(c);
       }
     }
-
-    // If not found, we could try to fetch on demand? 
-    // For now, return empty.
-    return [];
+    return allCards;
   }
 
+  // Re-implement others similarly or rely on basic cache
   async fetchCollection(identifiers: { id?: string, name?: string }[]): Promise<ScryfallCard[]> {
     const results: ScryfallCard[] = [];
     const missing: { id?: string, name?: string }[] = [];
 
-    // Check cache first
     for (const id of identifiers) {
       if (id.id) {
-        const c = this.getCachedCard(id.id);
-        if (c) {
-          results.push(c);
-        } else {
-          missing.push(id);
-        }
+        // Use async getCachedCard which checks Redis
+        const c = await this.getCachedCard(id.id);
+        if (c) results.push(c);
+        else missing.push(id);
       } else {
-        // Warning: Name lookup relies on API because we don't index names locally yet
         missing.push(id);
       }
     }
 
     if (missing.length === 0) return results;
 
-    console.log(`[ScryfallService] Locally cached: ${results.length}. Fetching ${missing.length} missing cards from API...`);
-
-    // Chunk requests
+    // Fetch missing from API
+    // ... (Same Logic but use await this.saveCard(c))
+    console.log(`[ScryfallService] Fetching ${missing.length} missing cards...`);
     const CHUNK_SIZE = 75;
     for (let i = 0; i < missing.length; i += CHUNK_SIZE) {
       const chunk = missing.slice(i, i + CHUNK_SIZE);
@@ -497,85 +440,126 @@ export class ScryfallService {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifiers: chunk })
         });
-
-        if (!resp.ok) {
-          console.error(`[ScryfallService] Collection fetch failed: ${resp.status}`);
-          continue;
-        }
-
         const d = await resp.json();
-
         if (d.data) {
-          d.data.forEach((c: ScryfallCard) => {
-            this.saveCard(c);
+          for (const c of d.data) {
+            await this.saveCard(c);
             results.push(c);
-          });
+          }
         }
+      } catch (e) { console.error(e); }
+    }
+    return results;
+  }
 
-        if (d.not_found && d.not_found.length > 0) {
-          console.warn(`[ScryfallService] Cards not found:`, d.not_found);
-        }
+  // Keep getTokensForSet / getFoundationLands but update to use saveCard
+  async getTokensForSet(setCode: string): Promise<ScryfallCard[]> {
+    const tokenSetCode = `t${setCode}`.toLowerCase();
 
-      } catch (e) {
-        console.error("Error fetching collection chunk", e);
-      }
-      await new Promise(r => setTimeout(r, 75)); // Rate limiting
+    // Redis Check
+    const store = this.metadataStore;
+    if (store) {
+      try {
+        const allMap = await store.hgetall(`set:${tokenSetCode}`);
+        const cards = Object.values(allMap).map(s => JSON.parse(s));
+        if (cards.length > 0) return cards;
+      } catch (e) { }
     }
 
-    return results;
+    // FS Check
+    const tokensCachePath = path.join(SETS_DIR, `${tokenSetCode}.json`);
+    if (fs.existsSync(tokensCachePath)) {
+      try {
+        const cards = JSON.parse(fs.readFileSync(tokensCachePath, 'utf-8'));
+        if (store) { for (const c of cards) await this.saveCardToRedis(c); }
+        return cards;
+      } catch { }
+    }
+
+    // Fetch
+    console.log(`[ScryfallService] Fetching tokens for set (set:${tokenSetCode})...`);
+    let tokenUrl = `https://api.scryfall.com/cards/search?q=set:${tokenSetCode} unique=prints`;
+    let allTokens: ScryfallCard[] = [];
+
+    try {
+      while (tokenUrl) {
+        const tResp = await fetch(tokenUrl);
+        if (!tResp.ok) {
+          if (tResp.status === 404) break;
+          break;
+        }
+
+        const td = await tResp.json();
+        if (td.data) allTokens.push(...td.data);
+
+        tokenUrl = td.has_more ? td.next_page : '';
+        await new Promise(res => setTimeout(res, 100));
+      }
+    } catch (tokenErr) {
+      console.warn("[ScryfallService] Failed to fetch tokens", tokenErr);
+    }
+
+    if (allTokens.length > 0) {
+      fs.writeFileSync(tokensCachePath, JSON.stringify(allTokens, null, 2));
+      for (const c of allTokens) await this.saveCard(c);
+    }
+
+    return allTokens;
   }
 
   async getFoundationLands(): Promise<ScryfallCard[]> {
     const setCode = 'j25';
-    const landsCachePath = path.join(SETS_DIR, `${setCode}_lands.json`);
+    // Reuse Redis/FS logic by checking cache manually or effectively behaving like a set fetch
+    // But we need Unique By Name filtering here?
+    // Let's check Redis first for ALL j25 lands.
 
-    // 1. Check Cache
-    if (fs.existsSync(landsCachePath)) {
+    const store = this.metadataStore;
+    if (store) {
       try {
-        const raw = fs.readFileSync(landsCachePath, 'utf-8');
-        const cards = JSON.parse(raw);
-        console.log(`[ScryfallService] Loaded ${cards.length} Foundation lands from cache.`);
-        return cards;
-      } catch (e) {
-        console.error(`[ScryfallService] Error reading Foundation lands cache`, e);
-      }
+        const allMap = await store.hgetall(`set:${setCode}`);
+        const cards = Object.values(allMap).map(s => JSON.parse(s));
+        // Filter for lands if mixed set? j25 is a set.
+        // We only want Basic Lands.
+        const lands = cards.filter((c: ScryfallCard) => c.type_line.includes('Basic Land'));
+        if (lands.length > 0) return lands;
+      } catch (e) { }
     }
 
-    // 2. Fetch from API
-    console.log('[ScryfallService] Fetching Foundation (J25) lands for fallback...');
+    const landsCachePath = path.join(SETS_DIR, `${setCode}_lands.json`);
+
+    if (fs.existsSync(landsCachePath)) {
+      try {
+        const cards = JSON.parse(fs.readFileSync(landsCachePath, 'utf-8'));
+        if (store) { for (const c of cards) await this.saveCardToRedis(c); }
+        return cards;
+      } catch { }
+    }
+
+    console.log('[ScryfallService] Fetching Foundation (J25) lands...');
     const url = `https://api.scryfall.com/cards/search?q=e:${setCode}+type:land+type:basic+unique:prints&order=set`;
 
     try {
       const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`Scryfall API error: ${resp.statusText}`);
+      if (!resp.ok) return [];
 
       const data = await resp.json();
       let cards = data.data || [];
 
-      // Filter to keep only Single Instance per Name (Color) as requested
       const uniqueNameMap = new Map();
       cards.forEach((c: ScryfallCard) => {
-        if (!uniqueNameMap.has(c.name)) {
-          uniqueNameMap.set(c.name, c);
-        }
+        if (!uniqueNameMap.has(c.name)) uniqueNameMap.set(c.name, c);
       });
       cards = Array.from(uniqueNameMap.values());
 
       if (cards.length > 0) {
-        // Save Cache
-        if (!fs.existsSync(SETS_DIR)) fs.mkdirSync(SETS_DIR, { recursive: true });
         fs.writeFileSync(landsCachePath, JSON.stringify(cards, null, 2));
-
-        // Also cache individual cards
-        cards.forEach((c: ScryfallCard) => this.saveCard(c));
-
-        console.log(`[ScryfallService] Cached ${cards.length} Foundation lands (Unique per color).`);
+        for (const c of cards) await this.saveCard(c);
       }
-
       return cards;
     } catch (e) {
       console.error('[ScryfallService] Failed to fetch Foundation lands', e);
       return [];
     }
   }
+
 }

@@ -116,6 +116,16 @@ export class MemcachedStateStore implements IStateStore {
     await this.set(key, JSON.stringify(obj));
   }
 
+  async hgetall(key: string): Promise<Record<string, string>> {
+    const current = await this.get(key);
+    if (!current) return {};
+    try {
+      return JSON.parse(current);
+    } catch {
+      return {};
+    }
+  }
+
   async acquireLock(key: string, ttl: number): Promise<boolean> {
     return new Promise((resolve, _reject) => {
       // memcached 'add' is atomic: fails if key exists
