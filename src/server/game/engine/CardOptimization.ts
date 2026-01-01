@@ -40,11 +40,11 @@ export class CardOptimization {
       keywords: fullCard.keywords,
       layout: fullCard.layout,
       image_uris: extractImages(fullCard.image_uris),
-      // Preserve pre-parsed types if they exist, or let ActionHandler parse them later
-      // But for optimization, let's just keep the raw strings mostly.
-      // Actually, ActionHandler expects 'types' and 'subtypes' on the card object, 
-      // often derived from definition. Let's populate them if missing to save runtime parsing?
-      // No, let's keep it minimal.
+      // Preserve generated image paths
+      image: fullCard.image,
+      imageArtCrop: fullCard.imageArtCrop,
+      local_path_full: fullCard.local_path_full,
+      local_path_crop: fullCard.local_path_crop,
     };
 
     if (fullCard.card_faces) {

@@ -150,6 +150,7 @@ export class ScryfallService {
       if (fs.existsSync(p)) {
         try {
           const card = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          this.normalizeCard(card, setCode);
           this.cacheById.set(id, card);
           // Repair Redis if missing
           if (store) this.saveCardToRedis(card).catch(console.error);
@@ -161,12 +162,28 @@ export class ScryfallService {
     return null;
   }
 
+  private normalizeCard(card: ScryfallCard, forcedSetCode?: string): ScryfallCard {
+    if (!card) return card;
+
+    // 1. Fix Set Code if needed
+    if (forcedSetCode && card.set !== forcedSetCode) {
+      card.set = forcedSetCode;
+    }
+    // Heuristic: If set has space, it's a name, not a code. But we might not knw the code here?
+    // We rely on forcedSetCode usually.
+
+    // 2. Inject Paths
+    if (card.set && card.id) {
+      if (!card.local_path_full) card.local_path_full = `/cards/images/${card.set}/full/${card.id}.jpg`;
+      if (!card.local_path_crop) card.local_path_crop = `/cards/images/${card.set}/crop/${card.id}.jpg`;
+    }
+    return card;
+  }
+
   private async saveCard(card: ScryfallCard) {
     if (!card.id || !card.set) return;
 
-    // Enhance with Local paths
-    card.local_path_full = `/cards/images/${card.set}/full/${card.id}.jpg`;
-    card.local_path_crop = `/cards/images/${card.set}/crop/${card.id}.jpg`;
+    this.normalizeCard(card);
 
     // Memory
     this.cacheById.set(card.id, card);
@@ -357,14 +374,8 @@ export class ScryfallService {
         const cards = JSON.parse(fs.readFileSync(setCachePath, 'utf-8'));
         console.log(`[ScryfallService] Loaded set ${setCode} from FS cache.`);
 
-        // Ensure paths are populated
-        const enrichedCards = cards.map((c: ScryfallCard) => {
-          if (!c.local_path_full && c.set && c.id) {
-            c.local_path_full = `/cards/images/${c.set}/full/${c.id}.jpg`;
-            c.local_path_crop = `/cards/images/${c.set}/crop/${c.id}.jpg`;
-          }
-          return c;
-        });
+        // Ensure paths are populated and Set Code is correct
+        const enrichedCards = cards.map((c: ScryfallCard) => this.normalizeCard(c, setCode));
 
         // Populate Redis
         if (store) {

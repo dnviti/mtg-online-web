@@ -44,6 +44,12 @@ export interface MinimalScryfallCard {
   // Pre-parsed for performance
   types?: string[];
   subtypes?: string[];
+
+  // Custom Draft/Local Props
+  image?: string;
+  imageArtCrop?: string;
+  local_path_full?: string;
+  local_path_crop?: string;
 }
 
 export interface CardObject {
