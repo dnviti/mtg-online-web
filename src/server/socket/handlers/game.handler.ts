@@ -80,7 +80,10 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                 image_uris: authCard.image_uris,
                 keywords: authCard.keywords || [],
                 set: authCard.set,
-                ...card.definition // Keep extra props if any, but above should prevail? Actually spread last
+                ...card.definition, // Keep extra props
+                // Force authoritative paths from Redis
+                local_path_full: authCard.local_path_full,
+                local_path_crop: authCard.local_path_crop
               };
             }
 
@@ -115,8 +118,8 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               scryfallId: scryfallId || 'unknown',
               setCode: setCode || 'unknown',
               name: card.name || card.definition?.name || "Unknown Card",
-              imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
-              imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
+              imageUrl: card.definition?.local_path_full || ((setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "")),
+              imageArtCrop: card.definition?.local_path_crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
               zone: 'library',
               typeLine: card.typeLine || card.type_line || card.definition?.type_line || '',
               types: card.types || (card.typeLine || card.type_line || card.definition?.type_line || '').split('—')[0].trim().split(' '),

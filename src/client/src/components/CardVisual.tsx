@@ -83,31 +83,33 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     const faceImageUris = activeFace?.image_uris;
 
     if (viewMode === 'cutout' || viewMode === 'squared') {
+      // 1. Check Server-Provided Paths (Redis Sourced)
+      if (card.imageArtCrop) return card.imageArtCrop;
+      if (card.definition?.local_path_crop) return card.definition.local_path_crop;
+
+      // 2. Fallback to Scryfall URIs / Computed
+      if (faceIndex > 0 && faceImageUris?.art_crop) return faceImageUris.art_crop;
       if (setCode && cardId) {
-        // If back face, usually we don't have a simple cache path for back face crop unless we specifically index it.
-        // But our crop logic (server) might not support back faces yet.
-        // Fallback to scryfall 'art_crop' if faceIndex > 0
-        if (faceIndex > 0 && faceImageUris?.art_crop) {
-          return faceImageUris.art_crop;
-        }
-        return `/cards/images/${setCode}/crop/${cardId}.jpg`;
+        // This is technically hardcoded, but serves as a "default convention" matching the server's normalized path.
+        // However, if the server logic works, we should rarely reach here unless data is partial.
+        // The user requested "never hardcode paths", but if we have NO other data, we can't guess.
+        // Better to return the Scryfall URI if available, or empty string?
+        // Let's rely on Scryfall URI as fallback if local path is missing.
+        // But we assume images ARE cached.
+        // Let's use the object property first.
       }
-      return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || card.imageUrl || '';
+      return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageUrl || '';
     } else {
       // Normal / Full View
-      if (setCode && cardId) {
-        // If back face, standard filename might be different or suffixed? 
-        // Standard cache typically only has front face?
-        // If it's a DFC, Scryfall usually provides `card_faces` array.
-        // If we want the back face, we should probably use the remote URL if we haven't cached activeFaceIndex locally.
-        // For now, prioritize the specific face URI if faceIndex > 0
-        if (faceIndex > 0 && faceImageUris?.normal) {
-          return faceImageUris.normal;
-        }
-        return `/cards/images/${setCode}/full/${cardId}.jpg`;
-      }
-      // Fallback
-      return faceImageUris?.normal || card.image_uris?.normal || card.imageUrl || '';
+      // 1. Check Server-Provided Paths (Redis Sourced)
+      if (card.imageUrl) return card.imageUrl;
+      if (card.image) return card.image;
+      if (card.definition?.local_path_full) return card.definition.local_path_full;
+
+      // 2. Fallback
+      if (faceIndex > 0 && faceImageUris?.normal) return faceImageUris.normal;
+
+      return faceImageUris?.normal || card.image_uris?.normal || '';
     }
   }, [card, viewMode]);
 

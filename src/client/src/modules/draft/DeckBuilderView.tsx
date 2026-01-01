@@ -84,14 +84,9 @@ const ManaCurve = React.memo(({ deck }: { deck: any[] }) => {
 
 // Internal Helper to normalize card data for visuals
 const normalizeCard = (c: any): DraftCard => {
-  const targetId = c.scryfallId || c.id;
-  const setCode = c.setCode || c.set || c.definition?.set;
-  const localImage = (targetId && setCode)
-    ? `/cards/images/${setCode}/full/${targetId}.jpg`
-    : null;
-  const localCrop = (targetId && setCode)
-    ? `/cards/images/${setCode}/crop/${targetId}.jpg`
-    : null;
+
+  const localImage = c.local_path_full || c.definition?.local_path_full || null;
+  const localCrop = c.local_path_crop || c.definition?.local_path_crop || null;
 
   return {
     ...c,
@@ -769,8 +764,10 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
       scryfallId: card.id, // Preserve original ID for image resolution
       setCode: card.set,   // Ensure set code is top-level
       // Ensure image prop is carried over for visual
-      image: card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
-      imageArtCrop: card.image_uris?.art_crop || card.card_faces?.[0]?.image_uris?.art_crop
+      image: card.local_path_full || card.image || card.image_uris?.normal || card.card_faces?.[0]?.image_uris?.normal,
+      imageArtCrop: card.local_path_crop || card.imageArtCrop || card.image_uris?.art_crop || card.card_faces?.[0]?.image_uris?.art_crop,
+      local_path_full: card.local_path_full,
+      local_path_crop: card.local_path_crop
     };
     setDeck(prev => [...prev, newCard]);
   };
@@ -1312,11 +1309,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
 
       return uniqueLands.map(land => {
         const targetId = land.scryfallId || land.id;
-        const setCode = land.setCode || land.set;
 
-        const localImage = (targetId && setCode)
-          ? `/cards/images/${setCode}/full/${targetId}.jpg`
-          : null;
+
+        const localImage = land.local_path_full || null;
 
         return {
           ...land,

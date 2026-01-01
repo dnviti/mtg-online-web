@@ -111,11 +111,11 @@ export class PackGeneratorService {
         typeLine: typeLine,
         layout: layout,
         colors: cardData.colors || [],
-        image: useLocalImages
-          ? `${window.location.origin}/cards/images/${cardData.set}/full/${cardData.id}.jpg`
+        image: (useLocalImages && cardData.local_path_full)
+          ? `${window.location.origin}${cardData.local_path_full}`
           : (cardData.image_uris?.normal || cardData.card_faces?.[0]?.image_uris?.normal || ''),
-        imageArtCrop: useLocalImages
-          ? `${window.location.origin}/cards/images/${cardData.set}/crop/${cardData.id}.jpg`
+        imageArtCrop: (useLocalImages && cardData.local_path_crop)
+          ? `${window.location.origin}${cardData.local_path_crop}`
           : (cardData.image_uris?.art_crop || cardData.card_faces?.[0]?.image_uris?.art_crop || ''),
         set: cardData.set_name,
         setCode: cardData.set,

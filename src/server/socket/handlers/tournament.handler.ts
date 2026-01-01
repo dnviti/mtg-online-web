@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { roomManager, gameManager, tournamentManager } from '../../singletons';
+import { roomManager, gameManager, tournamentManager, scryfallService } from '../../singletons';
 
 export const registerTournamentHandlers = (io: Server, socket: Socket) => {
   const getContext = async () => await roomManager.getPlayerBySocket(socket.id);
@@ -95,6 +95,23 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
             const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
             const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);
 
+            // 1. Gather all Scryfall IDs from all decks
+            const allIdentifiers: { id: string }[] = [];
+            [d1, d2].forEach(deck => {
+              if (deck && Array.isArray(deck)) {
+                deck.forEach((card: any) => {
+                  let id = card.scryfallId || card.id || card.definition?.id;
+                  if (id) allIdentifiers.push({ id });
+                });
+              }
+            });
+
+            // 2. Bulk fetch authoritative data
+            console.log(`[GameStart] Fetching authoritative data for ${allIdentifiers.length} cards...`);
+            const authoritativeCards = await scryfallService.fetchCollection(allIdentifiers);
+            const cardMap = new Map(authoritativeCards.map(c => [c.id, c]));
+            console.log(`[GameStart] Resolved ${cardMap.size} unique cards from service.`);
+
             // Serialize Deck Loading to prevent lock contention
             const loadDeck = async (p: any, d: any[]) => {
               if (d && d.length > 0) {
@@ -102,6 +119,7 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                 for (const card of d) {
                   let setCode = card.setCode || card.set || card.definition?.set;
                   let scryfallId = card.scryfallId || card.id || card.definition?.id;
+
                   if ((!setCode || !scryfallId) && card.imageUrl && card.imageUrl.includes('/cards/images/')) {
                     const parts = card.imageUrl.split('/cards/images/');
                     if (parts[1]) {
@@ -114,6 +132,48 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                     }
                   }
 
+                  // --- AUTHORITATIVE DATA MERGE ---
+                  const authCard = cardMap.get(scryfallId);
+                  if (authCard) {
+                    card.definition = {
+                      name: authCard.name,
+                      id: authCard.id,
+                      oracle_id: authCard.oracle_id,
+                      type_line: authCard.type_line,
+                      oracle_text: authCard.oracle_text || (authCard.card_faces ? authCard.card_faces[0].oracle_text : ''),
+                      mana_cost: authCard.mana_cost || (authCard.card_faces ? authCard.card_faces[0].mana_cost : ''),
+                      power: authCard.power,
+                      toughness: authCard.toughness,
+                      colors: authCard.colors,
+                      card_faces: authCard.card_faces,
+                      image_uris: authCard.image_uris,
+                      keywords: authCard.keywords || [],
+                      set: authCard.set,
+                      ...card.definition,
+                      // Force authoritative paths from Redis
+                      local_path_full: authCard.local_path_full,
+                      local_path_crop: authCard.local_path_crop
+                    };
+                  }
+
+                  if (!card.definition) {
+                    card.definition = {
+                      name: card.name,
+                      id: card.id,
+                      oracle_id: card.oracle_id || card.oracleId,
+                      type_line: card.type_line || card.typeLine,
+                      oracle_text: card.oracle_text || card.oracleText,
+                      mana_cost: card.mana_cost || card.manaCost,
+                      power: card.power?.toString(),
+                      toughness: card.toughness?.toString(),
+                      colors: card.colors,
+                      card_faces: card.card_faces || card.cardFaces,
+                      image_uris: card.image_uris,
+                      keywords: card.keywords,
+                      set: card.set || card.setCode
+                    };
+                  }
+
                   await gameManager.addCardToGame(matchId, {
                     ownerId: p.id,
                     controllerId: p.id,
@@ -121,15 +181,15 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                     scryfallId: scryfallId,
                     setCode: setCode,
                     name: card.name,
-                    imageUrl: (setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || ""),
-                    imageArtCrop: card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
+                    imageUrl: card.definition?.local_path_full || ((setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "")),
+                    imageArtCrop: card.definition?.local_path_crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
                     zone: 'library',
-                    typeLine: card.typeLine || card.type_line || '',
-                    oracleText: card.oracleText || card.oracle_text || '',
-                    manaCost: card.manaCost || card.mana_cost || '',
-                    keywords: card.keywords || [],
-                    power: card.power,
-                    toughness: card.toughness,
+                    typeLine: card.typeLine || card.type_line || card.definition?.type_line || '',
+                    oracleText: card.oracleText || card.oracle_text || card.definition?.oracle_text || '',
+                    manaCost: card.manaCost || card.mana_cost || card.definition?.mana_cost || '',
+                    keywords: card.keywords || card.definition?.keywords || [],
+                    power: (typeof card.power === 'number' ? card.power : parseFloat(card.power || card.definition?.power || '0')) || 0,
+                    toughness: (typeof card.toughness === 'number' ? card.toughness : parseFloat(card.toughness || card.definition?.toughness || '0')) || 0,
                     damageMarked: 0,
                     controlledSinceTurn: 0,
                     definition: card.definition

@@ -84,25 +84,11 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       // Cache images on server (API call)
       await ApiService.post('/api/cards/cache', { cards: cardsToCache });
 
-      const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
-      const updatedPacks = packsToUse.map(pack => ({
-        ...pack,
-        cards: pack.cards.map(c => ({
-          ...c,
-          image: `${baseUrl}/${c.setCode}/${c.scryfallId}.jpg`
-        }))
-      }));
-
-      const updatedBasicLands = availableLands.map(l => ({
-        ...l,
-        image: `${baseUrl}/${l.setCode}/${l.scryfallId}.jpg`
-      }));
-
       const response = await createRoom({
         hostId: playerId,
         hostName: playerName,
-        packs: updatedPacks,
-        basicLands: updatedBasicLands,
+        packs: packsToUse,
+        basicLands: availableLands,
         format: selectedFormat
       });
 

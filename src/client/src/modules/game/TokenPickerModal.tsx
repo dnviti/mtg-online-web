@@ -126,7 +126,7 @@ export const TokenPickerModal: React.FC<TokenPickerModalProps> = ({ isOpen, onCl
                   name: token.name,
                   // Prefer Crop for preview if available? Or normal?
                   // CardComponent uses normal usually.
-                  imageUrl: token.image_uris?.normal || token.card_faces?.[0]?.image_uris?.normal || "",
+                  imageUrl: token.local_path_full || token.image_uris?.normal || token.card_faces?.[0]?.image_uris?.normal || "",
                   // Fallback logic handled in CardComponent now
                   typeLine: token.type_line,
                   power: token.power || token.card_faces?.[0]?.power,
@@ -141,7 +141,7 @@ export const TokenPickerModal: React.FC<TokenPickerModalProps> = ({ isOpen, onCl
                     onClick={() => onSelect(token)}
                   >
                     <img
-                      src={cardDisplay.imageUrl || '/cards/images/token.jpg'} // Explicit fallback here just in case, but CardComponent handles it too
+                      src={cardDisplay.imageUrl || '/images/token.jpg'} // Explicit fallback here just in case, but CardComponent handles it too
                       alt={token.name}
                       className="w-full h-full object-cover rounded-xl shadow-lg border border-transparent group-hover:border-emerald-400/50"
                       onError={(e) => {
