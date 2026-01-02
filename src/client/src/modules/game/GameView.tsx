@@ -802,7 +802,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                 subtypes: subtypes,
                 power: token.power,
                 toughness: token.toughness,
-                imageUrl: token.image_uris?.normal || token.image_uris?.large || "",
+                imageUrl: token.local_path_full || token.image_uris?.normal || token.image_uris?.large || "",
+                imageArtCrop: token.local_path_crop || token.image_uris?.art_crop || "",
+                local_path_full: token.local_path_full,
+                local_path_crop: token.local_path_crop,
                 // If no image, CardComponent will fallback.
                 // But server token object might have caching?
               };

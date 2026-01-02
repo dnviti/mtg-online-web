@@ -4,6 +4,7 @@ export interface CardIdentifier {
   value: string;
   quantity: number;
   finish?: 'foil' | 'normal';
+  setCode?: string;
 }
 
 export class CardParserService {
@@ -112,15 +113,23 @@ export class CardParserService {
         }
       }
 
-      // "4 Lightning Bolt" format
+      // "4 Lightning Bolt (set)" format
       const cleanLine = line.replace(/['"]/g, '');
       const simpleMatch = cleanLine.match(/^(\d+)[xX\s]+(.+)$/);
       if (simpleMatch) {
         let name = simpleMatch[2].trim();
-        name = name.replace(/\s*[\(\[].*?[\)\]]/g, '');
+        let setCode: string | undefined;
+
+        // Extract (SET) or [SET]
+        const setMatch = name.match(/[\(\[]([0-9a-zA-Z]{3,})[\)\]]/);
+        if (setMatch) {
+          setCode = setMatch[1].toLowerCase();
+        }
+
+        name = name.replace(/\s*[\(\[].*?[\)\]]/g, '').trim();
         name = name.replace(/\s+\d+$/, '');
 
-        rawCardList.push({ type: 'name', value: name, quantity: parseInt(simpleMatch[1]) });
+        rawCardList.push({ type: 'name', value: name, quantity: parseInt(simpleMatch[1]), setCode });
       } else {
         let name = cleanLine.trim();
         if (name) {

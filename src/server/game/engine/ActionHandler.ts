@@ -334,7 +334,9 @@ export class ActionHandler {
       baseToughness: definition.toughness,
       power: definition.power,
       toughness: definition.toughness,
-      imageUrl: definition.imageUrl || '',
+      imageUrl: definition.local_path_full || definition.imageUrl || '',
+      imageArtCrop: definition.local_path_crop || definition.imageArtCrop || '',
+      definition: definition, // Store the full definition for reference
       damageMarked: 0,
       controlledSinceTurn: state.turnCount,
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }

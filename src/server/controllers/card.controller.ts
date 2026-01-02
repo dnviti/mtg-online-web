@@ -94,7 +94,10 @@ export class CardController {
       const { text } = req.body;
       const identifiers = cardParserService.parse(text);
 
-      const uniqueIds = identifiers.map(id => id.type === 'id' ? { id: id.value } : { name: id.value });
+      const uniqueIds = identifiers.map(id => {
+        if (id.type === 'id') return { id: id.value };
+        return { name: id.value, set: id.setCode };
+      });
       const uniqueCards = await scryfallService.fetchCollection(uniqueIds);
 
       if (uniqueCards.length > 0) {

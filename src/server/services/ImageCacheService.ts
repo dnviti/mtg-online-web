@@ -16,6 +16,13 @@ export class ImageCacheService {
     let metadata: any = null;
     let scryfallUri = '';
 
+    // 0. Check Physical File first (Fastest / Offline mode)
+    const fileExists = await fileStorageManager.exists(absoluteFilePath);
+    if (fileExists) {
+      if (process.env.DEBUG_IMAGES) console.log(`[ImageCacheService] Serving local file: ${absoluteFilePath}`);
+      return fileStorageManager.readFile(absoluteFilePath);
+    }
+
     if (store) {
       try {
         const jsonStr = await store.hget(`set:${setCode}`, cardId);
@@ -27,13 +34,8 @@ export class ImageCacheService {
       }
     }
 
-    // 2. If Metadata exists, check file consistency
+    // 2. If Metadata exists, use it to recover (File already confirmed missing above)
     if (metadata) {
-      const fileExists = await fileStorageManager.exists(absoluteFilePath);
-      if (fileExists) {
-        return fileStorageManager.readFile(absoluteFilePath);
-      }
-      // File missing but metadata exists? Use metadata to recover
       console.log(`[ImageCacheService] File missing for ${cardId} but metadata found. Recovering...`);
       scryfallUri = (type === 'crop') ? metadata.image_uris?.art_crop : metadata.image_uris?.normal;
     }

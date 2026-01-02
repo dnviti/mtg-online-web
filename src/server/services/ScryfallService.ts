@@ -422,15 +422,22 @@ export class ScryfallService {
   }
 
   // Re-implement others similarly or rely on basic cache
-  async fetchCollection(identifiers: { id?: string, name?: string }[]): Promise<ScryfallCard[]> {
+  async fetchCollection(identifiers: { id?: string, name?: string, set?: string }[]): Promise<ScryfallCard[]> {
     const results: ScryfallCard[] = [];
-    const missing: { id?: string, name?: string }[] = [];
+    const missing: { id?: string, name?: string, set?: string }[] = [];
 
     for (const id of identifiers) {
       if (id.id) {
         // Use async getCachedCard which checks Redis
         const c = await this.getCachedCard(id.id);
         if (c) results.push(c);
+        else missing.push(id);
+      } else if (id.name && id.set) {
+        // Check local cache for Set + Name match (crucial for custom sets)
+        const cached = await this.searchLocal(`${id.name} set:${id.set}`);
+        const exact = cached.find(c => c.name.toLowerCase() === id.name!.toLowerCase() && (c.set === id.set?.toLowerCase() || c.set_name?.toLowerCase() === id.set?.toLowerCase()));
+
+        if (exact) results.push(exact);
         else missing.push(id);
       } else {
         missing.push(id);

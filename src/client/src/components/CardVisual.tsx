@@ -109,7 +109,23 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       // 2. Fallback
       if (faceIndex > 0 && faceImageUris?.normal) return faceImageUris.normal;
 
-      return faceImageUris?.normal || card.image_uris?.normal || '';
+      const scryfallUri = faceImageUris?.normal || card.image_uris?.normal || '';
+      if (scryfallUri) return scryfallUri;
+
+      // 3. Fallback to constructed path if setCode/id present (Recovery for missing metadata)
+      if (setCode && cardId) {
+        // SANITIZATION FIX: If setCode appears to be a full name (has spaces), try to recover the code.
+        let safeSetCode = setCode.toLowerCase();
+        if (safeSetCode.includes('avatar: the last airbender')) safeSetCode = 'tla';
+        else if (safeSetCode.includes(' ')) {
+          // Heuristic: take first word or handle other known sets?
+          // For now, if it has spaces, it's likely broken.
+          // But 'tla' is the immediate issue.
+        }
+        return `/cards/images/${safeSetCode}/full/${cardId}.jpg`;
+      }
+
+      return '';
     }
   }, [card, viewMode]);
 
@@ -167,12 +183,19 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       style={style}
     >
       {!card.faceDown || forceFaceUp ? (
-        <img
-          src={imageSrc}
-          alt={card.name || 'Card'}
-          className="w-full h-full object-cover"
-          draggable={false}
-        />
+        imageSrc ? (
+          <img
+            src={imageSrc}
+            alt={card.name || 'Card'}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 p-2 text-center text-slate-500">
+            <span className="text-[10px] font-bold">{card.name || 'Unknown'}</span>
+            <span className="text-[8px] italic mt-1">(No Image)</span>
+          </div>
+        )
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-90 bg-[url('/images/back.jpg')] bg-cover">
         </div>
