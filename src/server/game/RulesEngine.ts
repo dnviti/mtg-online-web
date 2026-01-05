@@ -61,6 +61,10 @@ export class RulesEngine {
     // It's TBA related.
     if (this.state.step !== 'mulligan') throw new Error("Not mulligan step");
     const player = this.state.players[playerId];
+    if (!player) {
+      console.error(`[RulesEngine] ❌ Player ${playerId} not found in game state. Available players: ${Object.keys(this.state.players).join(', ')}`);
+      throw new Error(`Player ${playerId} not found in game state`);
+    }
     if (player.handKept) throw new Error("Already kept");
 
     if (keep) {

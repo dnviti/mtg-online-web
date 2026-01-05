@@ -98,6 +98,7 @@ export class PhaseManager {
       Object.values(state.players).forEach(p => {
         const hand = Object.values(state.cards).filter(c => c.ownerId === p.id && c.zone === 'hand');
         if (hand.length === 0 && !p.handKept) {
+          console.log(`[PhaseManager] Player ${p.name} (${p.id}) has 0 cards. Drawing 7.`);
           for (let i = 0; i < 7; i++) ActionHandler.drawCard(state, p.id);
         }
       });

@@ -59,6 +59,8 @@ export class GameManager extends EventEmitter {
       maxZ: 100
     };
 
+    console.log(`[GameManager] Creating game ${gameId} with players: ${players.map(p => `${p.name} (${p.id})`).join(', ')}`);
+
     players.forEach(p => {
       state.players[p.id] = { ...p, life: 20, poison: 0, manaPool: {}, handKept: false, isBot: !!p.isBot };
     });
