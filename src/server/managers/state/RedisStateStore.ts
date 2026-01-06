@@ -65,10 +65,19 @@ export class RedisStateStore implements IStateStore {
   }
 
   async acquireLock(key: string, ttl: number): Promise<boolean> {
-    // Use EX, ttl, NX order which is standard
-    // Casting to any to avoid strict overload mismatch if types are outdated
-    const res = await (this.client as any).set(key, '1', 'EX', ttl, 'NX');
-    return res === 'OK';
+    // Retry for up to 2 seconds (handle double-clicks or quick sequential actions)
+    const timeout = 2000;
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+      // Use EX, ttl, NX order which is standard
+      const res = await (this.client as any).set(key, '1', 'EX', ttl, 'NX');
+      if (res === 'OK') return true;
+
+      // Wait 100ms before retrying
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return false;
   }
 
   async releaseLock(key: string): Promise<void> {

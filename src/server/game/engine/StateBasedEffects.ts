@@ -36,7 +36,7 @@ export class StateBasedEffects {
     }
 
     // 2. Creature Death (Zero Toughness or Lethal Damage)
-    const creatures = Object.values(cards).filter(c => c.zone === 'battlefield' && c.types.includes('Creature'));
+    const creatures = Object.values(cards).filter(c => c.zone === 'battlefield' && c.types?.includes('Creature'));
 
     for (const c of creatures) {
       // 704.5f Toughness 0 or less
@@ -48,7 +48,7 @@ export class StateBasedEffects {
       }
 
       // 704.5g Lethal Damage
-      if (c.damageMarked >= c.toughness && !c.supertypes.includes('Indestructible')) {
+      if (c.damageMarked >= c.toughness && !c.supertypes?.includes('Indestructible')) {
         console.log(`SBA: ${c.name} destroyed (Lethal Damage: ${c.damageMarked}/${c.toughness}).`);
         c.zone = 'graveyard';
         sbaPerformed = true;
@@ -59,7 +59,7 @@ export class StateBasedEffects {
 
     // 4. Aura Validity (704.5n)
     Object.values(cards).forEach(c => {
-      if (c.zone === 'battlefield' && c.types.includes('Enchantment') && c.subtypes.includes('Aura')) {
+      if (c.zone === 'battlefield' && c.types?.includes('Enchantment') && c.subtypes?.includes('Aura')) {
         if (!c.attachedTo) {
           console.log(`SBA: ${c.name} (Aura) unattached. Destroyed.`);
           c.zone = 'graveyard';
@@ -77,7 +77,7 @@ export class StateBasedEffects {
 
     // 5. Equipment Validity
     Object.values(cards).forEach(c => {
-      if (c.zone === 'battlefield' && c.types.includes('Artifact') && c.subtypes.includes('Equipment') && c.attachedTo) {
+      if (c.zone === 'battlefield' && c.types?.includes('Artifact') && c.subtypes?.includes('Equipment') && c.attachedTo) {
         const target = cards[c.attachedTo];
         if (!target || target.zone !== 'battlefield') {
           console.log(`SBA: ${c.name} (Equipment) detached (Host invalid).`);

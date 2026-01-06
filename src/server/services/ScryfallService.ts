@@ -63,6 +63,27 @@ export class ScryfallService {
     this.hydrateCache();
   }
 
+  private async fetchWithRetry(url: string, options: any = {}, retries = 3, backoff = 1000): Promise<Response> {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 10000); // 10s timeout per attempt
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(id);
+      if (!response.ok && response.status >= 500 && retries > 0) {
+        throw new Error(response.statusText);
+      }
+      return response;
+    } catch (e) {
+      if (retries > 0) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(`[ScryfallService] Fetch failed (${msg}). Retrying in ${backoff}ms...`);
+        await new Promise(r => setTimeout(r, backoff));
+        return this.fetchWithRetry(url, options, retries - 1, backoff * 2);
+      }
+      throw e;
+    }
+  }
+
   private async hydrateCache() {
     console.time('ScryfallService:hydrateCache');
     try {
@@ -267,7 +288,7 @@ export class ScryfallService {
       const setInfoPath = path.join(SETS_DIR, `${code}_info.json`);
       if (!fs.existsSync(setInfoPath)) {
         try {
-          const resp = await fetch(`https://api.scryfall.com/sets/${code}`);
+          const resp = await this.fetchWithRetry(`https://api.scryfall.com/sets/${code}`);
           if (resp.ok) {
             const data = await resp.json();
             fs.writeFileSync(setInfoPath, JSON.stringify(data, null, 2));
@@ -309,7 +330,7 @@ export class ScryfallService {
 
     console.log('[ScryfallService] Fetching sets from API...');
     try {
-      const resp = await fetch('https://api.scryfall.com/sets');
+      const resp = await this.fetchWithRetry('https://api.scryfall.com/sets');
       if (!resp.ok) throw new Error(`Scryfall API error: ${resp.statusText}`);
       const data = await resp.json();
 
@@ -400,7 +421,7 @@ export class ScryfallService {
 
     try {
       while (url) {
-        const resp = await fetch(url);
+        const resp = await this.fetchWithRetry(url);
         if (!resp.ok) break;
         const d = await resp.json();
         if (d.data) allCards.push(...d.data);
@@ -453,7 +474,7 @@ export class ScryfallService {
     for (let i = 0; i < missing.length; i += CHUNK_SIZE) {
       const chunk = missing.slice(i, i + CHUNK_SIZE);
       try {
-        const resp = await fetch('https://api.scryfall.com/cards/collection', {
+        const resp = await this.fetchWithRetry('https://api.scryfall.com/cards/collection', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifiers: chunk })
@@ -501,7 +522,7 @@ export class ScryfallService {
 
     try {
       while (tokenUrl) {
-        const tResp = await fetch(tokenUrl);
+        const tResp = await this.fetchWithRetry(tokenUrl);
         if (!tResp.ok) {
           if (tResp.status === 404) break;
           break;
@@ -557,7 +578,7 @@ export class ScryfallService {
     const url = `https://api.scryfall.com/cards/search?q=e:${setCode}+type:land+type:basic+unique:prints&order=set`;
 
     try {
-      const resp = await fetch(url);
+      const resp = await this.fetchWithRetry(url);
       if (!resp.ok) return [];
 
       const data = await resp.json();
