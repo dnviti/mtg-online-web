@@ -118,6 +118,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               scryfallId: scryfallId || 'unknown',
               setCode: setCode || 'unknown',
               name: card.name || card.definition?.name || "Unknown Card",
+              // STRICTLY use the definition's local paths if available (from Redis/Auth)
               imageUrl: card.definition?.local_path_full || ((setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.image_uris?.png || "")),
               imageArtCrop: card.definition?.local_path_crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
               zone: 'library',

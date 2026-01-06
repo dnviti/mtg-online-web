@@ -73,7 +73,47 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
     if (!context) return;
     const { room, player } = context;
 
-    const updatedRoom = await roomManager.setPlayerReady(room.id, player.id, deck);
+    // RE-HYDRATION FIX: Ensure server uses canonical data for image paths
+    const hydratedDeck = [];
+    if (deck && Array.isArray(deck)) {
+      for (const card of deck) {
+        // Use the scryfallId (canonical ID) to fetch metadata.
+        // Fallback to card.definition.id if scryfallId missing (though it shouldn't be).
+        const targetId = card.scryfallId || card.definition?.id;
+
+        let canonicalData = null;
+        if (targetId) {
+          canonicalData = await scryfallService.getCachedCard(targetId);
+        }
+
+        if (canonicalData) {
+          // Merge canonical data into the card, preserving instance props
+          hydratedDeck.push({
+            ...canonicalData, // Base properties from Scryfall (includes local_path_full)
+            ...card, // Instance properties (id, count, etc.) override if needed
+            // BUT: Ensure critical image paths from canonical defined in ScryfallService take precedence if missing in card
+            // Actually, spread order: canonical first, then card. 
+            // If 'card' has bad data (e.g. empty image_uris), it might overwrite?
+            // Safer: Explicitly ensure paths.
+            local_path_full: canonicalData.local_path_full || card.local_path_full,
+            local_path_crop: canonicalData.local_path_crop || card.local_path_crop,
+            set: canonicalData.set || card.set,
+            image_uris: canonicalData.image_uris || card.image_uris,
+            // Restore instance ID which is critical for game state
+            id: card.id
+          });
+        } else {
+          console.warn(`[DraftHandler] Failed to re-hydrate card ${card.name} (${targetId}). Using client data.`);
+          hydratedDeck.push(card);
+        }
+      }
+    } else {
+      // Fallback if deck invalid
+      console.warn("[DraftHandler] Deck received was not an array or empty.");
+    }
+
+    // Use hydratedDeck instead of raw deck
+    const updatedRoom = await roomManager.setPlayerReady(room.id, player.id, hydratedDeck.length > 0 ? hydratedDeck : deck);
     if (updatedRoom) {
       io.to(room.id).emit('room_update', updatedRoom);
       const activePlayers = updatedRoom.players.filter(p => p.role === 'player');

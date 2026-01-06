@@ -82,8 +82,8 @@ if (cluster.isPrimary) {
   // This must be BEFORE the generic file serving or static middleware if they overlap.
   // The generic one is app.get('/cards/*', ...) which is what we want to replace/augment.
 
-  app.get('/cards/images/:set/:type/:filename', async (req: Request, res: Response) => {
-    const { set, type, filename } = req.params;
+  app.get('/cards/images/:set_code/:type/:filename', async (req: Request, res: Response) => {
+    const { set_code, type, filename } = req.params;
     const cardId = filename.replace(/\.(jpg|png|jpeg)$/, '');
     const relativePath = req.path;
     const absPath = path.join(__dirname, 'public', relativePath);
@@ -93,7 +93,7 @@ if (cluster.isPrimary) {
 
     try {
       // Use ImageCacheService to ensure it's in Redis Metadata and Local FS
-      const buffer = await imageCacheService.ensureImageCached(absPath, cardId, set, type as 'full' | 'crop');
+      const buffer = await imageCacheService.ensureImageCached(absPath, cardId, set_code, type as 'full' | 'crop');
       if (buffer) {
         res.type('image/jpeg');
         res.send(buffer);

@@ -68,43 +68,38 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
     // Use top-level properties if available (common in DraftCard / Game Card objects)
     const setCode = card.setCode || card.set || card.definition?.set;
-    const cardId = card.scryfallId || card.definition?.id;
+    // PRIORITY FIX: definition.id must take precedence over card.id because card.id can be an instance ID (e.g. land-G-...)
+    const cardId = card.scryfallId || card.definition?.id || (card.id && card.id.length > 20 && !card.id.startsWith('land-') ? card.id : null);
 
     // Detect Face
     // If activeFaceIndex is present, we try to use it.
-    // However, Scryfall data structure for faces is: card.card_faces[i].image_uris
-    // Some cards have card_faces but share image_uris (e.g. Adventure), but Transform cards have separate image_uris.
-    // If definition exists, use it.
     const faces = card.definition?.card_faces || card.card_faces;
     const faceIndex = card.activeFaceIndex ?? 0;
-
-    // Check if we have specific face images
     const activeFace = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
     const faceImageUris = activeFace?.image_uris;
 
     if (viewMode === 'cutout' || viewMode === 'squared') {
       // 1. Check Server-Provided Paths (Redis Sourced)
-      if (card.imageArtCrop) return card.imageArtCrop;
+      // PRIORITY: definition.local_path_crop
       if (card.definition?.local_path_crop) return card.definition.local_path_crop;
+      if (card.imageArtCrop) return card.imageArtCrop;
 
       // 2. Fallback to Scryfall URIs / Computed
       if (faceIndex > 0 && faceImageUris?.art_crop) return faceImageUris.art_crop;
+
+      // Heuristic Fallback
       if (setCode && cardId) {
-        // This is technically hardcoded, but serves as a "default convention" matching the server's normalized path.
-        // However, if the server logic works, we should rarely reach here unless data is partial.
-        // The user requested "never hardcode paths", but if we have NO other data, we can't guess.
-        // Better to return the Scryfall URI if available, or empty string?
-        // Let's rely on Scryfall URI as fallback if local path is missing.
-        // But we assume images ARE cached.
-        // Let's use the object property first.
+        // If we don't have explicit paths but have ID, we might guess (BUT this is risky if file missing)
+        // Better to rely on what Server gave us.
       }
       return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageUrl || '';
     } else {
       // Normal / Full View
       // 1. Check Server-Provided Paths (Redis Sourced)
+      // PRIORITY: definition.local_path_full
+      if (card.definition?.local_path_full) return card.definition.local_path_full;
       if (card.imageUrl) return card.imageUrl;
       if (card.image) return card.image;
-      if (card.definition?.local_path_full) return card.definition.local_path_full;
 
       // 2. Fallback
       if (faceIndex > 0 && faceImageUris?.normal) return faceImageUris.normal;
@@ -112,29 +107,20 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       const scryfallUri = faceImageUris?.normal || card.image_uris?.normal || '';
       if (scryfallUri) return scryfallUri;
 
-      // 3. Fallback to constructed path if setCode/id present (Recovery for missing metadata)
-      if (setCode && cardId) {
-        // SANITIZATION FIX: If setCode appears to be a full name (has spaces), try to recover the code.
-        let safeSetCode = setCode.toLowerCase();
-        if (safeSetCode.includes('avatar: the last airbender')) safeSetCode = 'tla';
-        else if (safeSetCode.includes(' ')) {
-          // Heuristic: take first word or handle other known sets?
-          // For now, if it has spaces, it's likely broken.
-          // But 'tla' is the immediate issue.
-        }
-        return `/cards/images/${safeSetCode}/full/${cardId}.jpg`;
-      }
+      // 3. Fallback
+      // User explicitly requested to remove hardcoded paths and rely on Redis/Server.
+      // If we are here, it means we don't have a local path and no explicit URL.
+      // We will return empty or throw a visual warning, but we must NOT construct a path manually.
 
       return '';
     }
   }, [card, viewMode]);
 
   // POST-PROCESSING: Force Full Image if viewMode demands it
-  // This catches cases where the URL resolved to a crop (due to missing full path) but we want to try guessing the full path
-  // OR where the server sent a crop URL by mistake.
   const finalImageSrc = useMemo(() => {
     if (!imageSrc) return '';
     if (viewMode === 'normal' || viewMode === 'large') {
+      // If we accidentally got a crop path but wanted full
       if (imageSrc.includes('/crop/')) {
         return imageSrc.replace('/crop/', '/full/');
       }
