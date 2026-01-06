@@ -129,6 +129,19 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     }
   }, [card, viewMode]);
 
+  // POST-PROCESSING: Force Full Image if viewMode demands it
+  // This catches cases where the URL resolved to a crop (due to missing full path) but we want to try guessing the full path
+  // OR where the server sent a crop URL by mistake.
+  const finalImageSrc = useMemo(() => {
+    if (!imageSrc) return '';
+    if (viewMode === 'normal' || viewMode === 'large') {
+      if (imageSrc.includes('/crop/')) {
+        return imageSrc.replace('/crop/', '/full/');
+      }
+    }
+    return imageSrc;
+  }, [imageSrc, viewMode]);
+
 
 
   const getLandManaSymbols = (card: VisualCard): string[] => {
@@ -185,7 +198,7 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       {!card.faceDown || forceFaceUp ? (
         imageSrc ? (
           <img
-            src={imageSrc}
+            src={finalImageSrc}
             alt={card.name || 'Card'}
             className="w-full h-full object-cover"
             draggable={false}
