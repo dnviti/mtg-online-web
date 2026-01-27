@@ -53,7 +53,13 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
   const { activeRoom, gameState, draftState } = useGameContext();
 
   // Cast activeRoom to Room interface. Fallback should rarely happen if Lobby calls this correctly.
+  // Ensure required arrays are always initialized to prevent undefined errors
   const room = (activeRoom as Room) || { players: [], messages: [], id: 'Error', status: 'error', hostId: 'system' } as Room;
+
+  // Defensive: ensure arrays are always defined even if data is corrupted
+  if (!Array.isArray(room.players)) room.players = [];
+  if (!Array.isArray(room.messages)) room.messages = [];
+  if (!Array.isArray(room.packs)) room.packs = [];
 
   // State
   const [modalOpen, setModalOpen] = useState(false);

@@ -52,7 +52,16 @@ export class RoomManager {
 
   private async getRoomState(roomId: string): Promise<Room | null> {
     const data = await this.store.get(`room:${roomId}`);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+
+    const room = JSON.parse(data) as Room;
+
+    // Ensure required arrays are always initialized to prevent undefined errors
+    if (!Array.isArray(room.players)) room.players = [];
+    if (!Array.isArray(room.messages)) room.messages = [];
+    if (!Array.isArray(room.packs)) room.packs = [];
+
+    return room;
   }
 
   async saveRoom(room: Room) {
