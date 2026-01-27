@@ -10,7 +10,7 @@ import { StrictGameState, GameLogEntry, CardObject } from '../types';
 export class GameLogger {
 
   /**
-   * Add a log entry to the game state's pending logs
+   * Add a log entry to both the persistent logs and pending logs
    */
   static log(
     state: StrictGameState,
@@ -19,6 +19,10 @@ export class GameLogger {
     source: string = 'Game',
     cards?: CardObject[]
   ) {
+    // Initialize arrays if needed
+    if (!state.logs) {
+      state.logs = [];
+    }
     if (!state.pendingLogs) {
       state.pendingLogs = [];
     }
@@ -32,12 +36,20 @@ export class GameLogger {
       oracleText: c.oracleText || c.definition?.oracle_text
     }));
 
-    state.pendingLogs.push({
+    const logEntry: GameLogEntry = {
+      id: Math.random().toString(36).substring(2, 11),
+      timestamp: Date.now(),
       message,
       type,
       source,
       cards: cardRefs
-    });
+    };
+
+    // Add to persistent logs (saved with game state)
+    state.logs.push(logEntry);
+
+    // Add to pending logs (for real-time emission to clients)
+    state.pendingLogs.push(logEntry);
   }
 
   /**

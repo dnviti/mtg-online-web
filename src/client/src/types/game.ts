@@ -81,7 +81,25 @@ export interface PlayerState {
   stopRequested?: boolean; // Server-side stop/suspend state
 }
 
+// Game log entry (matches server-side GameLogEntry)
+export interface GameStateLogEntry {
+  id: string;
+  timestamp: number;
+  message: string;
+  type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
+  source: string;
+  cards?: {
+    name: string;
+    imageUrl?: string;
+    imageArtCrop?: string;
+    manaCost?: string;
+    typeLine?: string;
+    oracleText?: string;
+  }[];
+}
+
 export interface GameState {
+  id?: string; // Game ID
   roomId: string;
   players: Record<string, PlayerState>;
   cards: Record<string, CardInstance>; // Keyed by instanceId
@@ -96,4 +114,6 @@ export interface GameState {
   priorityPlayerId?: string;
   attackersDeclared?: boolean;
   blockersDeclared?: boolean;
+  // Persistent game logs
+  logs?: GameStateLogEntry[];
 }

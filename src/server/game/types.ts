@@ -144,6 +144,8 @@ export interface StackObject {
 
 // Game log entry for client-side display
 export interface GameLogEntry {
+  id: string;
+  timestamp: number;
   message: string;
   type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
   source: string;
@@ -182,6 +184,9 @@ export interface StrictGameState {
 
   maxZ: number; // Visual depth (legacy support)
 
-  // Pending game logs to be sent to clients after action processing
+  // Persistent game log history (saved with game state)
+  logs: GameLogEntry[];
+
+  // Pending game logs to be sent to clients after action processing (not persisted)
   pendingLogs?: GameLogEntry[];
 }

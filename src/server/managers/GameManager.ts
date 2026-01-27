@@ -65,7 +65,8 @@ export class GameManager extends EventEmitter {
       landsPlayedThisTurn: 0,
       attackersDeclared: false,
       blockersDeclared: false,
-      maxZ: 100
+      maxZ: 100,
+      logs: []
     };
 
     console.log(`[GameManager] Creating game ${gameId} with players: ${players.map(p => `${p.name} (${p.id})`).join(', ')}`);

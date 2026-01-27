@@ -84,7 +84,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
   // Services
   const { showToast } = useToast();
-  const { addLog } = useGameLog();
+  const { addLog, addLogs, syncLogs } = useGameLog();
   // const { confirm } = useConfirm(); // Unused
 
   // Local Chat / UI State
@@ -310,14 +310,14 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
     // Handle game log events from the server (card movements, combat, etc.)
     const handleGameLog = (data: { logs: Array<{
+      id: string;
+      timestamp: number;
       message: string;
       type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
       source: string;
-      cards?: Array<{ name: string; imageUrl?: string; imageArtCrop?: string }>;
+      cards?: Array<{ name: string; imageUrl?: string; imageArtCrop?: string; manaCost?: string; typeLine?: string; oracleText?: string }>;
     }> }) => {
-      data.logs.forEach(log => {
-        addLog(log.message, log.type, log.source, log.cards);
-      });
+      addLogs(data.logs);
     };
 
     socket.on('game_error', handleGameError);
@@ -328,7 +328,14 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       socket.off('game_notification', handleGameNotification);
       socket.off('game_log', handleGameLog);
     };
-  }, [currentPlayerId, showToast, addLog]);
+  }, [currentPlayerId, showToast, addLog, addLogs]);
+
+  // Sync logs from game state on initial load or reconnection
+  useEffect(() => {
+    if (gameState?.logs && gameState.logs.length > 0) {
+      syncLogs(gameState.logs);
+    }
+  }, [gameState?.id, syncLogs]); // Only sync when game ID changes (new game or reconnect)
 
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
