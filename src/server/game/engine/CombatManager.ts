@@ -28,7 +28,7 @@ export class CombatManager {
     attackers.forEach(({ attackerId, targetId }) => {
       const card = state.cards[attackerId];
       if (!card || card.controllerId !== playerId || card.zone !== 'battlefield') throw new Error(`Invalid attacker ${attackerId}`);
-      if (!card.types.includes('Creature')) throw new Error(`${card.name} is not a creature.`);
+      if (!card.types?.includes('Creature')) throw new Error(`${card.name} is not a creature.`);
 
       // Summoning Sickness
       const hasHaste = card.keywords.includes('Haste');

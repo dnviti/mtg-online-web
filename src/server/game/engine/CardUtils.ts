@@ -20,8 +20,8 @@ export class CardUtils {
 
   static canAttach(source: any, target: any): boolean {
     if (this.isAura(source)) {
-      if (source.oracleText?.toLowerCase().includes('enchant land')) return target.types.includes('Land');
-      return target.types.includes('Creature');
+      if (source.oracleText?.toLowerCase().includes('enchant land')) return target.types?.includes('Land') ?? false;
+      return target.types?.includes('Creature') ?? false;
     }
     return true;
   }

@@ -63,7 +63,7 @@ export class ManaUtils {
       c.controllerId === playerId &&
       c.zone === 'battlefield' &&
       !c.tapped &&
-      (c.types.includes('Land') || c.typeLine?.includes('Land'))
+      (c.types?.includes('Land') || c.typeLine?.includes('Land'))
     );
 
     const landsToTap: string[] = []; // List of IDs
@@ -170,7 +170,7 @@ export class ManaUtils {
   // Helper: Get ALL colors a card can produce
   static getAvailableManaColors(card: any): string[] {
     // 0. Type Guard for Land
-    if (!card.typeLine?.includes('Land') && !card.types.includes('Land')) return [];
+    if (!card.typeLine?.includes('Land') && !card.types?.includes('Land')) return [];
 
     // 1. Check Definition (Scryfall Data)
     if (card.definition?.produced_mana && Array.isArray(card.definition.produced_mana)) {

@@ -400,14 +400,32 @@ export class ActionHandler {
   static tapCard(state: StrictGameState, _playerId: string, cardId: string) {
     const card = state.cards[cardId];
     if (!card) throw new Error("Card not found");
-    // Basic validation? Tapping usually doesn't use stack unless ability.
-    // This is "manual tap" often used in sandbox or visual cues.
-    // If strict rules enforced, might restrict. For now, allow toggle.
+
+    // If tapping a land on the battlefield, automatically add mana
+    if (!card.tapped && card.zone === 'battlefield' && (card.types?.includes('Land') || card.typeLine?.includes('Land'))) {
+      const availableColors = ManaUtils.getAvailableManaColors(card);
+
+      if (availableColors.length > 0) {
+        card.tapped = true;
+
+        // For lands that produce a single color, automatically add it
+        if (availableColors.length === 1) {
+          ManaUtils.addMana(state, _playerId, { color: availableColors[0], amount: 1 });
+          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} and added ${availableColors[0]} mana`);
+        } else {
+          // For lands that produce multiple colors, add the first color
+          // (In the future, we could prompt the player to choose)
+          const colorToProduce = availableColors[0];
+          ManaUtils.addMana(state, _playerId, { color: colorToProduce, amount: 1 });
+          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} and added ${colorToProduce} mana (options: ${availableColors.join(', ')})`);
+        }
+        return;
+      }
+    }
+
+    // For non-lands or untapping, just toggle the tap state
     card.tapped = !card.tapped;
     console.log(`[ActionHandler] Player ${_playerId} ${card.tapped ? 'tapped' : 'untapped'} ${card.name}`);
-    // Tapping doesn't use stack or priority reset usually in manual mode. 
-    // But if used for ability, `activateAbility` handles it.
-    // This is likely visual toggle.
   }
 
   static activateAbility(state: StrictGameState, playerId: string, sourceId: string, abilityIndex: number, targets: string[] = []) {
@@ -417,7 +435,7 @@ export class ActionHandler {
     if (!source) throw new Error("Source card not found");
 
     // Land Mana Ability Support
-    if (source.zone === 'battlefield' && (source.types.includes('Land') || source.typeLine?.includes('Land'))) {
+    if (source.zone === 'battlefield' && (source.types?.includes('Land') || source.typeLine?.includes('Land'))) {
       if (source.tapped) throw new Error("Land is already tapped.");
 
       // Determine color to produce

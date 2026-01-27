@@ -46,14 +46,23 @@ export class BotLogic {
       }
     }
 
-    // 2. Attack
-    if (game.phase === 'combat' && game.step === 'declare_attackers') {
+    // 2. Declare Attackers (only if active player and not yet declared)
+    if (game.phase === 'combat' && game.step === 'declare_attackers' && game.activePlayerId === player.id && !game.attackersDeclared) {
       // Declaring 0 attackers for now to pass
+      console.log(`[Bot] ${player.name} declaring attackers (none)`);
       new RulesEngine(game).declareAttackers(player.id, []);
       return;
     }
 
-    // 3. Pass Priority
+    // 3. Declare Blockers (only if defending player and not yet declared)
+    if (game.phase === 'combat' && game.step === 'declare_blockers' && game.activePlayerId !== player.id && !game.blockersDeclared) {
+      // Declaring 0 blockers for now (no blocking)
+      console.log(`[Bot] ${player.name} declaring blockers (none)`);
+      new RulesEngine(game).declareBlockers(player.id, []);
+      return;
+    }
+
+    // 4. Pass Priority
     new RulesEngine(game).passPriority(player.id);
   }
 }

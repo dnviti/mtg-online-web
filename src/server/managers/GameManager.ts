@@ -199,7 +199,9 @@ export class GameManager extends EventEmitter {
             engine.createToken(actorId, action.definition, action.position);
             break;
           case 'add_mana':
-            engine.addMana(actorId, { color: action.color, amount: 1 });
+            // Support both direct (action.color) and nested (action.mana) structures
+            const manaData = action.mana || { color: action.color, amount: action.amount || 1 };
+            engine.addMana(actorId, { color: manaData.color, amount: manaData.amount });
             break;
           case 'tap_card':
             engine.tapCard(actorId, action.cardId);
@@ -220,6 +222,7 @@ export class GameManager extends EventEmitter {
             break;
           case 'change_life':
           case 'life_change':
+          case 'update_life':
             engine.changeLife(actorId, action.amount);
             break;
           case 'move_card':
