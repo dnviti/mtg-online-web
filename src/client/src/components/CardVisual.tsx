@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ManaIcon } from './ManaIcon';
-import { Feather } from 'lucide-react';
+import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye } from 'lucide-react';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
@@ -304,27 +304,77 @@ export const CardVisual: React.FC<CardVisualProps> = ({
         <div className="absolute top-16 left-1 flex flex-col gap-1 z-20 pointer-events-none">
           {card.counters.map((c: any, i: number) => {
             if (c.count <= 0) return null;
-            let bgColor = "bg-slate-700";
-            let textColor = "text-white";
-            let borderColor = "border-slate-500";
-            let label = c.type;
 
-            if (c.type === '+1/+1') {
-              bgColor = "bg-emerald-600";
-              borderColor = "border-emerald-400";
-              label = `+ ${c.count}`;
-            } else if (c.type === '-1/-1') {
-              bgColor = "bg-red-600";
-              borderColor = "border-red-400";
-              label = `- ${c.count}`;
-            } else {
-              // Generic
-              label = `${c.count} ${c.type}`;
-            }
+            // Counter styling configuration
+            const counterConfig: Record<string, { bg: string; border: string; icon?: React.ReactNode; format: (count: number) => string }> = {
+              '+1/+1': {
+                bg: 'bg-emerald-600',
+                border: 'border-emerald-400',
+                format: (count) => `+${count}/+${count}`
+              },
+              '-1/-1': {
+                bg: 'bg-red-600',
+                border: 'border-red-400',
+                format: (count) => `-${count}/-${count}`
+              },
+              'loyalty': {
+                bg: 'bg-violet-600',
+                border: 'border-violet-400',
+                icon: <Gem size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'defense': {
+                bg: 'bg-amber-600',
+                border: 'border-amber-400',
+                icon: <Shield size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'charge': {
+                bg: 'bg-sky-600',
+                border: 'border-sky-400',
+                icon: <Zap size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'poison': {
+                bg: 'bg-lime-600',
+                border: 'border-lime-400',
+                icon: <Skull size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'blood': {
+                bg: 'bg-rose-700',
+                border: 'border-rose-500',
+                icon: <Droplet size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'flame': {
+                bg: 'bg-orange-600',
+                border: 'border-orange-400',
+                icon: <Flame size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'lore': {
+                bg: 'bg-amber-700',
+                border: 'border-amber-500',
+                icon: <Eye size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              }
+            };
+
+            const config = counterConfig[c.type.toLowerCase()] || {
+              bg: 'bg-slate-700',
+              border: 'border-slate-500',
+              format: (count: number) => `${count} ${c.type}`
+            };
 
             return (
-              <div key={i} className={`${bgColor} ${textColor} text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${borderColor} shadow-md flex items-center justify-center min-w-[24px]`}>
-                {label}
+              <div
+                key={i}
+                className={`${config.bg} text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${config.border} shadow-md flex items-center justify-center min-w-[24px]`}
+                title={`${c.count} ${c.type} counter${c.count !== 1 ? 's' : ''}`}
+              >
+                {config.icon}
+                {config.format(c.count)}
               </div>
             );
           })}

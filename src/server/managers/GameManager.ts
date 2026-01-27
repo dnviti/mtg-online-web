@@ -231,6 +231,13 @@ export class GameManager extends EventEmitter {
             // Allow manual movement of cards between zones
             engine.moveCardToZone(action.cardId, action.toZone, false, action.position, action.faceIndex);
             break;
+          case 'add_counter':
+            engine.addCounter(actorId, action.cardId, action.counterType, action.amount || 1);
+            break;
+          case 'remove_counter':
+            // Remove counter is just adding a negative amount
+            engine.addCounter(actorId, action.cardId, action.counterType, -(action.amount || 1));
+            break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }
