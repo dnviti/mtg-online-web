@@ -252,6 +252,9 @@ export class GameManager extends EventEmitter {
               console.warn(`[GameManager] ⚠️ Cannot delete non-token card: ${action.cardId}`);
             }
             break;
+          case 'restart_game':
+            GameLifecycle.restartGame(game);
+            break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }
