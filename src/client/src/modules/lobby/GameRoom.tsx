@@ -79,6 +79,9 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
     return localStorage.getItem('notifications_enabled') !== 'false';
   });
 
+  // Card preview from game log hover
+  const [logHoveredCard, setLogHoveredCard] = useState<{ name: string; imageUrl?: string; imageArtCrop?: string; manaCost?: string; typeLine?: string; oracleText?: string } | null>(null);
+
   // Services
   const { showToast } = useToast();
   const { addLog } = useGameLog();
@@ -305,11 +308,25 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       addLog(data.message, (data.type as any) || 'info', source);
     };
 
+    // Handle game log events from the server (card movements, combat, etc.)
+    const handleGameLog = (data: { logs: Array<{
+      message: string;
+      type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
+      source: string;
+      cards?: Array<{ name: string; imageUrl?: string; imageArtCrop?: string }>;
+    }> }) => {
+      data.logs.forEach(log => {
+        addLog(log.message, log.type, log.source, log.cards);
+      });
+    };
+
     socket.on('game_error', handleGameError);
     socket.on('game_notification', handleGameNotification);
+    socket.on('game_log', handleGameLog);
     return () => {
       socket.off('game_error', handleGameError);
       socket.off('game_notification', handleGameNotification);
+      socket.off('game_log', handleGameLog);
     };
   }, [currentPlayerId, showToast, addLog]);
 
@@ -348,7 +365,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
   const renderContent = () => {
     if (gameState) {
-      return <GameView gameState={gameState} currentPlayerId={currentPlayerId} format={room.format} />;
+      return <GameView gameState={gameState} currentPlayerId={currentPlayerId} format={room.format} logHoveredCard={logHoveredCard} />;
     }
 
     // Explicit check for playing status to show loader instead of lobby
@@ -653,7 +670,18 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 
           {activePanel === 'log' && (
             <div className="flex-1 flex flex-col min-h-0 bg-slate-950/50">
-              <GameLogPanel className="h-full border-t-0 bg-transparent" maxHeight="100%" />
+              <GameLogPanel
+                className="h-full border-t-0 bg-transparent"
+                maxHeight="100%"
+                onCardHover={(card) => setLogHoveredCard(card ? {
+                  name: card.name,
+                  imageUrl: card.imageUrl,
+                  imageArtCrop: card.imageArtCrop,
+                  manaCost: card.manaCost,
+                  typeLine: card.typeLine,
+                  oracleText: card.oracleText
+                } : null)}
+              />
             </div>
           )}
         </div>

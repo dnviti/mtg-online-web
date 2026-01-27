@@ -14,6 +14,7 @@ interface SidePanelPreviewProps {
   className?: string;
   children?: React.ReactNode;
   showLog?: boolean;
+  onLogCardHover?: (card: VisualCard | null) => void;
 }
 
 export const SidePanelPreview = forwardRef<HTMLDivElement, SidePanelPreviewProps>(({
@@ -25,6 +26,7 @@ export const SidePanelPreview = forwardRef<HTMLDivElement, SidePanelPreviewProps
   className,
   children,
   showLog = true,
+  onLogCardHover,
 }, ref) => {
   // If collapsed, render the collapsed strip
   if (isCollapsed) {
@@ -152,7 +154,25 @@ export const SidePanelPreview = forwardRef<HTMLDivElement, SidePanelPreviewProps
 
       {/* Game Action Log - Fixed at bottom */}
       {showLog && (
-        <GameLogPanel className="w-full shrink-0 border-t border-slate-800" maxHeight="30%" />
+        <GameLogPanel
+          className="w-full shrink-0 border-t border-slate-800"
+          maxHeight="30%"
+          onCardHover={onLogCardHover ? (card) => {
+            if (card) {
+              // Convert CardReference to VisualCard format for the preview
+              onLogCardHover({
+                name: card.name,
+                imageUrl: card.imageUrl || card.imageArtCrop || '',
+                imageArtCrop: card.imageArtCrop,
+                manaCost: card.manaCost,
+                typeLine: card.typeLine,
+                oracleText: card.oracleText,
+              } as VisualCard);
+            } else {
+              onLogCardHover(null);
+            }
+          } : undefined}
+        />
       )}
     </div>
   );

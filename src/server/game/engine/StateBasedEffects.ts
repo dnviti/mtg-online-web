@@ -1,5 +1,6 @@
 import { StrictGameState } from '../types';
 import { Layers } from './Layers';
+import { GameLogger } from './GameLogger';
 
 /**
  * StateBasedEffects (SBA)
@@ -42,6 +43,7 @@ export class StateBasedEffects {
       // 704.5f Toughness 0 or less
       if (c.toughness <= 0) {
         console.log(`SBA: ${c.name} put to GY (Zero Toughness).`);
+        GameLogger.logCreatureDied(state, c, 'zero toughness');
         c.zone = 'graveyard';
         sbaPerformed = true;
         continue;
@@ -50,6 +52,7 @@ export class StateBasedEffects {
       // 704.5g Lethal Damage
       if (c.damageMarked >= c.toughness && !c.supertypes?.includes('Indestructible')) {
         console.log(`SBA: ${c.name} destroyed (Lethal Damage: ${c.damageMarked}/${c.toughness}).`);
+        GameLogger.logCreatureDied(state, c, 'lethal damage');
         c.zone = 'graveyard';
         sbaPerformed = true;
       }
@@ -62,12 +65,14 @@ export class StateBasedEffects {
       if (c.zone === 'battlefield' && c.types?.includes('Enchantment') && c.subtypes?.includes('Aura')) {
         if (!c.attachedTo) {
           console.log(`SBA: ${c.name} (Aura) unattached. Destroyed.`);
+          GameLogger.logLeavesBattlefield(state, c, 'graveyard', 'unattached');
           c.zone = 'graveyard';
           sbaPerformed = true;
         } else {
           const target = cards[c.attachedTo];
           if (!target || target.zone !== 'battlefield') {
             console.log(`SBA: ${c.name} (Aura) target invalid. Destroyed.`);
+            GameLogger.logLeavesBattlefield(state, c, 'graveyard', 'target invalid');
             c.zone = 'graveyard';
             sbaPerformed = true;
           }
@@ -93,6 +98,7 @@ export class StateBasedEffects {
     Object.entries(cards).forEach(([id, c]) => {
       if (c.isToken && c.zone !== 'battlefield') {
         console.log(`SBA: Token ${c.name} ceased to exist (left battlefield to ${c.zone}).`);
+        GameLogger.log(state, `{${c.name}} token ceased to exist`, 'zone', 'Game', [c]);
         tokensToRemove.push(id);
         sbaPerformed = true;
       }

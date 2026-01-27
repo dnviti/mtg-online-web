@@ -168,6 +168,9 @@ export class GameManager extends EventEmitter {
         return null;
       }
 
+      // Clear any stale pending logs from previous saves
+      game.pendingLogs = [];
+
       const engine = new RulesEngine(game);
       console.log(`[GameManager] Current Game Phase: ${game.phase}, Step: ${game.step}`);
 

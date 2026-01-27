@@ -1,16 +1,26 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
+export interface CardReference {
+  name: string;
+  imageUrl?: string;
+  imageArtCrop?: string;
+  manaCost?: string;
+  typeLine?: string;
+  oracleText?: string;
+}
+
 export interface GameLogEntry {
   id: string;
   timestamp: number;
   message: string;
   source: 'System' | 'Player' | 'Opponent' | string;
-  type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning';
+  type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
+  cards?: CardReference[];
 }
 
 interface GameLogContextType {
   logs: GameLogEntry[];
-  addLog: (message: string, type?: GameLogEntry['type'], source?: string) => void;
+  addLog: (message: string, type?: GameLogEntry['type'], source?: string, cards?: CardReference[]) => void;
   clearLogs: () => void;
 }
 
@@ -19,13 +29,14 @@ const GameLogContext = createContext<GameLogContextType | undefined>(undefined);
 export const GameLogProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [logs, setLogs] = useState<GameLogEntry[]>([]);
 
-  const addLog = useCallback((message: string, type: GameLogEntry['type'] = 'info', source: string = 'System') => {
+  const addLog = useCallback((message: string, type: GameLogEntry['type'] = 'info', source: string = 'System', cards?: CardReference[]) => {
     const newLog: GameLogEntry = {
       id: Math.random().toString(36).substr(2, 9),
       timestamp: Date.now(),
       message,
       source,
-      type
+      type,
+      cards
     };
     setLogs(prev => [...prev, newLog]);
   }, []);

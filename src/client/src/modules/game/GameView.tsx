@@ -61,9 +61,10 @@ interface GameViewProps {
   gameState: GameState;
   currentPlayerId: string;
   format?: string;
+  logHoveredCard?: { name: string; imageUrl?: string; imageArtCrop?: string; manaCost?: string; typeLine?: string; oracleText?: string } | null;
 }
 
-export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format }) => {
+export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format, logHoveredCard }) => {
   const hasPriority = gameState.priorityPlayerId === currentPlayerId;
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
@@ -850,7 +851,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
         {/* Zoom Sidebar */}
         <SidePanelPreview
           ref={sidebarRef}
-          card={hoveredCard}
+          card={hoveredCard || (logHoveredCard ? {
+            name: logHoveredCard.name,
+            imageUrl: logHoveredCard.imageUrl || '',
+            imageArtCrop: logHoveredCard.imageArtCrop,
+            manaCost: logHoveredCard.manaCost,
+            typeLine: logHoveredCard.typeLine,
+            oracleText: logHoveredCard.oracleText
+          } as CardInstance : null)}
           width={sidebarWidth}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={setIsSidebarCollapsed}

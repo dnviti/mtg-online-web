@@ -142,6 +142,21 @@ export interface StackObject {
   faceIndex?: number; // DFC Support
 }
 
+// Game log entry for client-side display
+export interface GameLogEntry {
+  message: string;
+  type: 'info' | 'action' | 'combat' | 'error' | 'success' | 'warning' | 'zone';
+  source: string;
+  cards?: {
+    name: string;
+    imageUrl?: string;
+    imageArtCrop?: string;
+    manaCost?: string;
+    typeLine?: string;
+    oracleText?: string;
+  }[];
+}
+
 export interface StrictGameState {
   id: string; // Game/Room ID
   roomId: string;
@@ -166,4 +181,7 @@ export interface StrictGameState {
   blockersDeclared?: boolean;
 
   maxZ: number; // Visual depth (legacy support)
+
+  // Pending game logs to be sent to clients after action processing
+  pendingLogs?: GameLogEntry[];
 }

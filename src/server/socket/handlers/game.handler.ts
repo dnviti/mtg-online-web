@@ -1,5 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager, gameManager, scryfallService } from '../../singletons';
+import { GameLogger } from '../../game/engine/GameLogger';
 
 export const registerGameHandlers = (io: Server, socket: Socket) => {
   const getContext = () => roomManager.getPlayerBySocket(socket.id);
@@ -182,6 +183,11 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
     const game = await gameManager.handleAction(targetGameId, action, player.id);
     if (game) {
+      // Emit any pending game logs
+      const logs = GameLogger.flushLogs(game);
+      if (logs.length > 0) {
+        io.to(game.roomId).emit('game_log', { logs });
+      }
       io.to(game.roomId).emit('game_update', game);
     }
   });
@@ -202,6 +208,11 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       const game = await gameManager.handleStrictAction(targetGameId, action, player.id);
       if (game) {
         console.log(`[Socket] ✅ Strict action handled. Emitting update to room ${game.roomId}`);
+        // Emit any pending game logs
+        const logs = GameLogger.flushLogs(game);
+        if (logs.length > 0) {
+          io.to(game.roomId).emit('game_log', { logs });
+        }
         io.to(game.roomId).emit('game_update', game);
       } else {
         console.warn(`[Socket] ⚠️ handleStrictAction returned null/undefined for game ${targetGameId}`);

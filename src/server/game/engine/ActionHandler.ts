@@ -2,6 +2,7 @@ import { StrictGameState } from '../types';
 import { CardUtils } from './CardUtils';
 import { ManaUtils } from './ManaUtils';
 import { StateBasedEffects } from './StateBasedEffects';
+import { GameLogger } from './GameLogger';
 
 /**
  * ActionHandler
@@ -17,15 +18,27 @@ export class ActionHandler {
    * Moves a card from one zone to another, handling all side-effects of zone transitions
    * such as clearing memory, resetting counters, and detaching auras/equipment.
    */
-  static moveCardToZone(state: StrictGameState, cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }, faceIndex?: number) {
+  static moveCardToZone(state: StrictGameState, cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }, faceIndex?: number, skipLog = false) {
     const card = state.cards[cardId];
     if (card) {
+      const fromZone = card.zone;
 
       if (toZone === 'battlefield' && card.zone !== 'battlefield') {
         card.controlledSinceTurn = state.turnCount;
       }
 
       card.zone = toZone;
+
+      // Log zone changes (skip library shuffling and initial setup)
+      if (!skipLog && fromZone !== toZone && fromZone !== 'library' && toZone !== 'library') {
+        if (fromZone === 'battlefield') {
+          GameLogger.logLeavesBattlefield(state, card, toZone);
+        } else if (toZone === 'battlefield') {
+          GameLogger.logEntersBattlefield(state, card);
+        } else {
+          GameLogger.logZoneChange(state, card, fromZone, toZone);
+        }
+      }
       card.faceDown = faceDown;
       card.tapped = false;
 
@@ -125,10 +138,14 @@ export class ActionHandler {
 
     if (!typeLine.includes('Land') && !types.includes('Land')) throw new Error("Not a land card.");
 
-    this.moveCardToZone(state, card.instanceId, 'battlefield', false, position, faceIndex);
+    const playerName = state.players[playerId]?.name || 'Unknown';
+
+    // moveCardToZone with skipLog=true to avoid duplicate "enters battlefield" log
+    this.moveCardToZone(state, card.instanceId, 'battlefield', false, position, faceIndex, true);
     state.landsPlayedThisTurn++;
 
     console.log(`[ActionHandler] Player ${playerId} played land: "${card.name}" (Type: ${typeLine})`);
+    GameLogger.logPlayLand(state, card, playerName);
 
     ActionHandler.resetPriority(state, playerId);
     return true;
@@ -221,6 +238,11 @@ export class ActionHandler {
     } as any);
 
     console.log(`[ActionHandler] Player ${playerId} cast spell: "${name}" (Type: ${typeLine})`);
+
+    // Log spell cast with targets
+    const playerName = state.players[playerId]?.name || 'Unknown';
+    const targetCards = targets.map(t => state.cards[t]).filter(Boolean);
+    GameLogger.logCastSpell(state, card, playerName, targetCards);
 
     ActionHandler.resetPriority(state, playerId);
     return true;
@@ -375,6 +397,10 @@ export class ActionHandler {
     };
     state.cards[token.instanceId] = token;
     console.log(`[ActionHandler] Player ${playerId} created token: ${token.name} (${typeLine}) P/T: ${power}/${toughness}`);
+
+    const playerName = state.players[playerId]?.name || 'Unknown';
+    GameLogger.logTokenCreated(state, token, playerName);
+
     StateBasedEffects.process(state);
   }
 
@@ -426,6 +452,10 @@ export class ActionHandler {
     }
 
     console.log(`[ActionHandler] Player ${_playerId} added ${count} ${type} counter(s) to ${card.name}`);
+
+    const playerName = state.players[_playerId]?.name || 'Unknown';
+    GameLogger.logCounterChange(state, card, type, count, playerName);
+
     StateBasedEffects.process(state);
   }
 

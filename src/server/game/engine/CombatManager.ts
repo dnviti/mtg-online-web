@@ -1,5 +1,5 @@
 import { StrictGameState } from '../types';
-
+import { GameLogger } from './GameLogger';
 
 /**
  * CombatManager
@@ -45,6 +45,10 @@ export class CombatManager {
       }
 
       card.attacking = targetId;
+
+      // Log attacker declaration
+      const playerName = state.players[playerId]?.name || 'Unknown';
+      GameLogger.logDeclareAttacker(state, card, playerName);
     });
 
     const attackerNames = attackers.map(a => state.cards[a.attackerId]?.name || a.attackerId).join(", ");
@@ -70,6 +74,10 @@ export class CombatManager {
 
       if (!blocker.blocking) blocker.blocking = [];
       blocker.blocking.push(attackerId);
+
+      // Log blocker declaration
+      const playerName = state.players[playerId]?.name || 'Unknown';
+      GameLogger.logDeclareBlocker(state, blocker, attacker, playerName);
     });
 
     const blockerDetails = declaredBlockers.map(b => {
@@ -95,10 +103,12 @@ export class CombatManager {
         // Attacker -> Blocker
         console.log(`${attacker.name} deals ${attacker.power} damage to ${blocker.name}`);
         blocker.damageMarked = (blocker.damageMarked || 0) + attacker.power;
+        GameLogger.logCombatDamage(state, attacker, blocker, attacker.power);
 
         // Blocker -> Attacker
         console.log(`${blocker.name} deals ${blocker.power} damage to ${attacker.name}`);
         attacker.damageMarked = (attacker.damageMarked || 0) + blocker.power;
+        GameLogger.logCombatDamage(state, blocker, attacker, blocker.power);
 
       } else {
         // Unblocked
@@ -107,6 +117,7 @@ export class CombatManager {
         if (targetPlayer) {
           console.log(`${attacker.name} deals ${attacker.power} damage to Player ${targetPlayer.name}`);
           targetPlayer.life -= attacker.power;
+          GameLogger.logCombatDamage(state, attacker, targetId, attacker.power);
         }
       }
     }
