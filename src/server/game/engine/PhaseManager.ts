@@ -163,6 +163,23 @@ export class PhaseManager {
 
     if (step === 'declare_blockers') {
       const defendingPlayerId = state.turnOrder.find(id => id !== activePlayerId);
+
+      // Check if the defending player has any untapped creatures that can block
+      const potentialBlockers = Object.values(state.cards).filter(c =>
+        c.controllerId === defendingPlayerId &&
+        c.zone === 'battlefield' &&
+        c.types?.includes('Creature') &&
+        !c.tapped
+      );
+
+      if (potentialBlockers.length === 0) {
+        // No creatures to block with - auto-advance to combat damage
+        console.log(`[PhaseManager] Defending player ${defendingPlayerId} has no creatures to block. Auto-advancing.`);
+        state.blockersDeclared = true;
+        this.advanceStep(state);
+        return;
+      }
+
       if (defendingPlayerId && state.priorityPlayerId !== defendingPlayerId) {
         state.priorityPlayerId = defendingPlayerId;
         Object.values(state.players).forEach(p => p.hasPassed = false);
