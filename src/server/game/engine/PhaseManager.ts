@@ -93,13 +93,20 @@ export class PhaseManager {
     if (step === 'mulligan') {
       // Logic moved here
       // Keeping for logging if needed but currently unused in logic below (except checks)
-      console.log(`[RulesEngine] Performing Mulligan TBA.`);
+      console.log(`[PhaseManager] Performing Mulligan TBA for game ${state.id}`);
 
       Object.values(state.players).forEach(p => {
         const hand = Object.values(state.cards).filter(c => c.ownerId === p.id && c.zone === 'hand');
+        const library = Object.values(state.cards).filter(c => c.ownerId === p.id && c.zone === 'library');
+        console.log(`[PhaseManager] Player ${p.name} (${p.id}): Hand=${hand.length}, Library=${library.length}, HandKept=${p.handKept}`);
+
         if (hand.length === 0 && !p.handKept) {
-          console.log(`[PhaseManager] Player ${p.name} (${p.id}) has 0 cards. Drawing 7.`);
-          for (let i = 0; i < 7; i++) ActionHandler.drawCard(state, p.id);
+          if (library.length === 0) {
+            console.error(`[PhaseManager] ❌ Player ${p.name} (${p.id}) has NO CARDS in library! Cannot draw starting hand.`);
+          } else {
+            console.log(`[PhaseManager] Player ${p.name} (${p.id}) has 0 cards in hand. Drawing 7 from library of ${library.length}.`);
+            for (let i = 0; i < 7; i++) ActionHandler.drawCard(state, p.id);
+          }
         }
       });
 

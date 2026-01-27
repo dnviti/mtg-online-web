@@ -64,19 +64,10 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
   const imageSrc = useMemo(() => {
     // Robustly resolve Image Source based on viewMode
-    // We prioritize Local Cache using Scryfall ID as per strict rules
+    // PRIORITY: Local Cache using Scryfall ID, then fallback to remote URIs
 
-    // Use top-level properties if available (common in DraftCard / Game Card objects)
-    const setCode = card.setCode || card.set || card.definition?.set;
-    // PRIORITY FIX: definition.id must take precedence over card.id because card.id can be an instance ID (e.g. land-G-...)
-    const cardId = card.scryfallId || card.definition?.id || (card.id && card.id.length > 20 && !card.id.startsWith('land-') ? card.id : null);
-
-    // Detect Face
-    // If activeFaceIndex is present, we try to use it.
-    const faces = card.definition?.card_faces || card.card_faces;
-    const faceIndex = card.activeFaceIndex ?? 0;
-    const activeFace = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
-    const faceImageUris = activeFace?.image_uris;
+    // In the future if we support multi-faced cards in Redis properly, we might need face-specific local paths.
+    // For now, the doc says "local_path_full" and "local_path_crop" are on the root object.
 
     if (viewMode === 'cutout' || viewMode === 'squared') {
       // 1. Check Server-Provided Paths (Redis Sourced)
@@ -84,33 +75,32 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       if (card.definition?.local_path_crop) return card.definition.local_path_crop;
       if (card.imageArtCrop) return card.imageArtCrop;
 
-      // 2. Fallback to Scryfall URIs / Computed
-      if (faceIndex > 0 && faceImageUris?.art_crop) return faceImageUris.art_crop;
+      // 2. FALLBACK: Remote Scryfall URIs
+      // If local paths are not available, fallback to remote art_crop
+      if (card.definition?.image_uris?.art_crop) return card.definition.image_uris.art_crop;
+      if (card.image_uris?.art_crop) return card.image_uris.art_crop;
+      if (card.card_faces?.[0]?.image_uris?.art_crop) return card.card_faces[0].image_uris.art_crop;
 
-      // Heuristic Fallback
-      if (setCode && cardId) {
-        // If we don't have explicit paths but have ID, we might guess (BUT this is risky if file missing)
-        // Better to rely on what Server gave us.
-      }
-      return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageUrl || '';
+      return '';
     } else {
       // Normal / Full View
       // 1. Check Server-Provided Paths (Redis Sourced)
       // PRIORITY: definition.local_path_full
       if (card.definition?.local_path_full) return card.definition.local_path_full;
       if (card.imageUrl) return card.imageUrl;
-      if (card.image) return card.image;
+      // Some legacy or draft objects might still have 'image' prop, check it if it matches pattern
+      if (card.image && card.image.startsWith('/cards/images/')) return card.image;
 
-      // 2. Fallback
-      if (faceIndex > 0 && faceImageUris?.normal) return faceImageUris.normal;
-
-      const scryfallUri = faceImageUris?.normal || card.image_uris?.normal || '';
-      if (scryfallUri) return scryfallUri;
-
-      // 3. Fallback
-      // User explicitly requested to remove hardcoded paths and rely on Redis/Server.
-      // If we are here, it means we don't have a local path and no explicit URL.
-      // We will return empty or throw a visual warning, but we must NOT construct a path manually.
+      // 2. FALLBACK: Remote Scryfall URIs
+      // If local paths are not available, fallback to remote normal/large/png
+      if (card.definition?.image_uris?.normal) return card.definition.image_uris.normal;
+      if (card.definition?.image_uris?.large) return card.definition.image_uris.large;
+      if (card.definition?.image_uris?.png) return card.definition.image_uris.png;
+      if (card.image_uris?.normal) return card.image_uris.normal;
+      if (card.image_uris?.large) return card.image_uris.large;
+      if (card.image_uris?.png) return card.image_uris.png;
+      if (card.card_faces?.[0]?.image_uris?.normal) return card.card_faces[0].image_uris.normal;
+      if (card.card_faces?.[0]?.image_uris?.large) return card.card_faces[0].image_uris.large;
 
       return '';
     }

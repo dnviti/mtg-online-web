@@ -28,6 +28,8 @@ export interface MinimalCardFace {
 
 export interface MinimalScryfallCard {
   id: string;
+  scryfallId?: string; // Preserve Scryfall ID for Redis lookups
+  oracle_id?: string; // Preserve Oracle ID for card identification
   name: string;
   set: string;
   type_line: string;

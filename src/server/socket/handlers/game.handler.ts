@@ -34,8 +34,13 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       console.log(`[GameStart] Resolved ${cardMap.size} unique cards from service.`);
 
       // Load decks for all players
+      console.log(`[GameStart] Starting deck loading for ${updatedRoom.players.length} players`);
+      console.log(`[GameStart] Decks provided:`, decks ? Object.keys(decks) : 'none');
+
       await Promise.all(updatedRoom.players.map(async p => {
         let finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
+
+        console.log(`[GameStart] Player ${p.name} (${p.id}): deck=${finalDeck ? finalDeck.length : 'undefined'} cards`);
 
         if (finalDeck && Array.isArray(finalDeck)) {
           console.log(`[GameStart] Loading deck for ${p.name} (${p.id}): ${finalDeck.length} cards.`);

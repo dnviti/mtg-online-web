@@ -28,6 +28,8 @@ export class CardOptimization {
 
     const optimized: MinimalScryfallCard = {
       id: fullCard.id,
+      scryfallId: fullCard.scryfallId || fullCard.id, // Preserve Scryfall ID
+      oracle_id: fullCard.oracle_id, // Preserve Oracle ID
       name: fullCard.name,
       set: fullCard.set,
       type_line: fullCard.type_line,

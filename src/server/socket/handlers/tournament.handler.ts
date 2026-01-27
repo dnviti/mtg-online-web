@@ -69,6 +69,18 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
 
     if (!room.tournament) return;
 
+    console.log(`[TournamentHandler] Player ${player.name} (${player.id}) submitted deck for match ${matchId} with ${deck ? deck.length : 0} cards`);
+
+    // Validate deck is not empty
+    if (!deck || !Array.isArray(deck) || deck.length === 0) {
+      console.error(`[TournamentHandler] ❌ Player ${player.name} submitted EMPTY deck for match ${matchId}!`);
+      socket.emit('game_error', {
+        message: 'Cannot start match with empty deck. Please build a deck first.',
+        userId: player.id
+      });
+      return;
+    }
+
     // Stateless update
     const readyState = tournamentManager.setMatchReady(room.tournament, matchId, player.id, deck);
 
@@ -94,6 +106,12 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
 
             const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
             const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);
+
+            console.log(`[TournamentStart] Match ${matchId}: Player1 ${p1.name} deck=${d1.length} cards, Player2 ${p2.name} deck=${d2.length} cards`);
+
+            if (d1.length === 0 || d2.length === 0) {
+              console.error(`[TournamentStart] ❌ Match ${matchId}: One or both players have EMPTY decks! P1=${d1.length}, P2=${d2.length}`);
+            }
 
             // 1. Gather all Scryfall IDs from all decks
             const allIdentifiers: { id: string }[] = [];

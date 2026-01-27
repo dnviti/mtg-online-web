@@ -4,6 +4,7 @@ import { ScryfallCard } from './ScryfallService';
 export interface DraftCard {
   id: string; // Internal UUID
   scryfallId: string;
+  oracle_id?: string; // Scryfall Oracle ID
   name: string;
   rarity: string;
   typeLine?: string;
@@ -18,6 +19,9 @@ export interface DraftCard {
   edhrecRank?: number; // Added EDHREC Rank
   oracleText?: string;
   manaCost?: string;
+  // Local image paths for Redis-cached images
+  local_path_full?: string;
+  local_path_crop?: string;
   [key: string]: any; // Allow extended props
 }
 
@@ -96,6 +100,7 @@ export class PackGeneratorService {
         // Overwrite/Set specific Draft properties
         id: crypto.randomUUID(),
         scryfallId: cardData.id,
+        oracle_id: cardData.oracle_id, // Preserve oracle ID
         name: cardData.name,
         rarity: rarity,
         typeLine: typeLine,
@@ -108,9 +113,12 @@ export class PackGeneratorService {
         setType: setType,
         finish: cardData.finish,
         edhrecRank: cardData.edhrec_rank, // Map EDHREC Rank
-        // Extended Metadata mappingl',
+        // Extended Metadata mapping
         oracleText: cardData.oracle_text || cardData.card_faces?.[0]?.oracle_text || '',
         manaCost: cardData.mana_cost || cardData.card_faces?.[0]?.mana_cost || '',
+        // Explicitly preserve local paths (critical for image display)
+        local_path_full: cardData.local_path_full,
+        local_path_crop: cardData.local_path_crop,
         damageMarked: 0,
         controlledSinceTurn: 0
       };
