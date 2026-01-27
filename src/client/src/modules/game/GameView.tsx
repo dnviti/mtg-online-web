@@ -77,6 +77,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   const [radialOptions, setRadialOptions] = useState<RadialOption[] | null>(null);
   const [radialPosition, setRadialPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [isYielding, setIsYielding] = useState(false);
+  const [manualYield, setManualYield] = useState(() => {
+    // Load from localStorage, default to false (auto mode)
+    return localStorage.getItem('game_manualYield') === 'true';
+  });
 
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [viewingZone, setViewingZone] = useState<string | null>(null);
@@ -160,31 +164,40 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   };
 
   useEffect(() => {
-    // Smart Auto-Pass Logic for NAP
+    // Smart Auto-Pass Logic
+    // Only auto-pass when it's the BOT's turn, not the human player's turn
+
     if (!gameState.activePlayerId) return;
     const amActivePlayer = gameState.activePlayerId === currentPlayerId;
     const amPriorityPlayer = gameState.priorityPlayerId === currentPlayerId;
 
-    // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
-    // Logic: Auto-Pass.
-    if (!amActivePlayer && amPriorityPlayer && !stopRequested) {
-      if (gameState.step === 'declare_blockers') {
-        console.log("[Smart Auto-Pass] Skipped: Enforce manual blocking declaration.");
-        return; // Explicit wait for blockers
-      }
+    // NEVER auto-pass on your own turn - you need time to play lands, cast spells, etc.
+    if (amActivePlayer) {
+      return;
+    }
 
-      console.log("[Smart Auto-Pass] Auto-passing priority as NAP (No Suspend requested).Step:", gameState.step);
+    // It's the opponent's (bot's) turn - check if manual yield is enabled
+    if (manualYield) {
+      // Manual mode: user wants full control even during bot turns
+      return;
+    }
+
+    // Skip auto-pass during critical decision points (blocking)
+    if (gameState.step === 'declare_blockers') {
+      return;
+    }
+
+    // Auto-pass during bot's turn (we are NAP - Non-Active Player)
+    if (amPriorityPlayer && !stopRequested) {
+      // Random delay between 500-1200ms to simulate human-like response time
+      const delay = 500 + Math.random() * 700;
+      console.log(`[Smart Auto-Pass] Auto-passing priority during bot's turn (Phase: ${gameState.phase}, Step: ${gameState.step}, delay: ${Math.round(delay)}ms)`);
       const timer = setTimeout(() => {
-        // Double check state hasn't changed in the timeout window
-        if (gameState.step === 'declare_blockers') return;
-        // Also check if we suddenly requested stop/suspend during timeout
-        // (Since effect re-runs on stopRequested change, this timeout will be cleared anyway, but safe check)
-
         socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
-      }, 800);
+      }, delay);
       return () => clearTimeout(timer);
     }
-  }, [gameState.activePlayerId, gameState.priorityPlayerId, stopRequested, currentPlayerId, gameState.step]);
+  }, [gameState.activePlayerId, gameState.priorityPlayerId, stopRequested, currentPlayerId, gameState.step, gameState.phase, manualYield]);
   // If I access `isYielding` inside `setIsYielding`, I don't need it in dependency.
   // But wait, the `if (['declare_...'].includes)` logic needs to potentially set it false.
   // setIsYielding(false) is fine.
@@ -263,6 +276,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   useEffect(() => {
     localStorage.setItem('game_sidebarCollapsed', isSidebarCollapsed.toString());
   }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('game_manualYield', manualYield.toString());
+  }, [manualYield]);
 
   useEffect(() => {
     localStorage.setItem('game_sidebarWidth', sidebarWidth.toString());
@@ -1323,6 +1340,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
               onYieldToggle={() => setIsYielding(!isYielding)}
               stopRequested={stopRequested}
               onToggleSuspend={onToggleSuspend}
+              manualYield={manualYield}
+              onManualYieldToggle={() => setManualYield(!manualYield)}
             />
           </div>
 

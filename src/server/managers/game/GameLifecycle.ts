@@ -61,7 +61,11 @@ export class GameLifecycle {
     engine.startGame();
   }
 
+  /**
+   * Triggers bot processing loop - bots will continue taking actions
+   * until a human player has priority.
+   */
   static triggerBotCheck(game: StrictGameState) {
-    BotLogic.processActions(game);
+    BotLogic.processActionsLoop(game);
   }
 }
