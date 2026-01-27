@@ -51,7 +51,7 @@ export const useGameSocket = (): GameSocketHook => {
   // Listen for Game/Room Updates
   useEffect(() => {
     const onGameUpdate = (arg1: any, arg2?: any) => {
-      // Handle both (roomId, game) and (game) signatures to be safe, 
+      // Handle both (roomId, game) and (game) signatures to be safe,
       // but prioritize (game) as per recent server handler observations.
       const game = (arg2 && typeof arg2 === 'object') ? arg2 : arg1;
       // If arg1 is the game, utilize it.
@@ -76,16 +76,30 @@ export const useGameSocket = (): GameSocketHook => {
       setError(msg);
     }
 
+    const onRoomClosed = (data: { message: string }) => {
+      console.log('[useGameSocket] Room closed by host:', data.message);
+      setError(data.message);
+      // Clear room state after a delay to allow user to see the message
+      setTimeout(() => {
+        setActiveRoom(null);
+        setGameState(null);
+        setDraftState(null);
+        localStorage.removeItem('active_room_id');
+      }, 2000);
+    };
+
     socketService.socket.on('game_update', onGameUpdate);
     socketService.socket.on('room_update', onRoomUpdate);
     socketService.socket.on('draft_update', onDraftUpdate);
     socketService.socket.on('error', onError);
+    socketService.socket.on('room_closed', onRoomClosed);
 
     return () => {
       socketService.socket.off('game_update', onGameUpdate);
       socketService.socket.off('room_update', onRoomUpdate);
       socketService.socket.off('draft_update', onDraftUpdate);
       socketService.socket.off('error', onError);
+      socketService.socket.off('room_closed', onRoomClosed);
     };
   }, []);
 

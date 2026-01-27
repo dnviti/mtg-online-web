@@ -206,7 +206,7 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
     prevPlayersRef.current = curr;
   }, [room.players, notificationsEnabled, showToast]);
 
-  // Handle kicked event
+  // Handle kicked and room_closed events
   useEffect(() => {
     const socket = socketService.socket;
     const onKicked = () => {
@@ -219,8 +219,22 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       });
       setModalOpen(true);
     };
+    const onRoomClosed = (data: { message: string }) => {
+      setModalConfig({
+        title: 'Room Closed',
+        message: data.message || 'The host has closed this room.',
+        type: 'warning',
+        confirmLabel: 'Back to Lobby',
+        onConfirm: () => onExit()
+      });
+      setModalOpen(true);
+    };
     socket.on('kicked', onKicked);
-    return () => { socket.off('kicked', onKicked); };
+    socket.on('room_closed', onRoomClosed);
+    return () => {
+      socket.off('kicked', onKicked);
+      socket.off('room_closed', onRoomClosed);
+    };
   }, [onExit]);
 
   // Scroll to bottom of chat
@@ -473,6 +487,31 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
               className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Bot className="w-5 h-5" /> Add Bot
+            </button>
+            <button
+              onClick={() => {
+                setModalConfig({
+                  title: 'Close Room',
+                  message: 'Are you sure you want to permanently close this room? This action cannot be undone and the room will be kept only for history.',
+                  type: 'warning',
+                  confirmLabel: 'Close Room',
+                  cancelLabel: 'Cancel',
+                  onConfirm: () => {
+                    socketService.socket.emit('close_room', { roomId: room.id, playerId: currentPlayerId }, (response: any) => {
+                      if (response.success) {
+                        showToast('Room closed successfully', 'success');
+                        onExit();
+                      } else {
+                        showToast(response.message || 'Failed to close room', 'error');
+                      }
+                    });
+                  }
+                });
+                setModalOpen(true);
+              }}
+              className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-red-900/20 transition-all"
+            >
+              <X className="w-5 h-5" /> Close Room
             </button>
           </div>
         )}

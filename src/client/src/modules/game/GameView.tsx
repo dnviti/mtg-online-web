@@ -941,8 +941,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                         >
                           {(() => {
                             // Organize Opponent Cards
-                            const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                            const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
+                            const oppLands = oppBattlefield.filter(c =>
+                              (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
+                              !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                            );
+                            const oppCreatures = oppBattlefield.filter(c =>
+                              !(c.types?.includes('Land') || c.typeLine?.includes('Land')) ||
+                              (c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                            );
 
                             return (
                               <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
@@ -1070,9 +1076,15 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                       const attachments = myBattlefield.filter(c => c.attachedTo);
                       const unattached = myBattlefield.filter(c => !c.attachedTo);
 
-                      const creatures = unattached.filter(c => c.types?.includes('Creature'));
-                      const allLands = unattached.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                      const others = unattached.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
+                      const creatures = unattached.filter(c => c.types?.includes('Creature') || c.typeLine?.includes('Creature'));
+                      const allLands = unattached.filter(c =>
+                        (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
+                        !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                      );
+                      const others = unattached.filter(c =>
+                        !(c.types?.includes('Creature') || c.typeLine?.includes('Creature')) &&
+                        !(c.types?.includes('Land') || c.typeLine?.includes('Land'))
+                      );
 
                       // Map Attachments to Hosts
                       const attachmentsMap = attachments.reduce((acc, c) => {

@@ -58,13 +58,16 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
   const [showBoxSelection, setShowBoxSelection] = useState(false);
   const [availableBoxes, setAvailableBoxes] = useState<{ id: string, title: string, packs: Pack[], setCode: string, packCount: number }[]>([]);
+  const [showExistingRoomsDialog, setShowExistingRoomsDialog] = useState(false);
+  const [existingRooms, setExistingRooms] = useState<any[]>([]);
+  const [pendingRoomCreation, setPendingRoomCreation] = useState<Pack[] | null>(null);
 
   // Sync socket error to local error
   useEffect(() => {
     if (socketError) setLocalError(socketError);
   }, [socketError]);
 
-  const executeCreateRoom = async (packsToUse: Pack[]) => {
+  const executeCreateRoom = async (packsToUse: Pack[], forceNew: boolean = false) => {
     setLoading(true);
     setLocalError('');
     connect();
@@ -89,10 +92,20 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         hostName: playerName,
         packs: packsToUse,
         basicLands: availableLands,
-        format: selectedFormat
+        format: selectedFormat,
+        forceNew
       });
 
       if (!response.success) {
+        // Check if the response indicates existing rooms
+        if (response.hasExistingRooms && response.existingRooms) {
+          setExistingRooms(response.existingRooms);
+          setPendingRoomCreation(packsToUse);
+          setShowExistingRoomsDialog(true);
+          setLoading(false);
+          setShowBoxSelection(false);
+          return;
+        }
         setLocalError(response.message || 'Failed to create room');
       }
       // Hook updates activeRoom automatically on success via state update or listener
@@ -245,6 +258,39 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     setActiveRoom(null); // Clear room from hook
   };
 
+  const handleRejoinExistingRoom = async (room: any) => {
+    setShowExistingRoomsDialog(false);
+    setLoading(true);
+    setLocalError('');
+
+    try {
+      const response = await rejoinRoom({ roomId: room.id, playerId });
+      if (response.success) {
+        if (response.room) {
+          const roomToSet = { ...response.room };
+          if (response.tournament) {
+            roomToSet.tournament = response.tournament;
+          }
+          setActiveRoom(roomToSet);
+        }
+      } else {
+        setLocalError(response.message || 'Failed to rejoin room');
+      }
+    } catch (err: any) {
+      setLocalError(err.message || 'Connection error');
+    } finally {
+      setLoading(false);
+      setPendingRoomCreation(null);
+    }
+  };
+
+  const handleForceCreateNewRoom = () => {
+    setShowExistingRoomsDialog(false);
+    if (pendingRoomCreation) {
+      executeCreateRoom(pendingRoomCreation, true);
+    }
+  };
+
   if (activeRoom) {
     return <GameRoom
       room={activeRoom}
@@ -360,6 +406,76 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
           </div>
         </div>
       </div>
+
+      {/* Existing Rooms Dialog */}
+      <Modal
+        isOpen={showExistingRoomsDialog}
+        onClose={() => {
+          setShowExistingRoomsDialog(false);
+          setPendingRoomCreation(null);
+        }}
+        title="Existing Open Rooms Found"
+        message="You have existing open rooms. Would you like to rejoin one of them or create a new room?"
+        type="warning"
+        maxWidth="max-w-3xl"
+      >
+        <div className="mt-6 space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <h3 className="text-sm font-bold text-slate-300 mb-3">Your Open Rooms:</h3>
+            <div className="space-y-2">
+              {existingRooms.map((room) => (
+                <div
+                  key={room.id}
+                  className="bg-slate-800 border border-slate-600 rounded-lg p-4 hover:border-purple-500 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-mono text-lg font-bold text-white">{room.id}</div>
+                      <div className="text-sm text-slate-400">
+                        Status: <span className="capitalize text-slate-300">{room.status}</span>
+                      </div>
+                      <div className="text-sm text-slate-400">
+                        Players: <span className="text-slate-300">{room.players.length}/{room.maxPlayers}</span>
+                      </div>
+                      {room.format && (
+                        <div className="text-sm text-slate-400">
+                          Format: <span className="capitalize text-slate-300">{room.format}</span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleRejoinExistingRoom(room)}
+                      disabled={loading}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Rejoining...' : 'Rejoin'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+            <button
+              onClick={() => {
+                setShowExistingRoomsDialog(false);
+                setPendingRoomCreation(null);
+              }}
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm font-bold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleForceCreateNewRoom}
+              disabled={loading}
+              className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating...' : 'Create New Room'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Box Selection Modal */}
       <Modal

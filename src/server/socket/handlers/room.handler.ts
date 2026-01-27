@@ -4,9 +4,26 @@ import { roomManager, draftManager, gameManager } from '../../singletons';
 export const registerRoomHandlers = (io: Server, socket: Socket) => {
   const getContext = async () => await roomManager.getPlayerBySocket(socket.id);
 
-  socket.on('create_room', async ({ hostId, hostName, packs, basicLands, format }, callback) => {
+  socket.on('create_room', async ({ hostId, hostName, packs, basicLands, format, forceNew }, callback) => {
     console.log(`[Handler] create_room request from ${hostName} (${hostId})`);
     try {
+      // Check for existing open rooms unless forceNew is true
+      if (!forceNew) {
+        const existingRooms = await roomManager.findPlayerOpenRooms(hostId);
+        if (existingRooms.length > 0) {
+          console.log(`[Handler] Player ${hostName} has ${existingRooms.length} existing open room(s)`);
+          if (typeof callback === 'function') {
+            callback({
+              success: false,
+              hasExistingRooms: true,
+              existingRooms: existingRooms,
+              message: 'You have existing open rooms. Do you want to rejoin or create a new room?'
+            });
+          }
+          return;
+        }
+      }
+
       const room = await roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id, format);
       console.log(`[Handler] Room object created: ${room.id}`);
 
@@ -113,6 +130,20 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
       io.to(roomId).emit('room_update', room);
     } else {
       console.log(`Room ${roomId} closed/empty`);
+    }
+  });
+
+  socket.on('close_room', async ({ roomId, playerId }, callback) => {
+    const room = await roomManager.closeRoom(roomId, playerId);
+    if (room) {
+      console.log(`Room ${roomId} closed by host ${playerId}`);
+      // Notify all players that the room has been closed
+      io.to(roomId).emit('room_closed', { message: 'The host has closed this room.' });
+      io.to(roomId).emit('room_update', room);
+      if (typeof callback === 'function') callback({ success: true, room });
+    } else {
+      console.log(`Failed to close room ${roomId} - either not found or player is not host`);
+      if (typeof callback === 'function') callback({ success: false, message: 'Failed to close room. Only the host can close a room.' });
     }
   });
 

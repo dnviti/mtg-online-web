@@ -36,6 +36,9 @@ interface Room {
   lastActive: number; // For persistence cleanup
   tournament?: Tournament | null;
   format?: string;
+  closed?: boolean; // Room intentionally closed by host (for history only)
+  closedBy?: string; // Player ID who closed the room
+  closedAt?: number; // Timestamp when room was closed
 }
 
 export class RoomManager {
@@ -103,7 +106,8 @@ export class RoomManager {
       status: 'waiting',
       messages: [],
       maxPlayers: hostId.startsWith('SOLO_') ? 1 : 8,
-      lastActive: Date.now()
+      lastActive: Date.now(),
+      closed: false
     };
 
     console.log(`[RoomManager] Saving room state for ${roomId}`);
@@ -180,6 +184,12 @@ export class RoomManager {
       const room = await this.getRoomState(roomId);
       if (!room) return null;
 
+      // Prevent joining closed rooms
+      if (room.closed) {
+        console.log(`Player ${playerId} attempted to join closed room ${roomId}`);
+        return null;
+      }
+
       room.lastActive = Date.now();
 
       // Rejoin if already exists
@@ -213,6 +223,12 @@ export class RoomManager {
     try {
       const room = await this.getRoomState(roomId);
       if (!room) return null;
+
+      // Prevent reconnecting to closed rooms
+      if (room.closed) {
+        console.log(`Player ${playerId} attempted to reconnect to closed room ${roomId}`);
+        return null;
+      }
 
       room.lastActive = Date.now();
       const player = room.players.find(p => p.id === playerId);
@@ -284,6 +300,32 @@ export class RoomManager {
       }
 
       await this.saveRoomState(room);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async closeRoom(roomId: string, playerId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      // Only the host can close the room
+      if (room.hostId !== playerId) {
+        console.log(`Player ${playerId} attempted to close room ${roomId} but is not the host.`);
+        return null;
+      }
+
+      // Mark room as closed
+      room.closed = true;
+      room.closedBy = playerId;
+      room.closedAt = Date.now();
+      room.lastActive = Date.now();
+
+      await this.saveRoomState(room);
+      console.log(`Room ${roomId} has been closed by host ${playerId}.`);
       return room;
     } finally {
       await this.releaseLock(roomId);
@@ -434,9 +476,31 @@ export class RoomManager {
     const rooms: Room[] = [];
     for (const key of keys) {
       const r = await this.getRoomState(key);
-      if (r) rooms.push(r);
+      // Filter out closed rooms from the list
+      if (r && !r.closed) rooms.push(r);
     }
     return rooms;
+  }
+
+  async findPlayerOpenRooms(playerId: string): Promise<Room[]> {
+    const keys = await this.store.smembers('active_rooms');
+    const openRooms: Room[] = [];
+
+    for (const roomId of keys) {
+      const room = await this.getRoomState(roomId);
+      if (!room) continue;
+
+      // Skip closed rooms
+      if (room.closed) continue;
+
+      // Check if player is in this room
+      const playerInRoom = room.players.find(p => p.id === playerId);
+      if (playerInRoom) {
+        openRooms.push(room);
+      }
+    }
+
+    return openRooms;
   }
 
   private async cleanupRooms() {
