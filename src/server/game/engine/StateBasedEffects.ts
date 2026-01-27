@@ -87,6 +87,18 @@ export class StateBasedEffects {
       }
     });
 
+    // 6. Token Ceasing to Exist (704.5d)
+    // Tokens that are in a zone other than the battlefield cease to exist
+    const tokensToRemove: string[] = [];
+    Object.entries(cards).forEach(([id, c]) => {
+      if (c.isToken && c.zone !== 'battlefield') {
+        console.log(`SBA: Token ${c.name} ceased to exist (left battlefield to ${c.zone}).`);
+        tokensToRemove.push(id);
+        sbaPerformed = true;
+      }
+    });
+    tokensToRemove.forEach(id => delete state.cards[id]);
+
     return sbaPerformed;
   }
 

@@ -110,6 +110,7 @@ export interface CardObject {
   controlledSinceTurn: number; // For Summoning Sickness check
   definition?: any;
   imageArtCrop?: string;
+  isToken?: boolean; // Tokens cease to exist when leaving the battlefield
 }
 
 export interface PlayerState {

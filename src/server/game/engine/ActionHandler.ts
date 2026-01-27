@@ -314,35 +314,67 @@ export class ActionHandler {
   }
 
   static createToken(state: StrictGameState, playerId: string, definition: any, position?: { x: number, y: number }) {
+    // Resolve properties from root or card_faces[0] (Scryfall tokens may use either)
+    const face = definition.card_faces?.[0];
+
+    // Build type_line from types array if not provided directly
+    const typeLine = definition.type_line || face?.type_line ||
+      [
+        ...(definition.supertypes || []),
+        'Token',
+        ...(definition.types || [])
+      ].filter(Boolean).join(' ') +
+      (definition.subtypes?.length ? ' — ' + definition.subtypes.join(' ') : '');
+
+    // Resolve power/toughness from root or card_faces[0]
+    const power = definition.power ?? face?.power;
+    const toughness = definition.toughness ?? face?.toughness;
+
+    // Resolve other properties
+    const oracleText = definition.oracle_text || face?.oracle_text || '';
+    const keywords = definition.keywords || face?.keywords || [];
+    const colors = definition.colors || face?.colors || [];
+    const imageUrl = definition.local_path_full || definition.imageUrl ||
+                     definition.image_uris?.normal || face?.image_uris?.normal || '';
+    const imageArtCrop = definition.local_path_crop || definition.imageArtCrop ||
+                         definition.image_uris?.art_crop || face?.image_uris?.art_crop || '';
+
     const token: any = {
       instanceId: Math.random().toString(36).substring(7),
       oracleId: 'token-' + Math.random(),
-      name: definition.name,
+      name: definition.name || face?.name,
       controllerId: playerId,
       ownerId: playerId,
       zone: 'battlefield',
       tapped: false,
       faceDown: false,
       counters: [],
-      keywords: definition.keywords || [],
+      keywords: keywords,
       modifiers: [],
-      colors: definition.colors,
-      types: definition.types,
-      subtypes: definition.subtypes,
-      supertypes: [],
-      basePower: definition.power,
-      baseToughness: definition.toughness,
-      power: definition.power,
-      toughness: definition.toughness,
-      imageUrl: definition.local_path_full || definition.imageUrl || '',
-      imageArtCrop: definition.local_path_crop || definition.imageArtCrop || '',
+      colors: colors,
+      types: definition.types || [],
+      subtypes: definition.subtypes || [],
+      supertypes: definition.supertypes || [],
+      // Type line for CardVisual creature/land detection
+      type_line: typeLine,
+      typeLine: typeLine,
+      // Oracle text for keyword detection (haste, flying, etc.)
+      oracle_text: oracleText,
+      oracleText: oracleText,
+      basePower: power,
+      baseToughness: toughness,
+      power: power,
+      toughness: toughness,
+      imageUrl: imageUrl,
+      imageArtCrop: imageArtCrop,
       definition: definition, // Store the full definition for reference
       damageMarked: 0,
       controlledSinceTurn: state.turnCount,
+      isToken: true, // Mark as token - tokens cease to exist when leaving the battlefield
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }
     };
     state.cards[token.instanceId] = token;
-    console.log(`[ActionHandler] Player ${playerId} created token: ${definition.name}`);
+    console.log(`[ActionHandler] Player ${playerId} created token: ${token.name} (${typeLine}) P/T: ${power}/${toughness}`);
     StateBasedEffects.process(state);
   }
 

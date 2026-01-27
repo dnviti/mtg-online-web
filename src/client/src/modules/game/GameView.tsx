@@ -793,21 +793,28 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
               // Logic to set types properly for Rules Engine to place it in correct row
               const types = (token.type_line || "").split('—')[0].trim().split(' ');
-              const subtypes = (token.type_line.split('—')[1] || "").trim().split(' ');
+              const subtypes = (token.type_line?.split('—')[1] || "").trim().split(' ').filter(Boolean);
 
               const definition = {
                 name: token.name,
                 colors: token.colors || [],
                 types: types,
                 subtypes: subtypes,
-                power: token.power,
-                toughness: token.toughness,
+                power: token.power || token.card_faces?.[0]?.power,
+                toughness: token.toughness || token.card_faces?.[0]?.toughness,
+                // Include type_line for CardVisual creature/land detection
+                type_line: token.type_line || token.card_faces?.[0]?.type_line,
+                // Include oracle_text and keywords for ability detection
+                oracle_text: token.oracle_text || token.card_faces?.[0]?.oracle_text || '',
+                keywords: token.keywords || token.card_faces?.[0]?.keywords || [],
+                // Include card_faces for double-faced tokens
+                card_faces: token.card_faces,
+                // Image paths
                 imageUrl: token.local_path_full || token.image_uris?.normal || token.image_uris?.large || "",
                 imageArtCrop: token.local_path_crop || token.image_uris?.art_crop || "",
                 local_path_full: token.local_path_full,
                 local_path_crop: token.local_path_crop,
-                // If no image, CardComponent will fallback.
-                // But server token object might have caching?
+                image_uris: token.image_uris,
               };
 
               socketService.socket.emit('game_strict_action', {

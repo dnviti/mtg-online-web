@@ -63,6 +63,7 @@ export interface CardInstance {
   controlledSinceTurn?: number;
   keywords?: string[];
   card_faces?: any[];
+  isToken?: boolean; // Tokens can be deleted and cease to exist when leaving battlefield
 }
 
 export interface PlayerState {

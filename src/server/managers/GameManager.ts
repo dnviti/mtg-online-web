@@ -238,6 +238,16 @@ export class GameManager extends EventEmitter {
             // Remove counter is just adding a negative amount
             engine.addCounter(actorId, action.cardId, action.counterType, -(action.amount || 1));
             break;
+          case 'delete_card':
+            // Only allow deleting tokens
+            const cardToDelete = game.cards[action.cardId];
+            if (cardToDelete && cardToDelete.isToken) {
+              delete game.cards[action.cardId];
+              console.log(`[GameManager] Token ${cardToDelete.name} deleted by ${actorId}`);
+            } else {
+              console.warn(`[GameManager] ⚠️ Cannot delete non-token card: ${action.cardId}`);
+            }
+            break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);
         }

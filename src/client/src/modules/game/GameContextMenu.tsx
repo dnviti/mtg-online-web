@@ -157,12 +157,17 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
           </>
         )}
 
-        <div className="h-px bg-slate-800 my-1 mx-2"></div>
-        <MenuItem
-          label="Delete Object"
-          className="text-red-500 hover:bg-red-900/30 hover:text-red-400"
-          onClick={() => handleAction('DELETE_CARD', { cardId: card.instanceId })}
-        />
+        {/* Delete option only for tokens */}
+        {card.isToken && (
+          <>
+            <div className="h-px bg-slate-800 my-1 mx-2"></div>
+            <MenuItem
+              label="Delete Token"
+              className="text-red-500 hover:bg-red-900/30 hover:text-red-400"
+              onClick={() => handleAction('DELETE_CARD', { cardId: card.instanceId })}
+            />
+          </>
+        )}
       </>
     );
   };
