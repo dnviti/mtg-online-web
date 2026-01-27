@@ -104,7 +104,38 @@ export class RoomManager {
 
   async createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string, format: string = 'standard'): Promise<Room> {
     console.log(`[RoomManager] createRoom called for ${hostName}`);
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // Generate unique room ID and ensure no collision
+    let roomId: string;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    do {
+      roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const existing = await this.getRoomState(roomId);
+
+      if (!existing) {
+        // No collision, we can use this ID
+        break;
+      }
+
+      // Room ID collision detected - delete old room and any associated game state
+      console.warn(`[RoomManager] ⚠️ Room ID collision detected for ${roomId}. Deleting old room, game state, and all associated data...`);
+      await this.deleteRoomState(roomId);
+
+      // Also delete any associated game state to ensure clean slate
+      await this.store.del(`game:${roomId}`);
+
+      // Delete any draft state too
+      await this.store.del(`draft:${roomId}`);
+
+      attempts++;
+      if (attempts >= maxAttempts) {
+        console.error(`[RoomManager] ❌ Failed to generate unique room ID after ${maxAttempts} attempts`);
+        throw new Error('Failed to generate unique room ID');
+      }
+    } while (attempts < maxAttempts);
+
     const room: Room = {
       id: roomId,
       hostId,

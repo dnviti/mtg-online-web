@@ -143,5 +143,4 @@ vite.config.ts.timestamp-*
 src/server/public/cards/*
 src/server-data/
 server-data/
-src/client/dev-dist/sw.js
-src/client/dev-dist/sw.js
+src/client/dev-dist/*

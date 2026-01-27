@@ -41,8 +41,10 @@ export class GameManager extends EventEmitter {
     // CRITICAL FIX: Delete any existing game state to prevent old games from being reused
     const existingGame = await this.getGameState(gameId);
     if (existingGame) {
-      console.warn(`[GameManager] ⚠️ Found existing game state for ${gameId}. Deleting old state.`);
+      console.warn(`[GameManager] ⚠️ Found existing game state for ${gameId}. Deleting old state with ${Object.keys(existingGame.cards || {}).length} cards from previous session.`);
       await this.store.del(`game:${gameId}`);
+    } else {
+      console.log(`[GameManager] ✓ No existing game state found for ${gameId}. Creating fresh game.`);
     }
 
     // ... creation logic ...
