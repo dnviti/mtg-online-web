@@ -198,7 +198,26 @@ export class PhaseManager {
     }
 
     if (step === 'combat_damage') {
-      CombatManager.resolveCombatDamage(state);
+      // Check if any creatures have First Strike or Double Strike
+      const hasFirstStrikers = CombatManager.hasFirstStrikeCreatures(state);
+
+      if (hasFirstStrikers) {
+        // First Strike damage step
+        console.log('[PhaseManager] Resolving First Strike damage...');
+        CombatManager.resolveCombatDamage(state, true);
+
+        // Check state-based effects after first strike damage (creatures may die)
+        const { StateBasedEffects } = require('./StateBasedEffects');
+        StateBasedEffects.process(state);
+
+        // Normal damage step (non-first-strikers and double-strikers)
+        console.log('[PhaseManager] Resolving Normal combat damage...');
+        CombatManager.resolveCombatDamage(state, false);
+      } else {
+        // No first strikers, just resolve normal damage
+        CombatManager.resolveCombatDamage(state, false);
+      }
+
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }

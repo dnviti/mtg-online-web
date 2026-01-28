@@ -15,6 +15,7 @@ import { StackVisualizer } from './StackVisualizer';
 
 import { GestureManager } from './GestureManager';
 import { MulliganView } from './MulliganView';
+import { ChoiceModal } from './ChoiceModal';
 import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
 import { CreateTokenModal } from './CreateTokenModal'; // Import Modal
@@ -757,6 +758,35 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                     type: 'MULLIGAN_DECISION',
                     keep,
                     cardsToBottom
+                  }
+                });
+              }}
+            />
+          )
+        }
+
+        {/* Choice Modal - for effects requiring player decisions */}
+        {
+          gameState.pendingChoice && (
+            gameState.pendingChoice.choosingPlayerId === currentPlayerId ||
+            gameState.pendingChoice.revealedCards?.length
+          ) && (
+            <ChoiceModal
+              choice={gameState.pendingChoice}
+              cards={gameState.cards}
+              currentPlayerId={currentPlayerId}
+              onSubmit={(result) => {
+                socketService.socket.emit('game_strict_action', {
+                  action: {
+                    type: 'RESPOND_TO_CHOICE',
+                    choiceId: result.choiceId,
+                    choiceType: result.type,
+                    selectedOptionIds: result.selectedOptionIds,
+                    selectedCardIds: result.selectedCardIds,
+                    selectedPlayerId: result.selectedPlayerId,
+                    selectedValue: result.selectedValue,
+                    confirmed: result.confirmed,
+                    orderedIds: result.orderedIds
                   }
                 });
               }}

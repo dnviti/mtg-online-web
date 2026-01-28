@@ -1,8 +1,10 @@
 
-import { StrictGameState } from '../game/types';
+import { StrictGameState, ChoiceResult } from '../game/types';
 import { RulesEngine } from '../game/RulesEngine';
 import { GameLifecycle } from './game/GameLifecycle';
 import { StateStoreManager } from './StateStoreManager';
+import { ChoiceHandler } from '../game/engine/ChoiceHandler';
+import { OracleEffectResolver } from '../game/engine/OracleEffectResolver';
 import { EventEmitter } from 'events';
 
 export class GameManager extends EventEmitter {
@@ -275,6 +277,58 @@ export class GameManager extends EventEmitter {
             break;
           case 'restart_game':
             GameLifecycle.restartGame(game);
+            break;
+          case 'respond_to_choice':
+            if (!game.pendingChoice) {
+              console.warn(`[GameManager] No pending choice to respond to`);
+              break;
+            }
+
+            const choiceResult: ChoiceResult = {
+              choiceId: action.choiceId,
+              type: action.choiceType,
+              selectedOptionIds: action.selectedOptionIds,
+              selectedCardIds: action.selectedCardIds,
+              selectedPlayerId: action.selectedPlayerId,
+              selectedValue: action.selectedValue,
+              confirmed: action.confirmed,
+              orderedIds: action.orderedIds
+            };
+
+            const validation = ChoiceHandler.validateChoice(game, actorId, choiceResult);
+            if (!validation.valid) {
+              console.warn(`[GameManager] Invalid choice: ${validation.error}`);
+              throw new Error(validation.error);
+            }
+
+            const resolvedStackItem = ChoiceHandler.processChoice(game, choiceResult);
+            if (resolvedStackItem) {
+              // Check if this was a Ward payment choice
+              if ((resolvedStackItem as any).wardPending) {
+                const { WardHandler } = require('../game/engine/WardHandler');
+                const wardPaid = WardHandler.processWardPayment(game, resolvedStackItem, choiceResult.confirmed);
+                if (!wardPaid) {
+                  // Spell was countered by Ward - don't resume resolution
+                  console.log(`[GameManager] Spell countered by Ward`);
+                  break;
+                }
+              }
+
+              // Handle target selection for triggered abilities
+              if (choiceResult.type === 'target_selection' && resolvedStackItem.type === 'trigger') {
+                // Store selected targets in the stack item
+                resolvedStackItem.targets = choiceResult.selectedCardIds || [];
+                console.log(`[GameManager] Stored targets for trigger: ${resolvedStackItem.targets.join(', ')}`);
+                // Don't resolve yet - let priority pass and resolve normally
+                break;
+              }
+
+              const sourceCard = game.cards[resolvedStackItem.sourceId];
+              if (sourceCard) {
+                console.log(`[GameManager] Resuming resolution for ${sourceCard.name}`);
+                OracleEffectResolver.resolveSpellEffects(game, sourceCard, resolvedStackItem);
+              }
+            }
             break;
           default:
             console.warn(`[GameManager] ⚠️ Unknown strict action type: ${normalizedType} (Original: ${action.type})`);

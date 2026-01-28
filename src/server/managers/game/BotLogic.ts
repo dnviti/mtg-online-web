@@ -1,6 +1,8 @@
-import { StrictGameState, CardObject } from '../../game/types';
+import { StrictGameState, CardObject, ChoiceResult } from '../../game/types';
 import { RulesEngine } from '../../game/RulesEngine';
 import { ManaUtils } from '../../game/engine/ManaUtils';
+import { ChoiceHandler } from '../../game/engine/ChoiceHandler';
+import { OracleEffectResolver } from '../../game/engine/OracleEffectResolver';
 
 /**
  * BotLogic
@@ -60,7 +62,17 @@ export class BotLogic {
    * Returns true if an action was taken.
    */
   static processSingleAction(game: StrictGameState): boolean {
-    // 0. Mulligan Phase - all bots keep immediately
+    // 0a. Handle pending choice for bot
+    if (game.pendingChoice) {
+      const chooser = game.players[game.pendingChoice.choosingPlayerId];
+      if (chooser?.isBot) {
+        return this.handleBotChoice(game);
+      }
+      // Waiting for human to make choice
+      return false;
+    }
+
+    // 0b. Mulligan Phase - all bots keep immediately
     if (game.step === 'mulligan') {
       let actionTaken = false;
       Object.values(game.players).forEach(p => {
@@ -744,6 +756,380 @@ export class BotLogic {
    */
   static processActions(game: StrictGameState) {
     this.processActionsLoop(game);
+  }
+
+  // ============================================
+  // CHOICE HANDLING
+  // ============================================
+
+  /**
+   * Handles pending choices for bot players.
+   * Makes decisions based on heuristics and resumes spell resolution.
+   */
+  static handleBotChoice(game: StrictGameState): boolean {
+    const pending = game.pendingChoice;
+    if (!pending) return false;
+
+    const player = game.players[pending.choosingPlayerId];
+    if (!player?.isBot) return false;
+
+    console.log(`[Bot] ${player.name} making choice: ${pending.type} - "${pending.prompt}"`);
+
+    let result: ChoiceResult;
+
+    switch (pending.type) {
+      case 'mode_selection':
+        result = this.chooseModes(game, pending);
+        break;
+
+      case 'card_selection':
+        result = this.chooseCards(game, pending);
+        break;
+
+      case 'target_selection':
+        result = this.chooseTargets(game, pending);
+        break;
+
+      case 'yes_no':
+        result = this.chooseYesNo(game, pending);
+        break;
+
+      case 'player_selection':
+        result = this.choosePlayer(game, pending);
+        break;
+
+      case 'number_selection':
+        result = this.chooseNumber(game, pending);
+        break;
+
+      case 'order_selection':
+        result = this.chooseOrder(game, pending);
+        break;
+
+      default:
+        console.warn(`[Bot] Unknown choice type: ${pending.type}`);
+        return false;
+    }
+
+    // Process the choice
+    const stackItem = ChoiceHandler.processChoice(game, result);
+
+    // Resume spell/ability resolution
+    if (stackItem) {
+      // For triggered abilities with target selection, store targets and let stack resolve naturally
+      if (result.type === 'target_selection' && stackItem.type === 'trigger') {
+        stackItem.targets = result.selectedCardIds || [];
+        console.log(`[Bot] Stored targets for trigger: ${stackItem.targets.map(id => game.cards[id]?.name).join(', ')}`);
+        // Don't resolve yet - let the stack resolve normally when priority passes
+        return true;
+      }
+
+      // For other choices, resume resolution immediately
+      const sourceCard = game.cards[stackItem.sourceId];
+      if (sourceCard) {
+        console.log(`[Bot] Resuming resolution for ${sourceCard.name}`);
+        OracleEffectResolver.resolveSpellEffects(game, sourceCard, stackItem);
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Bot mode selection - prioritize removal/damage modes
+   */
+  private static chooseModes(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const options = pending.options?.filter(o => !o.disabled) || [];
+    const count = pending.constraints?.exactCount || 1;
+
+    // Score modes based on effect type
+    const scoredOptions = options.map(opt => {
+      let score = 0;
+      const text = opt.label.toLowerCase();
+
+      if (text.includes('destroy') || text.includes('exile')) score += 10;
+      if (text.includes('damage')) score += 8;
+      if (text.includes('draw')) score += 6;
+      if (text.includes('counter')) score += game.stack.length > 0 ? 10 : 0;
+      if (text.includes('gain') && text.includes('life')) score += 3;
+      if (text.includes('discard')) score += 5;
+      if (text.includes('+') && text.includes('/')) score += 4; // Pump
+
+      return { opt, score };
+    });
+
+    // Sort by score and pick top N
+    scoredOptions.sort((a, b) => b.score - a.score);
+    const selected = scoredOptions.slice(0, count).map(s => s.opt.id);
+
+    console.log(`[Bot] Selected modes: ${selected.join(', ')}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'mode_selection',
+      selectedOptionIds: selected
+    };
+  }
+
+  /**
+   * Bot card selection - choose best card to affect (remove from opponent, etc.)
+   */
+  private static chooseCards(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const selectableCards = (pending.selectableIds || [])
+      .map(id => game.cards[id])
+      .filter(Boolean);
+
+    const count = pending.constraints?.exactCount ||
+                  pending.constraints?.minCount || 1;
+
+    // Score cards (higher = more valuable to select)
+    const scoredCards = selectableCards.map(card => {
+      let score = 0;
+
+      // Creatures by power/toughness
+      if (card.types?.includes('Creature') || card.typeLine?.includes('Creature')) {
+        score += (card.power || 0) * 2 + (card.toughness || 0);
+      }
+
+      // Evasion keywords make creatures more threatening
+      if (card.keywords?.includes('Flying')) score += 3;
+      if (card.keywords?.includes('Trample')) score += 2;
+
+      // Card types
+      if (card.types?.includes('Planeswalker')) score += 15;
+      if (card.types?.includes('Instant') || card.types?.includes('Sorcery')) {
+        // Removal spells are high priority to discard
+        const text = card.oracleText?.toLowerCase() || '';
+        if (text.includes('destroy') || text.includes('exile') || text.includes('damage')) {
+          score += 10;
+        }
+      }
+
+      // Mana value (prefer removing expensive cards)
+      const cmc = this.getManaCost(card);
+      score += cmc * 0.5;
+
+      return { card, score };
+    });
+
+    scoredCards.sort((a, b) => b.score - a.score);
+    const selected = scoredCards.slice(0, count).map(s => s.card.instanceId);
+
+    console.log(`[Bot] Selected cards: ${selected.map(id => game.cards[id]?.name).join(', ')}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'card_selection',
+      selectedCardIds: selected
+    };
+  }
+
+  /**
+   * Bot target selection - similar to card selection but for targets
+   */
+  private static chooseTargets(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const prompt = pending.prompt.toLowerCase();
+    const selectableIds = pending.selectableIds || [];
+    const count = pending.constraints?.exactCount || pending.constraints?.minCount || 1;
+
+    // Special handling for blight - choose a creature that can survive or is least valuable
+    if (prompt.includes('blight') || prompt.includes('-1/-1 counter')) {
+      const cards = selectableIds
+        .map(id => game.cards[id])
+        .filter(Boolean)
+        .map(card => {
+          // Extract blight amount from prompt
+          const blightMatch = prompt.match(/blight\s+(\d+)|(\d+)\s*-1\/-1/i);
+          const blightAmount = blightMatch ? parseInt(blightMatch[1] || blightMatch[2]) : 1;
+
+          // Score: prefer creatures that survive the blight
+          const survives = card.toughness > blightAmount;
+          const value = (card.power || 0) + (card.toughness || 0);
+
+          // High score = less likely to pick (we want to preserve valuable creatures)
+          // But prioritize creatures that survive the blight
+          let score = survives ? -1000 : 0; // Strongly prefer survivors
+          score += value * 10; // Less valuable creatures are better blight targets
+
+          return { card, score };
+        })
+        .sort((a, b) => a.score - b.score); // Lower score = better choice
+
+      const selectedIds = cards.slice(0, count).map(c => c.card.instanceId);
+      console.log(`[Bot] Blight target: ${selectedIds.map(id => game.cards[id]?.name).join(', ')}`);
+
+      return {
+        choiceId: pending.id,
+        type: 'target_selection',
+        selectedCardIds: selectedIds
+      };
+    }
+
+    // Check for skip option (for "you may" abilities)
+    if (pending.options?.some(o => o.id === 'skip')) {
+      // Evaluate if blighting is worth it
+      const sourceCard = game.cards[pending.sourceCardId];
+      const oracleText = (sourceCard?.oracleText || '').toLowerCase();
+
+      // If the "if you do" effect is beneficial, don't skip
+      const hasBeneficialEffect = /if you do.*(?:create|draw|gain|deal|destroy|exile)/i.test(oracleText);
+
+      if (!hasBeneficialEffect && selectableIds.length > 0) {
+        // If no beneficial effect or no good targets, skip
+        const bestCreature = selectableIds
+          .map(id => game.cards[id])
+          .filter(Boolean)
+          .sort((a, b) => (b.power || 0) + (b.toughness || 0) - (a.power || 0) - (a.toughness || 0))[0];
+
+        const blightMatch = prompt.match(/blight\s+(\d+)/i);
+        const blightAmount = blightMatch ? parseInt(blightMatch[1]) : 1;
+
+        // Skip if our best creature would die from blight
+        if (bestCreature && bestCreature.toughness <= blightAmount) {
+          console.log(`[Bot] Skipping blight - would kill our creature`);
+          return {
+            choiceId: pending.id,
+            type: 'target_selection',
+            selectedOptionIds: ['skip'],
+            selectedCardIds: []
+          };
+        }
+      }
+    }
+
+    // Default: use same logic as card selection
+    return {
+      ...this.chooseCards(game, pending),
+      type: 'target_selection'
+    };
+  }
+
+  /**
+   * Bot yes/no decision - generally say yes to beneficial effects
+   */
+  private static chooseYesNo(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const prompt = pending.prompt.toLowerCase();
+    let confirm = true;
+
+    // Ward payment decision - usually pay if we can afford it
+    if (prompt.includes('ward')) {
+      const player = game.players[pending.choosingPlayerId];
+      if (!player) {
+        confirm = false;
+      } else {
+        // Check if it's a life cost
+        const lifeMatch = prompt.match(/pay\s+(\d+)\s*life/i);
+        if (lifeMatch) {
+          const lifeCost = parseInt(lifeMatch[1]);
+          confirm = player.life > lifeCost + 5; // Keep buffer of 5 life
+        }
+
+        // Check if it's a mana cost - bot will try to pay if spell seems important
+        // For simplicity, bots usually try to pay Ward
+        if (prompt.includes('{')) {
+          // Check available mana roughly
+          const totalMana = Object.values(player.manaPool || {}).reduce((a, b) => a + b, 0);
+          const costMatch = prompt.match(/\{(\d+)\}/);
+          if (costMatch && totalMana < parseInt(costMatch[1])) {
+            confirm = false; // Can't afford it
+          }
+        }
+      }
+      console.log(`[Bot] Ward decision: ${confirm ? 'Pay' : 'Decline'}`);
+    }
+    // Don't confirm if it explicitly helps opponent
+    else if (prompt.includes('opponent') && prompt.includes('draw')) {
+      confirm = false;
+    }
+    // Don't pay costs that seem too high
+    else if (prompt.includes('pay') && prompt.includes('life')) {
+      const player = game.players[pending.choosingPlayerId];
+      if (player && player.life <= 5) {
+        confirm = false;
+      }
+    }
+
+    console.log(`[Bot] Chose ${confirm ? 'Yes' : 'No'}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'yes_no',
+      confirmed: confirm
+    };
+  }
+
+  /**
+   * Bot player selection - usually target opponent
+   */
+  private static choosePlayer(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const controllerId = pending.controllingPlayerId;
+    const prompt = pending.prompt.toLowerCase();
+
+    // For beneficial effects, choose self; for harmful, choose opponent
+    let targetId: string;
+    if (prompt.includes('gain') || prompt.includes('draw') || prompt.includes('untap')) {
+      targetId = controllerId;
+    } else {
+      targetId = game.turnOrder.find(id => id !== controllerId) || controllerId;
+    }
+
+    console.log(`[Bot] Selected player: ${game.players[targetId]?.name}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'player_selection',
+      selectedPlayerId: targetId
+    };
+  }
+
+  /**
+   * Bot number selection - usually maximize beneficial values
+   */
+  private static chooseNumber(_game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const prompt = pending.prompt.toLowerCase();
+    let value: number;
+
+    if (prompt.includes('pay') || prompt.includes('sacrifice') || prompt.includes('discard')) {
+      // Minimize costs
+      value = pending.minValue || 0;
+    } else {
+      // Maximize benefits
+      value = pending.maxValue || pending.minValue || 1;
+    }
+
+    console.log(`[Bot] Selected number: ${value}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'number_selection',
+      selectedValue: value
+    };
+  }
+
+  /**
+   * Bot order selection - keep best cards on top
+   */
+  private static chooseOrder(game: StrictGameState, pending: import('../../game/types').PendingChoice): ChoiceResult {
+    const cards = (pending.selectableIds || [])
+      .map(id => game.cards[id])
+      .filter(Boolean);
+
+    // Score cards and order by score (best on top)
+    const scoredCards = cards.map(card => ({
+      card,
+      score: this.scoreCard(game, pending.controllingPlayerId, card)
+    }));
+
+    scoredCards.sort((a, b) => b.score - a.score);
+    const orderedIds = scoredCards.map(s => s.card.instanceId);
+
+    console.log(`[Bot] Ordered cards (top to bottom): ${orderedIds.map(id => game.cards[id]?.name).join(', ')}`);
+
+    return {
+      choiceId: pending.id,
+      type: 'order_selection',
+      orderedIds: orderedIds
+    };
   }
 
   /**

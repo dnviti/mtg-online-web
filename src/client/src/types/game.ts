@@ -98,6 +98,73 @@ export interface GameStateLogEntry {
   }[];
 }
 
+// ============================================
+// CHOICE SYSTEM TYPES
+// ============================================
+
+export type ChoiceType =
+  | 'mode_selection'      // "Choose one" / "Choose two"
+  | 'card_selection'      // Select cards from revealed zone
+  | 'target_selection'    // Mid-resolution targeting
+  | 'player_selection'    // Choose a player
+  | 'yes_no'              // May abilities
+  | 'order_selection'     // Put cards in order
+  | 'number_selection'    // Choose X
+  | 'ability_selection';  // Choose which ability to activate
+
+export interface ChoiceOption {
+  id: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export interface SelectionConstraints {
+  minCount?: number;
+  maxCount?: number;
+  exactCount?: number;
+  filter?: {
+    zones?: string[];
+    controllerId?: string;
+    types?: string[];
+    notTypes?: string[];
+  };
+}
+
+export interface PendingChoice {
+  id: string;
+  type: ChoiceType;
+  sourceStackId: string;
+  sourceCardId: string;
+  sourceCardName: string;
+  choosingPlayerId: string;
+  controllingPlayerId: string;
+  prompt: string;
+
+  // Type-specific data
+  options?: ChoiceOption[];           // For mode_selection, yes_no
+  constraints?: SelectionConstraints; // For card/target selection
+  selectableIds?: string[];           // Pre-computed valid IDs
+  revealedCards?: string[];           // Cards revealed to chooser
+  minValue?: number;                  // For number_selection
+  maxValue?: number;
+
+  createdAt: number;
+}
+
+export interface ChoiceResult {
+  choiceId: string;
+  type: ChoiceType;
+  selectedOptionIds?: string[];  // mode_selection
+  selectedCardIds?: string[];    // card_selection
+  selectedPlayerId?: string;     // player_selection
+  selectedValue?: number;        // number_selection
+  confirmed?: boolean;           // yes_no
+  orderedIds?: string[];         // order_selection
+  selectedAbilityIndex?: number; // ability_selection
+}
+
 export interface GameState {
   id?: string; // Game ID
   roomId: string;
@@ -116,4 +183,10 @@ export interface GameState {
   blockersDeclared?: boolean;
   // Persistent game logs
   logs?: GameStateLogEntry[];
+  // Choice system
+  pendingChoice?: PendingChoice | null;
+  revealedToPlayer?: {
+    playerId: string;
+    cardIds: string[];
+  };
 }

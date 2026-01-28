@@ -1,7 +1,9 @@
-import { StrictGameState, CardObject, StackObject } from '../types';
+import { StrictGameState, CardObject, StackObject, ChoiceResult } from '../types';
 import { ActionHandler } from './ActionHandler';
 import { StateBasedEffects } from './StateBasedEffects';
 import { GameLogger } from './GameLogger';
+import { ChoiceHandler } from './ChoiceHandler';
+import { LorwynMechanics } from './LorwynMechanics';
 import { scryfallService } from '../../singletons';
 import fs from 'fs';
 import path from 'path';
@@ -33,6 +35,41 @@ export class OracleEffectResolver {
     const targets = stackItem.targets || [];
 
     console.log(`[OracleEffectResolver] Resolving effects for "${card.name}": ${oracleText.substring(0, 100)}...`);
+
+    // ============================================
+    // CHOICE SYSTEM - Check for pending/completed choices
+    // ============================================
+
+    // Check if there's a pending choice for this stack item (waiting for player input)
+    if (state.pendingChoice?.sourceStackId === stackItem.id) {
+      console.log(`[OracleEffectResolver] Waiting for choice resolution for ${card.name}`);
+      return false; // Don't resolve yet, waiting for player choice
+    }
+
+    // Check for completed choice that needs execution
+    const completedChoice = stackItem.resolutionState?.choicesMade?.find(c => !c._executed);
+    if (completedChoice) {
+      return this.executeChoiceEffect(state, card, stackItem, completedChoice);
+    }
+
+    // Check for hand reveal + choose effects (e.g., "Auntie's Sentence")
+    if (this.requiresOpponentHandChoice(oracleText, stackItem)) {
+      return this.handleHandRevealChoice(state, card, stackItem, oracleText);
+    }
+
+    // Check for modal spells ("Choose one", "Choose two", etc.)
+    if (this.requiresModeChoice(oracleText, stackItem)) {
+      return this.handleModeChoice(state, card, stackItem, oracleText);
+    }
+
+    // Check for blight effects (Lorwyn Eclipsed mechanic)
+    if (this.requiresBlightChoice(oracleText, stackItem)) {
+      return this.handleBlightChoice(state, card, stackItem, oracleText);
+    }
+
+    // ============================================
+    // STANDARD EFFECT RESOLUTION
+    // ============================================
 
     let effectResolved = false;
 
@@ -1513,5 +1550,464 @@ export class OracleEffectResolver {
     }
 
     return [];
+  }
+
+  // ============================================
+  // CHOICE SYSTEM METHODS
+  // ============================================
+
+  /**
+   * Checks if the effect requires choosing from opponent's hand.
+   * Examples: "target opponent reveals their hand. You choose a nonland card from it."
+   */
+  static requiresOpponentHandChoice(oracleText: string, stackItem: StackObject): boolean {
+    // Skip if we already have a choice made for this
+    if (stackItem.resolutionState?.choicesMade?.length) return false;
+
+    return /target opponent reveals (their|his or her) hand.*you choose/i.test(oracleText) ||
+           /look at target (opponent's|player's) hand.*choose/i.test(oracleText) ||
+           /target player reveals (their|his or her) hand.*you choose/i.test(oracleText);
+  }
+
+  /**
+   * Checks if the spell is modal ("Choose one", "Choose two", etc.)
+   */
+  static requiresModeChoice(oracleText: string, stackItem: StackObject): boolean {
+    // Skip if modes already selected or choice already made
+    if (stackItem.modes?.length || stackItem.resolutionState?.choicesMade?.length) return false;
+
+    return /choose (one|two|three|four|five)/i.test(oracleText);
+  }
+
+  /**
+   * Handles effects that reveal opponent's hand and let caster choose a card.
+   * Creates a PendingChoice and pauses resolution.
+   */
+  static handleHandRevealChoice(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject,
+    oracleText: string
+  ): boolean {
+    const controllerId = stackItem.controllerId;
+
+    // Determine target player (opponent whose hand is revealed)
+    let targetPlayerId: string | undefined = stackItem.targets?.[0];
+
+    // If the target is a card (not a player), find the opponent
+    if (!targetPlayerId || state.cards[targetPlayerId]) {
+      targetPlayerId = state.turnOrder.find(id => id !== controllerId);
+    }
+
+    if (!targetPlayerId || !state.players[targetPlayerId]) {
+      console.log(`[OracleEffectResolver] No valid target player for hand reveal effect`);
+      return true; // Effect fizzles
+    }
+
+    // Get opponent's hand
+    const opponentHand = Object.values(state.cards).filter(c =>
+      c.ownerId === targetPlayerId && c.zone === 'hand'
+    );
+
+    if (opponentHand.length === 0) {
+      console.log(`[OracleEffectResolver] ${state.players[targetPlayerId].name} has no cards in hand`);
+      return true; // Effect resolves but does nothing
+    }
+
+    // Parse filter from oracle text (nonland, creature, instant/sorcery, etc.)
+    let selectableCards = opponentHand;
+    if (oracleText.includes('nonland permanent card') || oracleText.includes('nonland card')) {
+      selectableCards = opponentHand.filter(c =>
+        !c.types?.includes('Land') && !c.typeLine?.toLowerCase().includes('land')
+      );
+    } else if (oracleText.includes('creature card')) {
+      selectableCards = opponentHand.filter(c =>
+        c.types?.includes('Creature') || c.typeLine?.toLowerCase().includes('creature')
+      );
+    } else if (oracleText.includes('instant or sorcery')) {
+      selectableCards = opponentHand.filter(c =>
+        c.types?.includes('Instant') || c.types?.includes('Sorcery') ||
+        c.typeLine?.toLowerCase().includes('instant') || c.typeLine?.toLowerCase().includes('sorcery')
+      );
+    }
+
+    if (selectableCards.length === 0) {
+      console.log(`[OracleEffectResolver] No valid cards to choose from ${state.players[targetPlayerId].name}'s hand`);
+      return true; // Effect resolves but does nothing
+    }
+
+    // Create the pending choice
+    ChoiceHandler.createChoice(state, stackItem, {
+      type: 'card_selection',
+      sourceStackId: stackItem.id,
+      sourceCardId: card.instanceId,
+      sourceCardName: card.name,
+      choosingPlayerId: controllerId,
+      controllingPlayerId: controllerId,
+      constraints: { exactCount: 1 },
+      selectableIds: selectableCards.map(c => c.instanceId),
+      revealedCards: opponentHand.map(c => c.instanceId),
+      prompt: `Choose a card from ${state.players[targetPlayerId].name}'s hand:`
+    });
+
+    // Reveal the hand to the choosing player
+    state.revealedToPlayer = {
+      playerId: controllerId,
+      cardIds: opponentHand.map(c => c.instanceId)
+    };
+
+    console.log(`[OracleEffectResolver] Created hand reveal choice for ${card.name}, revealing ${opponentHand.length} cards`);
+    return false; // Pause resolution, waiting for choice
+  }
+
+  /**
+   * Handles modal spells ("Choose one", "Choose two", etc.)
+   * Creates a PendingChoice with the available modes.
+   */
+  static handleModeChoice(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject,
+    oracleText: string
+  ): boolean {
+    const countMatch = oracleText.match(/choose (one|two|three|four|five)/i);
+    const count = countMatch ? this.parseNumber(countMatch[1]) : 1;
+
+    // Parse modes (lines starting with • or -)
+    const modeMatches = oracleText.match(/[•\-]\s*([^•\-]+?)(?=\n|$|[•\-])/g);
+    if (!modeMatches?.length) {
+      console.log(`[OracleEffectResolver] No modes found in oracle text for ${card.name}`);
+      return true; // Continue with standard resolution
+    }
+
+    const modes = modeMatches.map((m, i) => {
+      const label = m.replace(/^[•\-]\s*/, '').trim();
+      return {
+        id: `mode-${i}`,
+        label: label,
+        description: label
+      };
+    });
+
+    // Create the pending choice
+    ChoiceHandler.createChoice(state, stackItem, {
+      type: 'mode_selection',
+      sourceStackId: stackItem.id,
+      sourceCardId: card.instanceId,
+      sourceCardName: card.name,
+      choosingPlayerId: stackItem.controllerId,
+      controllingPlayerId: stackItem.controllerId,
+      options: modes,
+      constraints: { exactCount: count },
+      prompt: `Choose ${count === 1 ? 'one' : count === 2 ? 'two' : count.toString()} for ${card.name}:`
+    });
+
+    console.log(`[OracleEffectResolver] Created mode choice for ${card.name} with ${modes.length} options`);
+    return false; // Pause resolution, waiting for choice
+  }
+
+  /**
+   * Executes the effect after a choice has been made.
+   * Called when resuming resolution with a completed choice.
+   */
+  static executeChoiceEffect(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject,
+    choice: ChoiceResult
+  ): boolean {
+    // Mark choice as executed to prevent re-execution
+    choice._executed = true;
+
+    console.log(`[OracleEffectResolver] Executing choice effect for ${card.name}, type: ${choice.type}`);
+
+    if (choice.type === 'card_selection' && choice.selectedCardIds?.length) {
+      const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+
+      // Handle "that player discards that card"
+      if (oracleText.includes('discards') || oracleText.includes('discard')) {
+        for (const cardId of choice.selectedCardIds) {
+          const targetCard = state.cards[cardId];
+          if (targetCard?.zone === 'hand') {
+            const ownerName = state.players[targetCard.ownerId]?.name || 'Unknown';
+            ActionHandler.moveCardToZone(state, cardId, 'graveyard');
+            console.log(`[OracleEffectResolver] ${targetCard.name} was discarded by ${card.name}`);
+            GameLogger.log(state, `${ownerName} discards ${targetCard.name}`, 'action', card.name, [targetCard]);
+          }
+        }
+        StateBasedEffects.process(state);
+        return true;
+      }
+
+      // Handle "exile that card"
+      if (oracleText.includes('exile')) {
+        for (const cardId of choice.selectedCardIds) {
+          const targetCard = state.cards[cardId];
+          if (targetCard) {
+            ActionHandler.moveCardToZone(state, cardId, 'exile');
+            console.log(`[OracleEffectResolver] ${targetCard.name} was exiled by ${card.name}`);
+            GameLogger.logExile(state, card, targetCard);
+          }
+        }
+        StateBasedEffects.process(state);
+        return true;
+      }
+    }
+
+    if (choice.type === 'mode_selection' && choice.selectedOptionIds?.length) {
+      // Store selected modes on the stack item
+      stackItem.modes = choice.selectedOptionIds.map(id => parseInt(id.replace('mode-', '')));
+      // Continue with mode-based resolution
+      return this.resolveSelectedModes(state, card, stackItem);
+    }
+
+    // Handle blight target selection (Lorwyn Eclipsed)
+    if (choice.type === 'target_selection' && (stackItem as any).blightAmount) {
+      return this.processBlightChoiceResult(state, card, stackItem, choice);
+    }
+
+    // Default: continue with standard resolution
+    return true;
+  }
+
+  /**
+   * Resolves effects based on selected modes.
+   * Only executes the effects corresponding to the selected modes.
+   */
+  static resolveSelectedModes(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject
+  ): boolean {
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+    const modeMatches = oracleText.match(/[•\-]\s*([^•\-]+?)(?=\n|$|[•\-])/g) || [];
+    const selectedModes = stackItem.modes || [];
+
+    let effectResolved = false;
+
+    for (const modeIndex of selectedModes) {
+      const modeText = modeMatches[modeIndex]?.replace(/^[•\-]\s*/, '').trim() || '';
+      if (!modeText) continue;
+
+      console.log(`[OracleEffectResolver] Executing mode ${modeIndex}: ${modeText.substring(0, 60)}...`);
+
+      // Use existing effect resolvers on mode text
+      if (this.resolveDamageEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveDestroyEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveExileEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveBounceEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolvePumpEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveDrawEffect(state, modeText, stackItem.controllerId, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveDiscardEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveLifeEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+      if (this.resolveCounterPlacementEffect(state, modeText, stackItem.controllerId, stackItem.targets, card)) {
+        effectResolved = true;
+      }
+    }
+
+    // Run state-based effects after resolving
+    StateBasedEffects.process(state);
+
+    return effectResolved;
+  }
+
+  // ============================================
+  // BLIGHT MECHANIC (Lorwyn Eclipsed)
+  // ============================================
+
+  /**
+   * Checks if the effect requires a blight choice.
+   * Blight: Put N -1/-1 counters on a creature you control as a cost.
+   */
+  static requiresBlightChoice(oracleText: string, stackItem: StackObject): boolean {
+    // Skip if we already have a choice made for this
+    if (stackItem.resolutionState?.choicesMade?.length) return false;
+
+    // Check for "you may blight N" pattern (optional blight)
+    if (/you may blight\s+\d+/i.test(oracleText)) return true;
+
+    // Check for ETB with blight pattern
+    if (/when .* enters.*blight\s+\d+/i.test(oracleText)) return true;
+
+    return false;
+  }
+
+  /**
+   * Handles blight choice creation for effects that require blighting.
+   */
+  static handleBlightChoice(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject,
+    _oracleText: string
+  ): boolean {
+    // Check if there are valid blight targets
+    if (!LorwynMechanics.canPayBlightCost(state, stackItem.controllerId)) {
+      console.log(`[OracleEffectResolver] No valid blight targets for ${card.name}`);
+      return true; // Continue without blighting
+    }
+
+    // Create the blight choice
+    if (LorwynMechanics.handleETBBlightEffect(state, card, stackItem)) {
+      return false; // Waiting for choice
+    }
+
+    return true; // Continue with standard resolution
+  }
+
+  /**
+   * Process blight choice result and continue with conditional effects.
+   */
+  static processBlightChoiceResult(
+    state: StrictGameState,
+    card: CardObject,
+    stackItem: StackObject,
+    choice: ChoiceResult
+  ): boolean {
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+    const blightAmount = (stackItem as any).blightAmount || 0;
+
+    // Check if the player chose to skip blighting
+    const skipped = choice.selectedOptionIds?.includes('skip') || false;
+
+    if (skipped || !choice.selectedCardIds?.length) {
+      console.log(`[OracleEffectResolver] Blight skipped for ${card.name}`);
+      // Don't execute the "if you do" effect, but may continue with other effects
+      return true;
+    }
+
+    // Apply the blight
+    const targetId = choice.selectedCardIds[0];
+    LorwynMechanics.applyBlight(state, stackItem.controllerId, targetId, blightAmount);
+
+    // Now execute the "if you do" effect
+    // Parse what happens after blighting
+    const ifYouDoMatch = oracleText.match(/if you do,?\s+(.+?)(?:\.|$)/i);
+    if (ifYouDoMatch) {
+      const effectText = ifYouDoMatch[1].toLowerCase();
+      console.log(`[OracleEffectResolver] Executing blight "if you do" effect: ${effectText}`);
+
+      // Resolve the conditional effect
+      this.resolveDamageEffect(state, effectText, stackItem.controllerId, stackItem.targets, card);
+      this.resolveDestroyEffect(state, effectText, stackItem.controllerId, stackItem.targets, card);
+      this.resolveDrawEffect(state, effectText, stackItem.controllerId, card);
+      this.resolveLifeEffect(state, effectText, stackItem.controllerId, stackItem.targets, card);
+      this.resolveTokenEffect(state, effectText, stackItem.controllerId, card);
+      this.resolveCounterPlacementEffect(state, effectText, stackItem.controllerId, stackItem.targets, card);
+    }
+
+    StateBasedEffects.process(state);
+    return true;
+  }
+
+  // ============================================
+  // VIVID MECHANIC (Lorwyn Eclipsed)
+  // ============================================
+
+  /**
+   * Get the vivid count (number of colors among permanents) for a player.
+   */
+  static getVividCount(state: StrictGameState, playerId: string): number {
+    return LorwynMechanics.countVividColors(state, playerId);
+  }
+
+  /**
+   * Resolve vivid-based effects where X equals the vivid count.
+   */
+  static resolveVividEffect(
+    state: StrictGameState,
+    oracleText: string,
+    controllerId: string,
+    targets: string[],
+    sourceCard: CardObject
+  ): boolean {
+    if (!LorwynMechanics.hasVivid(oracleText)) return false;
+
+    const vividCount = this.getVividCount(state, controllerId);
+    console.log(`[OracleEffectResolver] Vivid count for ${controllerId}: ${vividCount}`);
+
+    if (vividCount === 0) {
+      console.log(`[OracleEffectResolver] Vivid effect has no impact (0 colors)`);
+      return false;
+    }
+
+    let effectResolved = false;
+
+    // Handle vivid pump effects (+X/+X where X is vivid)
+    if (/gets?\s+\+x\/\+x/i.test(oracleText) || /equal to the number of colors/i.test(oracleText)) {
+      if (targets.length > 0) {
+        const targetCard = state.cards[targets[0]];
+        if (targetCard && targetCard.zone === 'battlefield') {
+          targetCard.modifiers = targetCard.modifiers || [];
+          targetCard.modifiers.push({
+            sourceId: sourceCard.instanceId,
+            type: 'pt_boost',
+            value: { power: vividCount, toughness: vividCount },
+            untilEndOfTurn: true
+          });
+
+          targetCard.power = (targetCard.basePower || 0) + vividCount;
+          targetCard.toughness = (targetCard.baseToughness || 0) + vividCount;
+
+          console.log(`[OracleEffectResolver] Vivid: ${targetCard.name} gets +${vividCount}/+${vividCount}`);
+          GameLogger.logPump(state, sourceCard, targetCard, vividCount, vividCount);
+          effectResolved = true;
+        }
+      }
+    }
+
+    // Handle vivid damage effects
+    if (/deals?\s+x\s+damage/i.test(oracleText) && /vivid|number of colors/i.test(oracleText)) {
+      if (targets.length > 0) {
+        const targetId = targets[0];
+        if (state.players[targetId]) {
+          this.dealDamageToPlayer(state, targetId, vividCount, sourceCard);
+          effectResolved = true;
+        } else {
+          const targetCard = state.cards[targetId];
+          if (targetCard && targetCard.zone === 'battlefield') {
+            this.dealDamageToCreature(state, targetCard, vividCount, sourceCard);
+            effectResolved = true;
+          }
+        }
+      }
+    }
+
+    // Handle vivid draw/life effects
+    if (/draw\s+x\s+cards?/i.test(oracleText) && /vivid|number of colors/i.test(oracleText)) {
+      for (let i = 0; i < vividCount; i++) {
+        ActionHandler.drawCard(state, controllerId);
+      }
+      console.log(`[OracleEffectResolver] Vivid: Draw ${vividCount} cards`);
+      effectResolved = true;
+    }
+
+    if (/gain\s+x\s+life/i.test(oracleText) && /vivid|number of colors/i.test(oracleText)) {
+      const player = state.players[controllerId];
+      if (player) {
+        player.life += vividCount;
+        console.log(`[OracleEffectResolver] Vivid: Gain ${vividCount} life`);
+        GameLogger.logLifeGain(state, sourceCard, player.name, vividCount);
+        effectResolved = true;
+      }
+    }
+
+    return effectResolved;
   }
 }

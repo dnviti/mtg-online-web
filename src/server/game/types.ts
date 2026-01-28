@@ -140,6 +140,78 @@ export interface StackObject {
   costPaid?: boolean;
   resolutionPosition?: { x: number, y: number };
   faceIndex?: number; // DFC Support
+  resolutionState?: {
+    choicesMade: ChoiceResult[];
+  };
+}
+
+// ============================================
+// CHOICE SYSTEM TYPES
+// ============================================
+
+// Choice types for effect resolution
+export type ChoiceType =
+  | 'mode_selection'      // "Choose one" / "Choose two"
+  | 'card_selection'      // Select cards from revealed zone
+  | 'target_selection'    // Mid-resolution targeting
+  | 'player_selection'    // Choose a player
+  | 'yes_no'              // May abilities
+  | 'order_selection'     // Put cards in order
+  | 'number_selection'    // Choose X
+  | 'ability_selection';  // Choose which ability to activate
+
+export interface ChoiceOption {
+  id: string;
+  label: string;
+  description?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+export interface SelectionConstraints {
+  minCount?: number;
+  maxCount?: number;
+  exactCount?: number;
+  filter?: {
+    zones?: Zone[];
+    controllerId?: string;
+    types?: string[];
+    notTypes?: string[];
+  };
+}
+
+export interface PendingChoice {
+  id: string;
+  type: ChoiceType;
+  sourceStackId: string;
+  sourceCardId: string;
+  sourceCardName: string;
+  choosingPlayerId: string;
+  controllingPlayerId: string;
+  prompt: string;
+
+  // Type-specific data
+  options?: ChoiceOption[];           // For mode_selection, yes_no
+  constraints?: SelectionConstraints; // For card/target selection
+  selectableIds?: string[];           // Pre-computed valid IDs
+  revealedCards?: string[];           // Cards revealed to chooser
+  minValue?: number;                  // For number_selection
+  maxValue?: number;
+
+  createdAt: number;
+}
+
+export interface ChoiceResult {
+  choiceId: string;
+  type: ChoiceType;
+  selectedOptionIds?: string[];  // mode_selection
+  selectedCardIds?: string[];    // card_selection
+  selectedPlayerId?: string;     // player_selection
+  selectedValue?: number;        // number_selection
+  confirmed?: boolean;           // yes_no
+  orderedIds?: string[];         // order_selection
+  selectedAbilityIndex?: number; // ability_selection
+  _executed?: boolean;           // Internal flag for tracking execution
 }
 
 // Game log entry for client-side display
@@ -191,4 +263,13 @@ export interface StrictGameState {
 
   // Pending game logs to be sent to clients after action processing (not persisted)
   pendingLogs?: GameLogEntry[];
+
+  // Choice system - for effects that require player decisions mid-resolution
+  pendingChoice?: PendingChoice | null;
+
+  // For revealing hidden information during choices (e.g., opponent's hand)
+  revealedToPlayer?: {
+    playerId: string;
+    cardIds: string[];
+  };
 }

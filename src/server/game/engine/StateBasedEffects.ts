@@ -1,19 +1,24 @@
-import { StrictGameState } from '../types';
+import { StrictGameState, CardObject } from '../types';
 import { Layers } from './Layers';
 import { GameLogger } from './GameLogger';
+import { LorwynMechanics } from './LorwynMechanics';
 
 /**
  * StateBasedEffects (SBA)
- * 
+ *
  * responsible for checking and applying automatic game rules that happen continuously.
  * This includes:
  * - A player losing the game (0 life).
  * - Creatures dying from lethal damage or 0 toughness.
  * - Auras/Equipment falling off invalid targets.
- * 
+ * - Counter annihilation (+1/+1 and -1/-1 counters cancel out).
+ * - Persist triggers (creatures return with -1/-1 counter).
+ *
  * This module runs in a loop until no more effects occur (StateBasedEffects.process).
  */
 export class StateBasedEffects {
+  // Track creatures that died this SBA check cycle for persist processing
+  private static pendingPersistCreatures: CardObject[] = [];
 
   /**
    * Checks for any applicable SBAs and applies them. 
@@ -36,7 +41,13 @@ export class StateBasedEffects {
       }
     }
 
-    // 2. Creature Death (Zero Toughness or Lethal Damage)
+    // 2. Counter Annihilation (Rule 122.3)
+    // If a permanent has both +1/+1 and -1/-1 counters, they are removed in pairs
+    if (LorwynMechanics.processAllCounterAnnihilation(state)) {
+      sbaPerformed = true;
+    }
+
+    // 3. Creature Death (Zero Toughness or Lethal Damage)
     const creatures = Object.values(cards).filter(c => c.zone === 'battlefield' && c.types?.includes('Creature'));
 
     for (const c of creatures) {
@@ -44,15 +55,50 @@ export class StateBasedEffects {
       if (c.toughness <= 0) {
         console.log(`SBA: ${c.name} put to GY (Zero Toughness).`);
         GameLogger.logCreatureDied(state, c, 'zero toughness');
+
+        // Check for persist before moving to graveyard
+        if (LorwynMechanics.canPersist(c)) {
+          StateBasedEffects.pendingPersistCreatures.push({ ...c }); // Clone to preserve state
+        }
+
         c.zone = 'graveyard';
         sbaPerformed = true;
         continue;
       }
 
-      // 704.5g Lethal Damage
-      if (c.damageMarked >= c.toughness && !c.supertypes?.includes('Indestructible')) {
+      // Check for Indestructible (from keywords or supertypes)
+      const isIndestructible = c.supertypes?.includes('Indestructible') ||
+                               c.keywords?.some(k => k.toLowerCase() === 'indestructible');
+
+      // 704.5h Deathtouch: Any damage from a source with deathtouch is lethal
+      const hasDeathouchDamage = c.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'deathtouch_damage_received'
+      );
+
+      if (hasDeathouchDamage && c.damageMarked > 0 && !isIndestructible) {
+        console.log(`SBA: ${c.name} destroyed (Deathtouch damage: ${c.damageMarked}).`);
+        GameLogger.logCreatureDied(state, c, 'deathtouch');
+
+        // Check for persist before moving to graveyard
+        if (LorwynMechanics.canPersist(c)) {
+          StateBasedEffects.pendingPersistCreatures.push({ ...c });
+        }
+
+        c.zone = 'graveyard';
+        sbaPerformed = true;
+        continue;
+      }
+
+      // 704.5g Lethal Damage (normal case)
+      if (c.damageMarked >= c.toughness && !isIndestructible) {
         console.log(`SBA: ${c.name} destroyed (Lethal Damage: ${c.damageMarked}/${c.toughness}).`);
         GameLogger.logCreatureDied(state, c, 'lethal damage');
+
+        // Check for persist before moving to graveyard
+        if (LorwynMechanics.canPersist(c)) {
+          StateBasedEffects.pendingPersistCreatures.push({ ...c });
+        }
+
         c.zone = 'graveyard';
         sbaPerformed = true;
       }
@@ -110,6 +156,9 @@ export class StateBasedEffects {
 
   // This method encapsulates the SBA loop and recalculation of layers
   static process(state: StrictGameState) {
+    // Reset pending persist creatures at start of SBA processing
+    StateBasedEffects.pendingPersistCreatures = [];
+
     Layers.recalculate(state);
 
     let loops = 0;
@@ -120,6 +169,27 @@ export class StateBasedEffects {
         break;
       }
       Layers.recalculate(state);
+    }
+
+    // Process persist triggers after SBA loop completes
+    // Persist creatures return to battlefield with a -1/-1 counter
+    if (StateBasedEffects.pendingPersistCreatures.length > 0) {
+      console.log(`[StateBasedEffects] Processing ${StateBasedEffects.pendingPersistCreatures.length} persist trigger(s)`);
+
+      for (const creatureSnapshot of StateBasedEffects.pendingPersistCreatures) {
+        // Find the actual card in graveyard
+        const card = state.cards[creatureSnapshot.instanceId];
+        if (card && card.zone === 'graveyard') {
+          LorwynMechanics.returnFromPersist(state, card);
+        }
+      }
+
+      // Clear the pending list
+      StateBasedEffects.pendingPersistCreatures = [];
+
+      // Run SBA again to check if the returned creatures die again
+      // (e.g., if they return as 0/0 with a -1/-1 counter)
+      this.process(state);
     }
   }
 }
