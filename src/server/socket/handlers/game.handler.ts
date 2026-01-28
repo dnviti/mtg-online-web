@@ -83,6 +83,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                 mana_cost: authCard.mana_cost || (authCard.card_faces ? authCard.card_faces[0].mana_cost : ''),
                 power: authCard.power,
                 toughness: authCard.toughness,
+                loyalty: authCard.loyalty,  // Planeswalker loyalty
                 colors: authCard.colors,
                 card_faces: authCard.card_faces,
                 image_uris: authCard.image_uris,
@@ -106,6 +107,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                 mana_cost: card.mana_cost || card.manaCost,
                 power: card.power?.toString(),
                 toughness: card.toughness?.toString(),
+                loyalty: card.loyalty,  // Planeswalker loyalty
                 colors: card.colors,
                 card_faces: card.card_faces || card.cardFaces,
                 image_uris: card.image_uris,

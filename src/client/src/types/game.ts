@@ -42,6 +42,8 @@ export interface CardInstance {
   toughness?: number;   // Current Calculated Toughness
   basePower?: number;   // Base Power
   baseToughness?: number; // Base Toughness
+  loyalty?: number;       // Current loyalty (for planeswalkers)
+  baseLoyalty?: number;   // Starting loyalty (for planeswalkers)
   position: { x: number; y: number; z: number }; // For freeform placement
   typeLine?: string;
   types?: string[];

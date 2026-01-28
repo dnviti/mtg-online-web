@@ -131,9 +131,27 @@ export class StateBasedEffects {
       }
     }
 
-    // 3. Legend Rule (704.5j) - Skipped for now (Placeholder from original)
+    // 4. Planeswalker Loyalty Death (Rule 704.5i)
+    // If a planeswalker has 0 or less loyalty counters, it's put into its owner's graveyard
+    const planeswalkers = Object.values(cards).filter(c =>
+      c.zone === 'battlefield' && c.types?.includes('Planeswalker')
+    );
 
-    // 4. Aura Validity (704.5n)
+    for (const pw of planeswalkers) {
+      const loyaltyCounter = pw.counters?.find(c => c.type === 'loyalty');
+      const currentLoyalty = loyaltyCounter?.count ?? 0;
+
+      if (currentLoyalty <= 0) {
+        console.log(`SBA: ${pw.name} put to GY (Zero Loyalty).`);
+        GameLogger.log(state, `{${pw.name}} is put into graveyard (0 loyalty)`, 'zone', 'Game', [pw]);
+        pw.zone = 'graveyard';
+        sbaPerformed = true;
+      }
+    }
+
+    // 5. Legend Rule (704.5j) - Skipped for now (Placeholder from original)
+
+    // 6. Aura Validity (704.5n)
     Object.values(cards).forEach(c => {
       if (c.zone === 'battlefield' && c.types?.includes('Enchantment') && c.subtypes?.includes('Aura')) {
         if (!c.attachedTo) {
@@ -153,7 +171,7 @@ export class StateBasedEffects {
       }
     });
 
-    // 5. Equipment Validity
+    // 7. Equipment Validity
     Object.values(cards).forEach(c => {
       if (c.zone === 'battlefield' && c.types?.includes('Artifact') && c.subtypes?.includes('Equipment') && c.attachedTo) {
         const target = cards[c.attachedTo];
@@ -165,7 +183,7 @@ export class StateBasedEffects {
       }
     });
 
-    // 6. Token Ceasing to Exist (704.5d)
+    // 8. Token Ceasing to Exist (704.5d)
     // Tokens that are in a zone other than the battlefield cease to exist
     const tokensToRemove: string[] = [];
     Object.entries(cards).forEach(([id, c]) => {

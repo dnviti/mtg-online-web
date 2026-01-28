@@ -30,6 +30,10 @@ export class CardUtils {
     return card.types && card.types.includes('Battle');
   }
 
+  static isPlaneswalker(card: any): boolean {
+    return card.types && card.types.includes('Planeswalker');
+  }
+
   static isPermanent(card: any): boolean {
     if (card.types && card.types.length > 0) {
       return card.types.some((t: string) =>

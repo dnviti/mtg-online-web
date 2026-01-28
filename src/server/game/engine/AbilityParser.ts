@@ -19,6 +19,7 @@ export interface ParsedAbilityCost {
   discard?: string;        // Discard pattern (e.g., "a card", "two cards")
   exile?: string;          // Exile from graveyard/hand pattern
   removeCounters?: { type: string; count: number }; // Remove counters
+  loyaltyCost?: number;    // Loyalty cost: positive for +X, negative for -X, 0 for 0:
   other?: string;          // Other costs as raw text
 }
 
@@ -43,6 +44,9 @@ export interface ParsedAbility {
 
   // Mana ability flag (doesn't use the stack)
   isManaAbility?: boolean;
+
+  // Loyalty ability flag (for planeswalkers)
+  isLoyaltyAbility?: boolean;
 }
 
 export class AbilityParser {
@@ -69,6 +73,38 @@ export class AbilityParser {
       // Check if it's a keyword line (Flying, Haste, Lifelink, etc.)
       if (this.isKeywordLine(trimmed)) {
         // Keywords are handled separately, skip
+        continue;
+      }
+
+      // Check for loyalty ability: +X: or -X: or 0: patterns (planeswalkers)
+      // Must check before activated abilities since they also use ":" pattern
+      const loyaltyMatch = trimmed.match(/^([+−-]?\d+):\s*(.+)$/s);
+      if (loyaltyMatch) {
+        const loyaltyCostStr = loyaltyMatch[1].replace('−', '-'); // Normalize minus sign (Unicode vs ASCII)
+        const loyaltyCost = parseInt(loyaltyCostStr);
+        const effectText = loyaltyMatch[2];
+
+        const ability: ParsedAbility = {
+          id: `loyalty-${abilityIndex++}`,
+          type: 'activated',
+          text: trimmed,
+          costText: `${loyaltyCostStr}:`,
+          effectText: effectText.trim(),
+          cost: {
+            loyaltyCost: loyaltyCost
+          },
+          isLoyaltyAbility: true,
+          sorcerySpeed: true,  // Rule 606.3 - only during main phase when stack is empty
+        };
+
+        // Check for targeting
+        const targetMatch = effectText.match(/target\s+([\w\s,]+?)(?:\.|,|$)/i);
+        if (targetMatch) {
+          ability.requiresTarget = true;
+          ability.targetFilter = targetMatch[1].trim();
+        }
+
+        abilities.push(ability);
         continue;
       }
 
@@ -271,16 +307,17 @@ export class AbilityParser {
   /**
    * Determines if an ability is a mana ability (doesn't use the stack)
    */
-  private static isManaAbility(effectText: string, _cost: ParsedAbilityCost): boolean {
+  private static isManaAbility(effectText: string, cost: ParsedAbilityCost): boolean {
     // A mana ability:
     // 1. Adds mana to the mana pool
     // 2. Doesn't target
-    // 3. Isn't a loyalty ability
+    // 3. Isn't a loyalty ability (Rule 606.2)
 
     const addsMana = /add\s+(\{[WUBRGC]\}|one mana|mana)/i.test(effectText);
     const hasTarget = /target/i.test(effectText);
+    const isLoyalty = cost.loyaltyCost !== undefined;
 
-    return addsMana && !hasTarget;
+    return addsMana && !hasTarget && !isLoyalty;
   }
 
   /**
@@ -296,7 +333,8 @@ export class AbilityParser {
       /^discard\b/i,
       /^pay\s+\d+\s+life/i,
       /^exile\b/i,
-      /^remove\b/i
+      /^remove\b/i,
+      /^[+−-]?\d+$/       // Loyalty cost patterns (+1, -3, 0, etc.)
     ];
 
     // Also short texts are often costs

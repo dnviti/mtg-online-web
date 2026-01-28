@@ -178,6 +178,8 @@ export class PhaseManager {
       });
       state.attackersDeclared = false;
       state.blockersDeclared = false;
+      // Clear planeswalker loyalty activation tracking for the new turn (Rule 606.3)
+      state.loyaltyActivatedThisTurn = [];
       this.advanceTurn(state);
       return;
     }

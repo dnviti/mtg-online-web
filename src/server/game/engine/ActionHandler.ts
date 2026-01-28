@@ -80,6 +80,9 @@ export class ActionHandler {
           card.oracleText = card.definition.oracle_text || card.oracleText;
           card.defense = parseFloat(card.definition.defense || card.defense || '0');
           card.baseDefense = card.defense;
+          // Reset loyalty for planeswalkers
+          card.loyalty = undefined;
+          card.baseLoyalty = undefined;
         }
 
         card.attachedTo = undefined;
@@ -338,6 +341,23 @@ export class ActionHandler {
             // Battles enter with defense counters
             if (CardUtils.isBattle(card) && card.baseDefense) {
               this.addCounter(state, state.activePlayerId, card.instanceId, 'defense', card.baseDefense);
+            }
+
+            // Planeswalkers enter with loyalty counters (Rule 306.5b)
+            if (CardUtils.isPlaneswalker(card)) {
+              // Check multiple possible locations for loyalty value
+              const loyaltyStr = card.definition?.loyalty || (card as any).loyalty ||
+                                 card.definition?.card_faces?.[0]?.loyalty || '0';
+              const baseLoyalty = parseInt(loyaltyStr);
+              console.log(`[ActionHandler] Planeswalker ${card.name} loyalty check: definition.loyalty=${card.definition?.loyalty}, parsed=${baseLoyalty}`);
+              if (baseLoyalty > 0) {
+                card.baseLoyalty = baseLoyalty;
+                card.loyalty = baseLoyalty;
+                this.addCounter(state, state.activePlayerId, card.instanceId, 'loyalty', baseLoyalty);
+                console.log(`[ActionHandler] Planeswalker ${card.name} enters with ${baseLoyalty} loyalty counters`);
+              } else {
+                console.warn(`[ActionHandler] Planeswalker ${card.name} has no loyalty value! Definition:`, JSON.stringify(card.definition, null, 2).substring(0, 500));
+              }
             }
 
             // Check for ETB triggered abilities instead of resolving immediately
@@ -684,6 +704,111 @@ export class ActionHandler {
     const playerName = state.players[playerId]?.name || 'Unknown';
     GameLogger.log(state, `${playerName} activates ability of {${source.name}}`, 'action', source.name, [source]);
 
+    ActionHandler.resetPriority(state, playerId);
+  }
+
+  /**
+   * Activates a loyalty ability on a planeswalker
+   * Rule 606.3: Only once per planeswalker per turn, only during main phase with empty stack
+   */
+  static activateLoyaltyAbility(
+    state: StrictGameState,
+    playerId: string,
+    planeswalkerInstanceId: string,
+    abilityIndex: number,
+    targets: string[] = []
+  ) {
+    // Validate priority
+    if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
+
+    const planeswalker = state.cards[planeswalkerInstanceId];
+    if (!planeswalker) throw new Error("Planeswalker not found");
+    if (!CardUtils.isPlaneswalker(planeswalker)) throw new Error("Card is not a planeswalker");
+    if (planeswalker.controllerId !== playerId) throw new Error("You don't control this planeswalker");
+    if (planeswalker.zone !== 'battlefield') throw new Error("Planeswalker not on battlefield");
+
+    // Rule 606.3: Sorcery speed timing
+    if (state.stack.length > 0) throw new Error("Stack must be empty to activate loyalty ability.");
+    if (state.phase !== 'main1' && state.phase !== 'main2') throw new Error("Can only activate loyalty abilities during main phase.");
+    if (state.activePlayerId !== playerId) throw new Error("Can only activate loyalty abilities on your turn.");
+
+    // Rule 606.3: Only once per planeswalker per turn
+    const activatedThisTurn = state.loyaltyActivatedThisTurn || [];
+    if (activatedThisTurn.includes(planeswalkerInstanceId)) {
+      throw new Error(`Already activated a loyalty ability on ${planeswalker.name} this turn.`);
+    }
+
+    // Get loyalty abilities using AbilityParser
+    const abilities = AbilityParser.parseAbilities(planeswalker);
+    const loyaltyAbilities = abilities.filter(a => a.isLoyaltyAbility);
+
+    if (loyaltyAbilities.length === 0) {
+      throw new Error(`${planeswalker.name} has no loyalty abilities.`);
+    }
+
+    if (abilityIndex < 0 || abilityIndex >= loyaltyAbilities.length) {
+      throw new Error(`Invalid loyalty ability index: ${abilityIndex}. ${planeswalker.name} has ${loyaltyAbilities.length} loyalty abilities.`);
+    }
+
+    const ability = loyaltyAbilities[abilityIndex];
+    const loyaltyCost = ability.cost?.loyaltyCost ?? 0;
+
+    // Get current loyalty from counters
+    const loyaltyCounter = planeswalker.counters?.find(c => c.type === 'loyalty');
+    const currentLoyalty = loyaltyCounter?.count ?? 0;
+
+    // Rule 606.6: Can't activate negative loyalty abilities if not enough loyalty
+    if (loyaltyCost < 0 && Math.abs(loyaltyCost) > currentLoyalty) {
+      throw new Error(`Not enough loyalty counters (have ${currentLoyalty}, need ${Math.abs(loyaltyCost)})`);
+    }
+
+    // Validate targets if required
+    if (ability.requiresTarget && targets.length === 0) {
+      throw new Error("This ability requires a target.");
+    }
+
+    // Pay loyalty cost (Rule 606.4)
+    if (loyaltyCost > 0) {
+      // Add loyalty counters
+      this.addCounter(state, playerId, planeswalkerInstanceId, 'loyalty', loyaltyCost);
+      console.log(`[ActionHandler] Added ${loyaltyCost} loyalty to ${planeswalker.name}`);
+    } else if (loyaltyCost < 0 && loyaltyCounter) {
+      // Remove loyalty counters
+      loyaltyCounter.count += loyaltyCost; // Adding negative number removes counters
+      console.log(`[ActionHandler] Removed ${Math.abs(loyaltyCost)} loyalty from ${planeswalker.name}`);
+    }
+    // loyaltyCost === 0 requires no change
+
+    // Track activation for this turn
+    if (!state.loyaltyActivatedThisTurn) {
+      state.loyaltyActivatedThisTurn = [];
+    }
+    state.loyaltyActivatedThisTurn.push(planeswalkerInstanceId);
+
+    // Put ability on stack
+    const stackItem: StackObject = {
+      id: Math.random().toString(36).substr(2, 9),
+      sourceId: planeswalkerInstanceId,
+      controllerId: playerId,
+      type: 'ability',
+      name: `${planeswalker.name}: ${ability.effectText.substring(0, 30)}...`,
+      text: ability.effectText,
+      targets
+    };
+
+    state.stack.push(stackItem);
+
+    const playerName = state.players[playerId]?.name || 'Unknown';
+    const costDisplay = loyaltyCost >= 0 ? `+${loyaltyCost}` : `${loyaltyCost}`;
+    GameLogger.log(
+      state,
+      `${playerName} activates {${planeswalker.name}}'s ${costDisplay} ability`,
+      'action',
+      planeswalker.name,
+      [planeswalker]
+    );
+
+    console.log(`[ActionHandler] Player ${playerId} activated ${planeswalker.name}'s ${costDisplay} loyalty ability`);
     ActionHandler.resetPriority(state, playerId);
   }
 

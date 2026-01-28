@@ -39,6 +39,7 @@ export interface MinimalScryfallCard {
   power?: string;
   toughness?: string;
   defense?: string;
+  loyalty?: string;  // Scryfall provides loyalty as string (e.g., "3")
   keywords?: string[];
   layout?: string;
   card_faces?: MinimalCardFace[];
@@ -84,6 +85,8 @@ export interface CardObject {
   baseToughness: number;
   defense?: number;
   baseDefense?: number;
+  loyalty?: number;      // Current loyalty (calculated from counters)
+  baseLoyalty?: number;  // Starting loyalty from card definition
   damageMarked: number;
 
   // Counters & Mods
@@ -327,4 +330,8 @@ export interface StrictGameState {
   // Delayed triggered abilities (Rule 603.7)
   // Created during spell/ability resolution, trigger at a later time
   delayedTriggers?: DelayedTrigger[];
+
+  // Planeswalker loyalty tracking (Rule 606.3)
+  // instanceIds of planeswalkers that have activated a loyalty ability this turn
+  loyaltyActivatedThisTurn?: string[];
 }
