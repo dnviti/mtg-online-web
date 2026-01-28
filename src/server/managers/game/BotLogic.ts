@@ -3,6 +3,7 @@ import { RulesEngine } from '../../game/RulesEngine';
 import { ManaUtils } from '../../game/engine/ManaUtils';
 import { ChoiceHandler } from '../../game/engine/ChoiceHandler';
 import { OracleEffectResolver } from '../../game/engine/OracleEffectResolver';
+import { DebugManager } from '../../game/engine/DebugManager';
 
 /**
  * BotLogic
@@ -22,14 +23,26 @@ export class BotLogic {
   /**
    * Processes bot actions in a loop until a human player has priority.
    * Returns true if any action was taken.
+   * If debug mode is enabled, the loop will pause after each action for debugging.
    */
   static processActionsLoop(game: StrictGameState): boolean {
     let iterations = 0;
     let actionTaken = false;
     this.spellsCastThisLoop.clear();
 
+    // Clear any stale pending action (in case we're resuming after debug continue)
+    if (this.pendingBotAction && this.pendingBotAction.gameId === game.roomId) {
+      this.pendingBotAction = null;
+    }
+
     while (iterations < this.MAX_ITERATIONS) {
       iterations++;
+
+      // Stop if debug mode is paused (waiting for continue signal)
+      if (DebugManager.isPaused(game.roomId)) {
+        console.log(`[BotLogic] Debug mode paused - stopping bot loop`);
+        break;
+      }
 
       const priorityPlayer = game.players[game.priorityPlayerId];
 
@@ -58,8 +71,68 @@ export class BotLogic {
   }
 
   /**
+   * Helper to check if an action should pause for debug mode.
+   * Returns the pause event if paused, null otherwise.
+   */
+  private static checkDebugPause(game: StrictGameState, action: any, actorId: string): import('../../game/types/debug').DebugPauseEvent | null {
+    if (!DebugManager.isEnabled(game.roomId)) return null;
+    return DebugManager.createSnapshot(game, action, actorId);
+  }
+
+  /**
+   * Stores the pending bot action for later execution after debug continue.
+   */
+  static pendingBotAction: { gameId: string; action: any; actorId: string } | null = null;
+
+  /**
+   * Executes a bot action after debug continue signal.
+   */
+  static executePendingBotAction(game: StrictGameState): boolean {
+    if (!this.pendingBotAction || this.pendingBotAction.gameId !== game.roomId) {
+      return false;
+    }
+
+    const { action, actorId } = this.pendingBotAction;
+    this.pendingBotAction = null;
+
+    const engine = new RulesEngine(game);
+    const normalizedType = action.type.toLowerCase();
+
+    try {
+      switch (normalizedType) {
+        case 'play_land':
+          engine.playLand(actorId, action.cardId);
+          break;
+        case 'cast_spell':
+          engine.castSpell(actorId, action.cardId, action.targets);
+          break;
+        case 'declare_attackers':
+          engine.declareAttackers(actorId, action.attackers);
+          break;
+        case 'declare_blockers':
+          engine.declareBlockers(actorId, action.blockers);
+          break;
+        case 'mulligan_decision':
+          engine.resolveMulligan(actorId, action.keep);
+          break;
+        case 'pass_priority':
+          engine.passPriority(actorId);
+          break;
+        default:
+          console.warn(`[BotLogic] Unknown pending action type: ${normalizedType}`);
+          return false;
+      }
+      return true;
+    } catch (e) {
+      console.error(`[BotLogic] Error executing pending bot action:`, e);
+      return false;
+    }
+  }
+
+  /**
    * Evaluates the game state and performs a single action for the current priority bot.
    * Returns true if an action was taken.
+   * In debug mode, may pause and store the action for later execution.
    */
   static processSingleAction(game: StrictGameState): boolean {
     // 0a. Handle pending choice for bot
@@ -75,13 +148,23 @@ export class BotLogic {
     // 0b. Mulligan Phase - all bots keep immediately
     if (game.step === 'mulligan') {
       let actionTaken = false;
-      Object.values(game.players).forEach(p => {
+      for (const p of Object.values(game.players)) {
         if (p.isBot && !p.handKept) {
+          const action = { type: 'MULLIGAN_DECISION', keep: true };
+
+          // Check for debug pause
+          const pauseEvent = this.checkDebugPause(game, action, p.id);
+          if (pauseEvent) {
+            this.pendingBotAction = { gameId: game.roomId, action, actorId: p.id };
+            console.log(`[BotLogic] Debug pause for bot mulligan: ${p.name}`);
+            return false; // Paused, no action taken yet
+          }
+
           console.log(`[Bot] ${p.name} keeps hand.`);
           new RulesEngine(game).resolveMulligan(p.id, true);
           actionTaken = true;
         }
-      });
+      }
       return actionTaken;
     }
 
@@ -93,7 +176,7 @@ export class BotLogic {
     const engine = new RulesEngine(game);
     const isOurTurn = game.activePlayerId === player.id;
 
-    // 1. Draw step - bot draws automatically
+    // 1. Draw step - bot draws automatically (no debug pause for draw)
     if (game.step === 'draw' && isOurTurn) {
       if (game.turnCount > 1 || game.turnOrder.length > 2) {
         console.log(`[Bot] ${player.name} draws a card.`);
@@ -107,6 +190,16 @@ export class BotLogic {
     if ((game.phase === 'main1' || game.phase === 'main2') && game.landsPlayedThisTurn === 0 && isOurTurn) {
       const land = this.chooseBestLandToPlay(game, player.id);
       if (land) {
+        const action = { type: 'PLAY_LAND', cardId: land.instanceId };
+
+        // Check for debug pause
+        const pauseEvent = this.checkDebugPause(game, action, player.id);
+        if (pauseEvent) {
+          this.pendingBotAction = { gameId: game.roomId, action, actorId: player.id };
+          console.log(`[BotLogic] Debug pause for bot land: ${land.name}`);
+          return false;
+        }
+
         console.log(`[Bot] ${player.name} plays land: ${land.name}`);
         engine.playLand(player.id, land.instanceId);
         return true;
@@ -132,6 +225,16 @@ export class BotLogic {
     // 5. Declare Attackers
     if (game.phase === 'combat' && game.step === 'declare_attackers' && isOurTurn && !game.attackersDeclared) {
       const attackers = this.chooseAttackers(game, player.id);
+      const action = { type: 'DECLARE_ATTACKERS', attackers };
+
+      // Check for debug pause
+      const pauseEvent = this.checkDebugPause(game, action, player.id);
+      if (pauseEvent) {
+        this.pendingBotAction = { gameId: game.roomId, action, actorId: player.id };
+        console.log(`[BotLogic] Debug pause for bot attackers`);
+        return false;
+      }
+
       console.log(`[Bot] ${player.name} declares ${attackers.length} attacker(s)`);
       engine.declareAttackers(player.id, attackers);
       return true;
@@ -140,12 +243,22 @@ export class BotLogic {
     // 6. Declare Blockers
     if (game.phase === 'combat' && game.step === 'declare_blockers' && !isOurTurn && !game.blockersDeclared) {
       const blockers = this.chooseBlockers(game, player.id);
+      const action = { type: 'DECLARE_BLOCKERS', blockers };
+
+      // Check for debug pause
+      const pauseEvent = this.checkDebugPause(game, action, player.id);
+      if (pauseEvent) {
+        this.pendingBotAction = { gameId: game.roomId, action, actorId: player.id };
+        console.log(`[BotLogic] Debug pause for bot blockers`);
+        return false;
+      }
+
       console.log(`[Bot] ${player.name} declares ${blockers.length} blocker(s)`);
       engine.declareBlockers(player.id, blockers);
       return true;
     }
 
-    // 7. Default: Pass Priority
+    // 7. Default: Pass Priority (no debug pause for pass)
     console.log(`[Bot] ${player.name} passes priority (Phase: ${game.phase}, Step: ${game.step})`);
     engine.passPriority(player.id);
     return true;
@@ -498,6 +611,16 @@ export class BotLogic {
           if (targets.length === 0) continue; // No valid target
         }
 
+        const action = { type: 'CAST_SPELL', cardId: card.instanceId, targets };
+
+        // Check for debug pause
+        const pauseEvent = this.checkDebugPause(game, action, playerId);
+        if (pauseEvent) {
+          this.pendingBotAction = { gameId: game.roomId, action, actorId: playerId };
+          console.log(`[BotLogic] Debug pause for bot spell: ${card.name}`);
+          return false; // Paused, return false to stop loop
+        }
+
         console.log(`[Bot] ${player.name} casts ${card.name} (score: ${score.toFixed(1)})`);
         engine.castSpell(playerId, card.instanceId, targets);
         this.spellsCastThisLoop.add(card.instanceId);
@@ -551,6 +674,16 @@ export class BotLogic {
       try {
         const targets = this.chooseSpellTargets(game, playerId, card);
         if (this.requiresTarget(card) && targets.length === 0) continue;
+
+        const action = { type: 'CAST_SPELL', cardId: card.instanceId, targets };
+
+        // Check for debug pause
+        const pauseEvent = this.checkDebugPause(game, action, playerId);
+        if (pauseEvent) {
+          this.pendingBotAction = { gameId: game.roomId, action, actorId: playerId };
+          console.log(`[BotLogic] Debug pause for bot instant: ${card.name}`);
+          return false; // Paused, return false to stop loop
+        }
 
         console.log(`[Bot] ${player.name} casts instant ${card.name} (score: ${score.toFixed(1)})`);
         engine.castSpell(playerId, card.instanceId, targets);

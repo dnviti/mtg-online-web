@@ -190,3 +190,158 @@ export interface GameState {
     cardIds: string[];
   };
 }
+
+// ============================================
+// DEBUG MODE TYPES
+// ============================================
+
+/**
+ * Step type for detailed explanations
+ */
+export type DebugStepType =
+  | 'parse'        // Oracle text parsing
+  | 'cost'         // Cost payment
+  | 'target'       // Target selection
+  | 'stack'        // Stack interaction
+  | 'resolve'      // Resolution step
+  | 'effect'       // Effect application
+  | 'trigger'      // Triggered ability
+  | 'state'        // State-based action
+  | 'zone'         // Zone change
+  | 'phase'        // Phase/step change
+  | 'info';        // General info
+
+/**
+ * A single step in the detailed engine explanation
+ */
+export interface DebugExplanationStep {
+  id: string;
+  type: DebugStepType;
+  title: string;
+  description: string;
+  details?: string[];
+  codeSnippet?: string;
+  highlight?: 'info' | 'warning' | 'success' | 'error';
+  relatedCardIds?: string[];
+}
+
+/**
+ * Parsed ability from oracle text
+ */
+export interface ParsedAbility {
+  type: 'static' | 'triggered' | 'activated' | 'spell' | 'etb' | 'ltb' | 'attack' | 'dies';
+  keyword?: string;
+  triggerCondition?: string;
+  cost?: string;
+  effect: string;
+  targets?: string[];
+}
+
+/**
+ * Detailed explanation for a debug action
+ */
+export interface DebugDetailedExplanation {
+  summary: string;
+  oracleText?: string;
+  parsedAbilities?: ParsedAbility[];
+  steps: DebugExplanationStep[];
+  stateChanges: {
+    type: 'zone' | 'counter' | 'life' | 'mana' | 'damage' | 'tap' | 'attach' | 'control' | 'phase';
+    description: string;
+    before?: string;
+    after?: string;
+  }[];
+  triggeredAbilities?: {
+    sourceCardId: string;
+    sourceCardName: string;
+    triggerCondition: string;
+    effect: string;
+  }[];
+  rulesReferences?: {
+    rule: string;
+    description: string;
+  }[];
+}
+
+/**
+ * Event received from server when debug mode pauses before an action
+ */
+export interface DebugPauseEvent {
+  snapshotId: string;
+  actionType: string;
+  description: string;
+  explanation: string;
+  detailedExplanation?: DebugDetailedExplanation;
+
+  // Actor info
+  actorId: string;
+  actorName: string;
+  isBot: boolean;
+
+  // Source card (if applicable)
+  sourceCard?: {
+    instanceId: string;
+    name: string;
+    imageUrl: string;
+    manaCost?: string;
+    typeLine?: string;
+  };
+
+  // Cards affected by this action
+  affectedCards: Array<{
+    instanceId: string;
+    name: string;
+    imageUrl: string;
+    effect: string;
+  }>;
+
+  // Targets (may differ from affected cards)
+  targets?: Array<{
+    id: string;
+    name: string;
+    type: 'card' | 'player';
+  }>;
+
+  // Undo/redo availability
+  canUndo: boolean;
+  canRedo: boolean;
+  historyPosition: number;
+  historyLength: number;
+}
+
+/**
+ * Minimal history item for client display
+ */
+export interface DebugHistoryItem {
+  id: string;
+  timestamp: number;
+  actionType: string;
+  actorName: string;
+  isBot: boolean;
+  description: string;
+  status: 'executed' | 'cancelled' | 'pending';
+  sourceCard?: {
+    instanceId: string;
+    name: string;
+    imageUrl: string;
+  };
+  detailedExplanation?: DebugDetailedExplanation;
+}
+
+/**
+ * Debug state update event from server
+ */
+export interface DebugStateEvent {
+  enabled: boolean;
+  paused: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  historyPosition: number;
+  historyLength: number;
+  lastAction?: {
+    type: string;
+    description: string;
+  };
+  // History items for debug panel display
+  history?: DebugHistoryItem[];
+}

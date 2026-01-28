@@ -23,6 +23,8 @@ import { TokenPickerModal } from './TokenPickerModal';
 import { DoubleFacedCardModal } from './DoubleFacedCardModal';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
 import { calculateAutoTap } from '../../utils/manaUtils';
+import { useDebug } from '../../contexts/DebugContext';
+// DebugOverlay removed - using DebugPanel in sidebar instead
 
 // --- DnD Helpers ---
 const DraggableCardWrapper = ({ children, card, disabled }: { children: React.ReactNode, card: CardInstance, disabled?: boolean }) => {
@@ -65,8 +67,9 @@ interface GameViewProps {
   logHoveredCard?: { name: string; imageUrl?: string; imageArtCrop?: string; manaCost?: string; typeLine?: string; oracleText?: string } | null;
 }
 
-export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format, logHoveredCard }) => {
+const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format, logHoveredCard }) => {
   const hasPriority = gameState.priorityPlayerId === currentPlayerId;
+  const { highlightedCardIds, sourceCardId } = useDebug();
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
   // If useGameSocket is not defined elsewhere, this will cause an error.
@@ -945,6 +948,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                   onDragEnd={() => { }}
                                   onMouseEnter={() => setHoveredCard(card)}
                                   onMouseLeave={() => setHoveredCard(null)}
+                                  isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                  debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                 />
                               </div>
                             ))}
@@ -1055,6 +1060,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                               onDragEnd={() => { }}
                                               onMouseEnter={() => setHoveredCard(card)}
                                               onMouseLeave={() => setHoveredCard(null)}
+                                              isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                              debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                             />
                                           </div>
                                         ))}
@@ -1094,6 +1101,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                           ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
                                           ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
                                         `}
+                                          isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                          debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                         />
                                         <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
 
@@ -1201,6 +1210,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                         onClick={() => { }}
                                         onDragStart={() => { }}
                                         className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
+                                        isDebugHighlighted={highlightedCardIds.has(att.instanceId) || sourceCardId === att.instanceId}
+                                        debugHighlightType={sourceCardId === att.instanceId ? 'source' : 'affected'}
                                       />
                                       {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
                                       {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
@@ -1299,6 +1310,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                   ${isAttacking ? "ring-4 ring-red-500 ring-offset-2 ring-offset-slate-900" : ""}
                                   ${blockingTargetId ? "ring-4 ring-blue-500 ring-offset-2 ring-offset-slate-900" : ""}
                                 `}
+                                isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                               />
                             </DraggableCardWrapper>
                             {blockingTargetId && (
@@ -1529,6 +1542,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                 style={{ transformOrigin: 'bottom center' }}
                                 onMouseEnter={() => setHoveredCard(card)}
                                 onMouseLeave={() => setHoveredCard(null)}
+                                isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                               />
                             </DraggableCardWrapper>
                           </div>
@@ -1658,7 +1673,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
             </div>
           ) : null}
         </DragOverlay>
+        {/* Debug Overlay - renders on top when debug mode is paused */}
+        {/* Debug panel is now in sidebar - no overlay needed */}
       </div>
     </DndContext>
   );
+};
+
+// GameView component - DebugProvider is now at GameRoom level
+export const GameView: React.FC<GameViewProps> = (props) => {
+  return <GameViewInner {...props} />;
 };

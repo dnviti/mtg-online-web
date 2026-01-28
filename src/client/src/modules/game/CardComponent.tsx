@@ -19,9 +19,12 @@ interface CardComponentProps {
   viewMode?: 'normal' | 'cutout' | 'large';
   ignoreZoneLayout?: boolean;
   currentTurn?: number;
+  // Debug highlighting
+  isDebugHighlighted?: boolean;
+  debugHighlightType?: 'source' | 'affected';
 }
 
-export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal', ignoreZoneLayout = false, currentTurn }) => {
+export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart, onClick, onContextMenu, onMouseEnter, onMouseLeave, onDrop, onDrag, onDragEnd, style, className, viewMode = 'normal', ignoreZoneLayout = false, currentTurn, isDebugHighlighted = false, debugHighlightType = 'affected' }) => {
   const { registerCard, unregisterCard } = useGesture();
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +76,13 @@ export const CardComponent: React.FC<CardComponentProps> = ({ card, onDragStart,
         opacity: card.tapped ? 0.5 : style?.opacity ?? 1
       }}
     >
-      <div className={`w-full h-full relative rounded-lg bg-slate-800 border-2 border-slate-700 ${card.zone === 'battlefield' ? 'hover:border-slate-400' : ''}`}>
+      <div className={`w-full h-full relative rounded-lg bg-slate-800 border-2 ${
+        isDebugHighlighted
+          ? debugHighlightType === 'source'
+            ? 'border-cyan-500 ring-4 ring-cyan-500/50 animate-pulse shadow-lg shadow-cyan-500/30'
+            : 'border-purple-500 ring-4 ring-purple-500/50 animate-pulse shadow-lg shadow-purple-500/30'
+          : `border-slate-700 ${card.zone === 'battlefield' ? 'hover:border-slate-400' : ''}`
+      }`}>
         <CardVisual
           card={card}
           viewMode={viewMode}

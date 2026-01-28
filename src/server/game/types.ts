@@ -231,6 +231,31 @@ export interface GameLogEntry {
   }[];
 }
 
+/**
+ * Minimal debug history item stored with game state (persisted to Redis)
+ */
+export interface PersistedDebugAction {
+  id: string;
+  timestamp: number;
+  actionType: string;
+  actorId: string;
+  actorName: string;
+  isBot: boolean;
+  description: string;
+  status: 'executed' | 'cancelled';
+  sourceCardName?: string;
+}
+
+/**
+ * Debug session info stored with game state (persisted to Redis)
+ */
+export interface DebugSessionInfo {
+  isDebugGame: boolean;        // True if game was started with DEV_MODE=true
+  debugEnabled: boolean;       // Current toggle state (can be disabled at runtime)
+  createdAt: number;           // When debug session started
+  actionHistory: PersistedDebugAction[];  // Persisted debug action log
+}
+
 export interface StrictGameState {
   id: string; // Game/Room ID
   roomId: string;
@@ -272,4 +297,7 @@ export interface StrictGameState {
     playerId: string;
     cardIds: string[];
   };
+
+  // Debug session info (persisted to Redis for debug games)
+  debugSession?: DebugSessionInfo;
 }

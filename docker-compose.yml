@@ -3,7 +3,7 @@ services:
     image: mtg-online-web:local
     build: .
     container_name: mtgate-app
-    restart: unless-stopped
+    restart: always
     ports:
       - "3000:3000"
     environment:

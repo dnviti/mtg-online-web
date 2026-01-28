@@ -1,6 +1,8 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager, gameManager, scryfallService, cardService } from '../../singletons';
 import { GameLogger } from '../../game/engine/GameLogger';
+import { StrictGameState } from '../../game/types';
+import { DebugPauseEvent } from '../../game/types/debug';
 
 export const registerGameHandlers = (io: Server, socket: Socket) => {
   const getContext = () => roomManager.getPlayerBySocket(socket.id);
@@ -204,13 +206,25 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       }
 
       // Trigger bot check
-      await gameManager.triggerBotCheck(room.id);
+      const botCheckResult = await gameManager.triggerBotCheck(room.id);
 
-      // We explicitly emitted initializedGame, so we don't strictly need the fallback `getGame` unless triggerBotCheck changed something immediately.
-      // But let's keep the final sync just in case bot check did something.
-      const latestGame = await gameManager.getGame(room.id);
-      if (latestGame) {
-        io.to(room.id).emit('game_update', latestGame);
+      // Check if bot action triggered a debug pause
+      if (botCheckResult && 'debugPause' in botCheckResult) {
+        const pauseEvent = botCheckResult.debugPause;
+        console.log(`[Socket] 🔍 Debug pause from bot check on start: ${pauseEvent.description}`);
+        io.to(room.id).emit('debug_pause', pauseEvent);
+        // Still emit the latest game state
+        const latestGame = await gameManager.getGame(room.id);
+        if (latestGame) {
+          io.to(room.id).emit('game_update', latestGame);
+        }
+      } else {
+        // We explicitly emitted initializedGame, so we don't strictly need the fallback `getGame` unless triggerBotCheck changed something immediately.
+        // But let's keep the final sync just in case bot check did something.
+        const latestGame = await gameManager.getGame(room.id);
+        if (latestGame) {
+          io.to(room.id).emit('game_update', latestGame);
+        }
       }
     }
   });
@@ -222,7 +236,16 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
 
     const targetGameId = player.matchId || room.id;
 
-    const game = await gameManager.handleAction(targetGameId, action, player.id);
+    const result = await gameManager.handleAction(targetGameId, action, player.id);
+
+    // Check if result is a debug pause event
+    if (result && 'debugPause' in result) {
+      const pauseEvent = (result as { debugPause: DebugPauseEvent }).debugPause;
+      io.to(targetGameId).emit('debug_pause', pauseEvent);
+      return;
+    }
+
+    const game = result as StrictGameState | null;
     if (game) {
       // Emit any pending game logs
       const logs = GameLogger.flushLogs(game);
@@ -246,7 +269,17 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     console.log(`[Socket] Processing strict action for game ${targetGameId} (Player: ${player.id})`);
 
     try {
-      const game = await gameManager.handleStrictAction(targetGameId, action, player.id);
+      const result = await gameManager.handleStrictAction(targetGameId, action, player.id);
+
+      // Check if result is a debug pause event
+      if (result && 'debugPause' in result) {
+        const pauseEvent = (result as { debugPause: DebugPauseEvent }).debugPause;
+        console.log(`[Socket] 🔍 Debug pause: ${pauseEvent.description}`);
+        io.to(targetGameId).emit('debug_pause', pauseEvent);
+        return;
+      }
+
+      const game = result as StrictGameState | null;
       if (game) {
         console.log(`[Socket] ✅ Strict action handled. Emitting update to room ${game.roomId}`);
         // Emit any pending game logs
@@ -255,11 +288,183 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
           io.to(game.roomId).emit('game_log', { logs });
         }
         io.to(game.roomId).emit('game_update', game);
+
+        // Send debug state if debug mode is enabled
+        if (process.env.DEV_MODE === 'true') {
+          io.to(game.roomId).emit('debug_state', gameManager.getDebugState(game.roomId));
+        }
       } else {
         console.warn(`[Socket] ⚠️ handleStrictAction returned null/undefined for game ${targetGameId}`);
       }
     } catch (error) {
       console.error(`[Socket] ❌ Error handling strict action:`, error);
+    }
+  });
+
+  // ============================================
+  // DEBUG MODE SOCKET HANDLERS
+  // ============================================
+
+  socket.on('debug_continue', async ({ snapshotId }) => {
+    console.log(`[Socket] 🔍 Debug continue: ${snapshotId}`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const result = await gameManager.handleDebugContinue(targetGameId, snapshotId);
+      if (result) {
+        const { state, botPause } = result;
+
+        // Emit any pending game logs
+        const logs = GameLogger.flushLogs(state);
+        if (logs.length > 0) {
+          io.to(state.roomId).emit('game_log', { logs });
+        }
+        io.to(state.roomId).emit('game_update', state);
+        io.to(state.roomId).emit('debug_state', gameManager.getDebugState(state.roomId));
+
+        // If a bot pause was already created during action execution, emit it
+        if (botPause) {
+          console.log(`[Socket] 🔍 Debug pause from bot after continue: ${botPause.description}`);
+          io.to(targetGameId).emit('debug_pause', botPause);
+        } else {
+          // No bot pause from action execution, trigger bot check for further processing
+          const botCheckResult = await gameManager.triggerBotCheck(targetGameId);
+
+          // Check if bot action triggered a new debug pause
+          if (botCheckResult && 'debugPause' in botCheckResult) {
+            const pauseEvent = botCheckResult.debugPause;
+            console.log(`[Socket] 🔍 Debug pause from bot check after continue: ${pauseEvent.description}`);
+            io.to(targetGameId).emit('debug_pause', pauseEvent);
+            // Emit updated game state
+            const latestGame = await gameManager.getGame(targetGameId);
+            if (latestGame) {
+              io.to(targetGameId).emit('game_update', latestGame);
+            }
+          } else if (botCheckResult && !('debugPause' in botCheckResult)) {
+            // Bot check completed normally, emit updated state
+            io.to(targetGameId).emit('game_update', botCheckResult);
+            io.to(targetGameId).emit('debug_state', gameManager.getDebugState(targetGameId));
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_continue:`, error);
+    }
+  });
+
+  socket.on('debug_cancel', async ({ snapshotId }) => {
+    console.log(`[Socket] 🔍 Debug cancel: ${snapshotId}`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const result = await gameManager.handleDebugCancel(targetGameId, snapshotId);
+      if (result) {
+        io.to(result.state.roomId).emit('game_update', result.state);
+        io.to(result.state.roomId).emit('debug_state', result.debugState);
+
+        // After cancelling a bot action, trigger bot check to continue processing
+        // The bot will either try a different action or pass priority
+        const priorityPlayer = result.state.players[result.state.priorityPlayerId];
+        if (priorityPlayer?.isBot) {
+          const botCheckResult = await gameManager.triggerBotCheck(targetGameId);
+
+          // Check if bot action triggered a new debug pause
+          if (botCheckResult && 'debugPause' in botCheckResult) {
+            const pauseEvent = botCheckResult.debugPause;
+            console.log(`[Socket] 🔍 Debug pause from bot after cancel: ${pauseEvent.description}`);
+            io.to(targetGameId).emit('debug_pause', pauseEvent);
+            // Emit updated game state
+            const latestGame = await gameManager.getGame(targetGameId);
+            if (latestGame) {
+              io.to(targetGameId).emit('game_update', latestGame);
+            }
+          } else if (botCheckResult && !('debugPause' in botCheckResult)) {
+            // Bot check completed normally, emit updated state
+            io.to(targetGameId).emit('game_update', botCheckResult);
+            io.to(targetGameId).emit('debug_state', gameManager.getDebugState(targetGameId));
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_cancel:`, error);
+    }
+  });
+
+  socket.on('debug_undo', async () => {
+    console.log(`[Socket] 🔍 Debug undo`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const result = await gameManager.handleDebugUndo(targetGameId);
+      if (result) {
+        io.to(result.state.roomId).emit('game_update', result.state);
+        io.to(result.state.roomId).emit('debug_state', result.debugState);
+      }
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_undo:`, error);
+    }
+  });
+
+  socket.on('debug_redo', async () => {
+    console.log(`[Socket] 🔍 Debug redo`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const result = await gameManager.handleDebugRedo(targetGameId);
+      if (result) {
+        io.to(result.state.roomId).emit('game_update', result.state);
+        io.to(result.state.roomId).emit('debug_state', result.debugState);
+      }
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_redo:`, error);
+    }
+  });
+
+  socket.on('debug_toggle', async ({ enabled }) => {
+    console.log(`[Socket] 🔍 Debug toggle: ${enabled}`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const debugState = await gameManager.handleDebugToggle(targetGameId, enabled);
+      io.to(targetGameId).emit('debug_state', debugState);
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_toggle:`, error);
+    }
+  });
+
+  socket.on('debug_clear_history', async () => {
+    console.log(`[Socket] 🔍 Debug clear history`);
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    try {
+      const debugState = await gameManager.handleDebugClearHistory(targetGameId);
+      io.to(targetGameId).emit('debug_state', debugState);
+    } catch (error) {
+      console.error(`[Socket] ❌ Error in debug_clear_history:`, error);
     }
   });
 };

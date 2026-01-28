@@ -128,6 +128,14 @@ export class CombatManager {
 
       if (!attacker || !attacker.attacking) throw new Error(`Invalid attacker target ${attackerId}`);
 
+      // Check for "can't be blocked" modifier on the attacker
+      const cantBeBlocked = attacker.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'cant_be_blocked'
+      );
+      if (cantBeBlocked) {
+        throw new Error(`${attacker.name} can't be blocked.`);
+      }
+
       // Flying/Reach interaction
       if (!this.canBlock(blocker, attacker)) {
         throw new Error(`${blocker.name} cannot block ${attacker.name} (Flying).`);

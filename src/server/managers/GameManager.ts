@@ -5,6 +5,8 @@ import { GameLifecycle } from './game/GameLifecycle';
 import { StateStoreManager } from './StateStoreManager';
 import { ChoiceHandler } from '../game/engine/ChoiceHandler';
 import { OracleEffectResolver } from '../game/engine/OracleEffectResolver';
+import { DebugManager } from '../game/engine/DebugManager';
+import { DebugPauseEvent, DebugStateEvent } from '../game/types/debug';
 import { EventEmitter } from 'events';
 
 export class GameManager extends EventEmitter {
@@ -77,6 +79,9 @@ export class GameManager extends EventEmitter {
       state.players[p.id] = { ...p, life: 20, poison: 0, manaPool: {}, handKept: false, isBot: !!p.isBot };
     });
 
+    // Initialize debug session if DEV_MODE is enabled
+    DebugManager.initializeGameDebugSession(state);
+
     // Save initial state
     await this.saveGameState(state);
 
@@ -144,15 +149,22 @@ export class GameManager extends EventEmitter {
     }
   }
 
-  async triggerBotCheck(roomId: string) {
+  async triggerBotCheck(roomId: string): Promise<StrictGameState | { debugPause: DebugPauseEvent } | null> {
     if (!await this.acquireLock(roomId)) return null;
     try {
       const game = await this.getGameState(roomId);
       if (!game) return null;
 
-      GameLifecycle.triggerBotCheck(game);
+      const botPauseEvent = GameLifecycle.triggerBotCheck(game);
 
       await this.saveGameState(game);
+
+      // If bot action triggered a debug pause, return the pause event
+      if (botPauseEvent) {
+        console.log(`[GameManager] 🔍 Debug pause from bot check: ${botPauseEvent.description}`);
+        return { debugPause: botPauseEvent };
+      }
+
       return game;
     } finally {
       await this.releaseLock(roomId);
@@ -178,7 +190,16 @@ export class GameManager extends EventEmitter {
     return this.handleStrictAction(roomId, action, actorId);
   }
 
-  async handleStrictAction(roomId: string, action: any, actorId: string) {
+  /**
+   * Handle strict action with optional debug mode pause.
+   * Returns either the game state or a debug pause event.
+   */
+  async handleStrictAction(
+    roomId: string,
+    action: any,
+    actorId: string,
+    skipDebugPause: boolean = false
+  ): Promise<StrictGameState | { debugPause: DebugPauseEvent } | null> {
     console.log(`[GameManager] Handling strict action: ${action.type} for room ${roomId} by ${actorId}`);
     if (!await this.acquireLock(roomId)) {
       console.warn(`[GameManager] ⚠️ Failed to acquire lock for ${roomId}`);
@@ -190,6 +211,16 @@ export class GameManager extends EventEmitter {
       if (!game) {
         console.warn(`[GameManager] ⚠️ Game state not found for room ${roomId}`);
         return null;
+      }
+
+      // Check for debug mode pause (unless explicitly skipped)
+      if (!skipDebugPause && DebugManager.isEnabled(roomId)) {
+        const pauseEvent = DebugManager.createSnapshot(game, action, actorId);
+        if (pauseEvent) {
+          console.log(`[GameManager] 🔍 Debug pause: ${pauseEvent.description}`);
+          // Don't execute the action yet - return pause event
+          return { debugPause: pauseEvent };
+        }
       }
 
       // Clear any stale pending logs from previous saves
@@ -336,11 +367,14 @@ export class GameManager extends EventEmitter {
 
         // Trigger Bot Check after human action
         if (game.step === 'mulligan' || game.priorityPlayerId !== actorId) {
-          // await GameLifecycle.triggerBotCheck(game); // Ensure this is awaited if async, or just called if sync
-          // The method is static and might be async? It was seemingly sync in previous code or handled internally.
-          // Wait, previous code: GameLifecycle.triggerBotCheck(game);
-          // I should check if it's async.
-          GameLifecycle.triggerBotCheck(game);
+          const botPauseEvent = GameLifecycle.triggerBotCheck(game);
+
+          // If bot action triggered a debug pause, save state and return the pause event
+          if (botPauseEvent) {
+            console.log(`[GameManager] 🔍 Debug pause from bot: ${botPauseEvent.description}`);
+            await this.saveGameState(game);
+            return { debugPause: botPauseEvent };
+          }
         }
 
         await this.saveGameState(game);
@@ -353,5 +387,185 @@ export class GameManager extends EventEmitter {
     } finally {
       await this.releaseLock(roomId);
     }
+  }
+
+  // ============================================
+  // DEBUG MODE METHODS
+  // ============================================
+
+  /**
+   * Continue execution after a debug pause.
+   * Executes the pending action and commits the snapshot.
+   * Returns the game state and optionally a bot pause event if bot created one.
+   */
+  async handleDebugContinue(roomId: string, snapshotId: string): Promise<{
+    state: StrictGameState;
+    botPause?: DebugPauseEvent;
+  } | null> {
+    const pendingAction = DebugManager.continueExecution(roomId, snapshotId);
+    if (!pendingAction) {
+      console.warn(`[GameManager] No pending action to continue for snapshot ${snapshotId}`);
+      return null;
+    }
+
+    // Execute the action (skip debug pause since we're continuing)
+    const result = await this.handleStrictAction(roomId, pendingAction.action, pendingAction.actorId, true);
+
+    if (!result) {
+      console.warn(`[GameManager] Action execution failed for snapshot ${snapshotId}`);
+      return null;
+    }
+
+    // Check if a bot pause was triggered
+    if ('debugPause' in result) {
+      // Action executed successfully but bot created a new pause
+      // We need to get the current game state to commit the original snapshot
+      const currentState = await this.getGame(roomId);
+      if (currentState) {
+        // Commit the original action's snapshot
+        DebugManager.commitSnapshot(roomId, snapshotId, currentState);
+        return { state: currentState, botPause: result.debugPause };
+      }
+      return null;
+    }
+
+    // Normal case - action executed, no bot pause
+    DebugManager.commitSnapshot(roomId, snapshotId, result);
+    return { state: result };
+  }
+
+  /**
+   * Cancel a pending debug action (don't execute it).
+   */
+  async handleDebugCancel(roomId: string, snapshotId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) {
+        return null;
+      }
+
+      // Pass game state to persist cancelled action
+      const debugState = DebugManager.cancelAction(roomId, snapshotId, game);
+      if (!debugState) {
+        return null;
+      }
+
+      // Save game state with updated debug history
+      await this.saveGameState(game);
+
+      return { state: game, debugState };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Undo the last executed action.
+   */
+  async handleDebugUndo(roomId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    const undoResult = DebugManager.undo(roomId);
+    if (!undoResult) {
+      return null;
+    }
+
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
+
+    try {
+      // Save the restored state to Redis
+      await this.saveGameState(undoResult.restoredState);
+      return { state: undoResult.restoredState, debugState: undoResult.event };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Redo an undone action.
+   */
+  async handleDebugRedo(roomId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    const redoResult = DebugManager.redo(roomId);
+    if (!redoResult) {
+      return null;
+    }
+
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
+
+    try {
+      // Save the restored state to Redis
+      await this.saveGameState(redoResult.restoredState);
+      return { state: redoResult.restoredState, debugState: redoResult.event };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Toggle debug mode for a game.
+   * Persists the enabled state to game state for Redis storage.
+   */
+  async handleDebugToggle(roomId: string, enabled: boolean): Promise<DebugStateEvent> {
+    if (!await this.acquireLock(roomId)) {
+      return DebugManager.toggleDebugMode(roomId, enabled);
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      const debugState = DebugManager.toggleDebugMode(roomId, enabled, game || undefined);
+
+      // Save game state with updated debug enabled flag
+      if (game) {
+        await this.saveGameState(game);
+      }
+
+      return debugState;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Clear debug history for a game.
+   * Clears both in-memory snapshots and persisted history.
+   */
+  async handleDebugClearHistory(roomId: string): Promise<DebugStateEvent> {
+    if (!await this.acquireLock(roomId)) {
+      return DebugManager.clearHistory(roomId);
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      const debugState = DebugManager.clearHistory(roomId, game || undefined);
+
+      // Save game state with cleared debug history
+      if (game) {
+        await this.saveGameState(game);
+      }
+
+      return debugState;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Get current debug state for a game.
+   */
+  getDebugState(roomId: string): DebugStateEvent {
+    return DebugManager.getDebugState(roomId);
+  }
+
+  /**
+   * Check if debug mode is paused for a game.
+   */
+  isDebugPaused(roomId: string): boolean {
+    return DebugManager.isPaused(roomId);
   }
 }

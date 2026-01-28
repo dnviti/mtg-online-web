@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameContext } from '../../contexts/GameSocketContext';
 import { socketService } from '../../services/SocketService';
-import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText, Loader2 } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText, Loader2, Bug } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameLogProvider, useGameLog } from '../../contexts/GameLogContext';
 import { GameView } from '../game/GameView';
 import { GameLogPanel } from '../../components/GameLogPanel';
+import { DebugPanel } from '../../components/DebugPanel';
+import { DebugProvider } from '../../contexts/DebugContext';
 import { DraftView } from '../draft/DraftView';
 import { TournamentManager as TournamentView } from '../tournament/TournamentManager';
 import { DeckBuilderView } from '../draft/DeckBuilderView';
@@ -74,7 +76,10 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
   }>({ title: '', message: '', type: 'info' });
 
   // Side Panel State
-  const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | 'log' | null>(null);
+  const [activePanel, setActivePanel] = useState<'lobby' | 'chat' | 'log' | 'debug' | null>(null);
+
+  // Debug mode check (via Vite env)
+  const debugEnabled = import.meta.env.VITE_DEV_MODE === 'true';
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
     return localStorage.getItem('notifications_enabled') !== 'false';
   });
@@ -612,10 +617,25 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
             {panel === 'log' && <ScrollText className="w-6 h-6" />}
           </button>
         ))}
+
+        {/* Debug Panel Button - Only visible in dev mode */}
+        {debugEnabled && (
+          <button
+            onClick={() => setActivePanel(activePanel === 'debug' ? null : 'debug')}
+            className={`p-3 rounded-xl transition-all duration-200 group relative ${
+              activePanel === 'debug'
+                ? 'bg-cyan-600 shadow-cyan-900/50 text-white shadow-lg'
+                : 'text-slate-500 hover:bg-slate-800 hover:text-white'
+            }`}
+            title="Debug Panel"
+          >
+            <Bug className="w-6 h-6" />
+          </button>
+        )}
       </div>
 
       {activePanel && (
-        <div className="hidden lg:flex absolute right-16 top-4 bottom-4 w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl z-40 flex-col">
+        <div className="hidden lg:flex absolute right-16 top-4 bottom-80 w-96 bg-slate-800/95 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl z-40 flex-col overflow-hidden">
           <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
             <h3 className="text-lg font-bold text-white uppercase">{activePanel}</h3>
             <button onClick={() => setActivePanel(null)}><X className="w-5 h-5 text-slate-400 hover:text-white" /></button>
@@ -691,6 +711,15 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
               />
             </div>
           )}
+
+          {activePanel === 'debug' && debugEnabled && (
+            <div className="flex-1 flex flex-col min-h-0 bg-slate-950/50">
+              <DebugPanel
+                className="h-full border-t-0 bg-transparent"
+                maxHeight="100%"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -713,7 +742,9 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
 export const GameRoom: React.FC<GameRoomProps> = (props) => {
   return (
     <GameLogProvider>
-      <GameRoomContent {...props} />
+      <DebugProvider>
+        <GameRoomContent {...props} />
+      </DebugProvider>
     </GameLogProvider>
   );
 };

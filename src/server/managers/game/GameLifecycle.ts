@@ -1,6 +1,8 @@
 import { StrictGameState } from '../../game/types';
 import { RulesEngine } from '../../game/RulesEngine';
 import { BotLogic } from './BotLogic';
+import { DebugManager } from '../../game/engine/DebugManager';
+import { DebugPauseEvent } from '../../game/types/debug';
 
 /**
  * GameLifecycle
@@ -97,8 +99,16 @@ export class GameLifecycle {
   /**
    * Triggers bot processing loop - bots will continue taking actions
    * until a human player has priority.
+   * Returns any pending debug pause event if a bot action triggered a pause.
    */
-  static triggerBotCheck(game: StrictGameState) {
+  static triggerBotCheck(game: StrictGameState): DebugPauseEvent | null {
     BotLogic.processActionsLoop(game);
+
+    // Check if bot action created a debug pause
+    if (DebugManager.isPaused(game.roomId)) {
+      return DebugManager.getPendingPauseEvent(game.roomId);
+    }
+
+    return null;
   }
 }
