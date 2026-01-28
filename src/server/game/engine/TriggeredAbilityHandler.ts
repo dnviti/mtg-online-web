@@ -1,4 +1,4 @@
-import { StrictGameState, CardObject, StackObject, Zone, PendingChoice, ChoiceResult } from '../types';
+import { StrictGameState, CardObject, StackObject, Zone, PendingChoice, ChoiceResult, DelayedTrigger, Step, Phase } from '../types';
 import { AbilityParser, ParsedAbility } from './AbilityParser';
 import { ChoiceHandler } from './ChoiceHandler';
 import { GameLogger } from './GameLogger';
@@ -54,6 +54,17 @@ export interface ParsedOptionalCost {
   costDescription: string;
   costRequirement?: ParsedTargetRequirement;  // For costs that need selection (tap another creature)
   conditionalEffect: string;  // The "if you do" effect text
+}
+
+/**
+ * Represents a damage event for tracking triggers
+ */
+export interface DamageEvent {
+  sourceId: string;        // Card dealing damage
+  targetId: string;        // Card or player receiving damage
+  amount: number;          // Amount of damage dealt
+  isCombatDamage: boolean; // Whether this is combat damage
+  isToPlayer: boolean;     // Whether target is a player (vs creature/planeswalker)
 }
 
 export class TriggeredAbilityHandler {
@@ -599,6 +610,587 @@ export class TriggeredAbilityHandler {
     };
     const lower = text.toLowerCase();
     return numberWords[lower] || parseInt(text) || 1;
+  }
+
+  // ============================================
+  // APNAP ORDERING (Rule 101.4)
+  // ============================================
+
+  /**
+   * Orders triggered abilities according to APNAP (Active Player, Non-Active Player) rule.
+   * When multiple triggers happen simultaneously:
+   * 1. Active player puts their triggers on the stack first (in any order they choose)
+   * 2. Then non-active players in turn order put their triggers on the stack
+   * 3. Since the stack is LIFO, active player's triggers resolve LAST
+   *
+   * @param state - Current game state
+   * @param triggers - Array of triggers that happened simultaneously
+   * @returns Ordered array of triggers (active player first, then APNAP order)
+   */
+  static orderTriggersAPNAP(state: StrictGameState, triggers: StackObject[]): StackObject[] {
+    if (triggers.length <= 1) return triggers;
+
+    const activePlayerId = state.activePlayerId;
+    const playerIds = Object.keys(state.players);
+
+    // Group triggers by controller
+    const triggersByController: Record<string, StackObject[]> = {};
+    for (const trigger of triggers) {
+      if (!triggersByController[trigger.controllerId]) {
+        triggersByController[trigger.controllerId] = [];
+      }
+      triggersByController[trigger.controllerId].push(trigger);
+    }
+
+    // Build APNAP order: active player first, then others in turn order
+    // For 2-player game, it's just active then non-active
+    const apnapOrder: string[] = [activePlayerId];
+    for (const playerId of playerIds) {
+      if (playerId !== activePlayerId) {
+        apnapOrder.push(playerId);
+      }
+    }
+
+    // Collect triggers in APNAP order
+    // Active player's triggers go on stack first (bottom), resolve last
+    const orderedTriggers: StackObject[] = [];
+    for (const playerId of apnapOrder) {
+      const playerTriggers = triggersByController[playerId] || [];
+      // For now, add in original order within each player's triggers
+      // TODO: For human players with multiple triggers, could prompt for ordering
+      orderedTriggers.push(...playerTriggers);
+    }
+
+    console.log(`[TriggeredAbilityHandler] Ordered ${triggers.length} triggers by APNAP`);
+    return orderedTriggers;
+  }
+
+  // ============================================
+  // BEGINNING-OF-PHASE/STEP TRIGGERS
+  // ============================================
+
+  /**
+   * Check for triggers that fire at the beginning of a phase or step.
+   * Patterns detected:
+   * - "At the beginning of your upkeep" (only active player)
+   * - "At the beginning of each upkeep" / "At the beginning of each player's upkeep" (all players)
+   * - "At the beginning of combat" / "At the beginning of your combat phase"
+   * - "At the beginning of your end step"
+   * - "At the beginning of the end step" / "At the beginning of each end step"
+   *
+   * @param state - Current game state
+   * @param phase - Current phase
+   * @param step - Current step
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkBeginningTriggers(state: StrictGameState, phase: string, step: string): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    // Get all permanents on the battlefield
+    const permanents = Object.values(state.cards).filter(c => c.zone === 'battlefield');
+
+    for (const permanent of permanents) {
+      const abilities = AbilityParser.parseAbilities(permanent);
+
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+
+        const text = ability.text.toLowerCase();
+        const isActivePlayerController = permanent.controllerId === state.activePlayerId;
+
+        // Check if this ability triggers for the current phase/step
+        let shouldTrigger = false;
+
+        // === UPKEEP TRIGGERS ===
+        if (step === 'upkeep') {
+          // "At the beginning of your upkeep" - only for active player's permanents
+          if (/^at the beginning of your upkeep/i.test(text) && isActivePlayerController) {
+            shouldTrigger = true;
+          }
+          // "At the beginning of each upkeep" / "At the beginning of each player's upkeep"
+          else if (/^at the beginning of (?:each (?:player's )?)?upkeep/i.test(text)) {
+            shouldTrigger = true;
+          }
+        }
+
+        // === COMBAT TRIGGERS (beginning of combat) ===
+        if (step === 'beginning_combat') {
+          // "At the beginning of combat" / "At the beginning of your combat phase"
+          if (/^at the beginning of (?:your )?combat/i.test(text) && isActivePlayerController) {
+            shouldTrigger = true;
+          }
+          // "At the beginning of each combat"
+          else if (/^at the beginning of each combat/i.test(text)) {
+            shouldTrigger = true;
+          }
+        }
+
+        // === END STEP TRIGGERS ===
+        if (step === 'end') {
+          // "At the beginning of your end step" - only for active player's permanents
+          if (/^at the beginning of your end step/i.test(text) && isActivePlayerController) {
+            shouldTrigger = true;
+          }
+          // "At the beginning of the end step" / "At the beginning of each end step"
+          else if (/^at the beginning of (?:the |each )?end step/i.test(text)) {
+            shouldTrigger = true;
+          }
+        }
+
+        // === DRAW STEP TRIGGERS ===
+        if (step === 'draw') {
+          if (/^at the beginning of (?:your )?draw step/i.test(text) && isActivePlayerController) {
+            shouldTrigger = true;
+          }
+        }
+
+        // === MAIN PHASE TRIGGERS (rare) ===
+        if (phase === 'main1' || phase === 'main2') {
+          if (/^at the beginning of (?:your )?(?:first )?main phase/i.test(text) && isActivePlayerController) {
+            if ((phase === 'main1' && /first/i.test(text)) || !(/first/i.test(text))) {
+              shouldTrigger = true;
+            }
+          }
+        }
+
+        if (shouldTrigger) {
+          const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+          if (trigger) {
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] Beginning trigger detected: ${permanent.name} at ${phase}/${step}`);
+          }
+        }
+      }
+    }
+
+    return triggers;
+  }
+
+  // ============================================
+  // BLOCK TRIGGERS
+  // ============================================
+
+  /**
+   * Check for triggers that fire when creatures block or become blocked.
+   * Patterns detected:
+   * - "Whenever this creature blocks" - Blocker has trigger
+   * - "Whenever this creature becomes blocked" - Attacker has trigger
+   * - "Whenever a creature you control blocks" - Other permanents care about blocking
+   *
+   * @param state - Current game state
+   * @param blockers - Array of blocker/attacker pairs that were declared
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkBlockTriggers(
+    state: StrictGameState,
+    blockers: { blockerId: string; attackerId: string }[]
+  ): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    // Track which attackers became blocked (for "becomes blocked" triggers)
+    const blockedAttackerIds = new Set<string>();
+    for (const { attackerId } of blockers) {
+      blockedAttackerIds.add(attackerId);
+    }
+
+    // 1. Check each blocker for "whenever this creature blocks" triggers
+    for (const { blockerId, attackerId } of blockers) {
+      const blocker = state.cards[blockerId];
+      if (!blocker) continue;
+
+      const abilities = AbilityParser.parseAbilities(blocker);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        // "Whenever this creature blocks" or "Whenever ~ blocks"
+        if (/^whenever (?:this creature|~|it) blocks/i.test(text)) {
+          const trigger = this.createTriggerStackObject(state, blocker, ability, blocker.controllerId);
+          if (trigger) {
+            // Store the attacker being blocked for effect reference
+            (trigger as any).blockedAttackerId = attackerId;
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] Block trigger: ${blocker.name} blocks`);
+          }
+        }
+      }
+    }
+
+    // 2. Check each blocked attacker for "whenever this creature becomes blocked" triggers
+    for (const attackerId of blockedAttackerIds) {
+      const attacker = state.cards[attackerId];
+      if (!attacker) continue;
+
+      const abilities = AbilityParser.parseAbilities(attacker);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        // "Whenever this creature becomes blocked"
+        if (/^whenever (?:this creature|~|it) becomes blocked/i.test(text)) {
+          const trigger = this.createTriggerStackObject(state, attacker, ability, attacker.controllerId);
+          if (trigger) {
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] Becomes blocked trigger: ${attacker.name}`);
+          }
+        }
+      }
+    }
+
+    // 3. Check other permanents for triggers that care about blocking
+    const otherPermanents = Object.values(state.cards).filter(c =>
+      c.zone === 'battlefield' &&
+      !blockers.some(b => b.blockerId === c.instanceId) &&
+      !blockedAttackerIds.has(c.instanceId)
+    );
+
+    for (const permanent of otherPermanents) {
+      const abilities = AbilityParser.parseAbilities(permanent);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        // "Whenever a creature you control blocks"
+        if (/^whenever a creature you control blocks/i.test(text)) {
+          // Check if any of the blockers are controlled by this permanent's controller
+          const relevantBlockers = blockers.filter(b => {
+            const blocker = state.cards[b.blockerId];
+            return blocker && blocker.controllerId === permanent.controllerId;
+          });
+
+          for (const { blockerId } of relevantBlockers) {
+            const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+            if (trigger) {
+              (trigger as any).triggeringBlockerId = blockerId;
+              triggers.push(trigger);
+              console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from creature blocking`);
+            }
+          }
+        }
+
+        // "Whenever a creature blocks"
+        if (/^whenever a creature blocks/i.test(text) && !/you control/i.test(text)) {
+          for (const { blockerId } of blockers) {
+            const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+            if (trigger) {
+              (trigger as any).triggeringBlockerId = blockerId;
+              triggers.push(trigger);
+              console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from any creature blocking`);
+            }
+          }
+        }
+      }
+    }
+
+    return triggers;
+  }
+
+  // ============================================
+  // DAMAGE TRIGGERS
+  // ============================================
+
+  /**
+   * Check for triggers that fire when damage is dealt.
+   * Patterns detected:
+   * - "Whenever this creature deals damage"
+   * - "Whenever this creature deals combat damage"
+   * - "Whenever this creature deals combat damage to a player"
+   * - "Whenever you are dealt damage" (player damage triggers)
+   *
+   * @param state - Current game state
+   * @param damageEvents - Array of damage events that occurred
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkDamageTriggers(state: StrictGameState, damageEvents: DamageEvent[]): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    for (const event of damageEvents) {
+      const source = state.cards[event.sourceId];
+      if (!source) continue;
+
+      // Check the damage source for "deals damage" triggers
+      const abilities = AbilityParser.parseAbilities(source);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        let shouldTrigger = false;
+
+        // "Whenever this creature deals combat damage to a player"
+        if (/^whenever (?:this creature|~|it) deals combat damage to a player/i.test(text)) {
+          if (event.isCombatDamage && event.isToPlayer) {
+            shouldTrigger = true;
+          }
+        }
+        // "Whenever this creature deals combat damage to an opponent"
+        else if (/^whenever (?:this creature|~|it) deals combat damage to an opponent/i.test(text)) {
+          if (event.isCombatDamage && event.isToPlayer) {
+            // Check if target is an opponent
+            const targetPlayer = state.players[event.targetId];
+            if (targetPlayer && targetPlayer.id !== source.controllerId) {
+              shouldTrigger = true;
+            }
+          }
+        }
+        // "Whenever this creature deals combat damage"
+        else if (/^whenever (?:this creature|~|it) deals combat damage/i.test(text)) {
+          if (event.isCombatDamage) {
+            shouldTrigger = true;
+          }
+        }
+        // "Whenever this creature deals damage to a player"
+        else if (/^whenever (?:this creature|~|it) deals damage to a player/i.test(text)) {
+          if (event.isToPlayer) {
+            shouldTrigger = true;
+          }
+        }
+        // "Whenever this creature deals damage"
+        else if (/^whenever (?:this creature|~|it) deals damage/i.test(text)) {
+          shouldTrigger = true;
+        }
+
+        if (shouldTrigger) {
+          const trigger = this.createTriggerStackObject(state, source, ability, source.controllerId);
+          if (trigger) {
+            // Store damage event info for effect reference
+            (trigger as any).damageEvent = event;
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] Damage trigger: ${source.name} dealt ${event.amount} damage`);
+          }
+        }
+      }
+    }
+
+    // Check other permanents for triggers that care about damage
+    const permanents = Object.values(state.cards).filter(c => c.zone === 'battlefield');
+    for (const permanent of permanents) {
+      const abilities = AbilityParser.parseAbilities(permanent);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        // "Whenever you are dealt damage"
+        if (/^whenever you are dealt damage/i.test(text)) {
+          for (const event of damageEvents) {
+            if (event.isToPlayer && event.targetId === permanent.controllerId) {
+              const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+              if (trigger) {
+                (trigger as any).damageEvent = event;
+                triggers.push(trigger);
+                console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from damage to controller`);
+              }
+            }
+          }
+        }
+
+        // "Whenever a creature you control deals damage"
+        if (/^whenever a creature you control deals damage/i.test(text)) {
+          for (const event of damageEvents) {
+            const source = state.cards[event.sourceId];
+            if (source && source.controllerId === permanent.controllerId && source.types?.includes('Creature')) {
+              const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+              if (trigger) {
+                (trigger as any).damageEvent = event;
+                triggers.push(trigger);
+                console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from creature dealing damage`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return triggers;
+  }
+
+  // ============================================
+  // LEAVES-THE-BATTLEFIELD (LTB) TRIGGERS
+  // ============================================
+
+  /**
+   * Check for triggers that fire when a permanent leaves the battlefield.
+   * Patterns detected:
+   * - "When this leaves the battlefield" (self LTB)
+   * - "When this creature leaves the battlefield"
+   * - "Whenever a creature leaves the battlefield" (other permanents care)
+   *
+   * Note: Uses "look-back-in-time" - the cardSnapshot has the card's state BEFORE it left.
+   *
+   * @param state - Current game state
+   * @param cardSnapshot - The card's state before it left the battlefield
+   * @param toZone - The zone the card moved to
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkLTBTriggers(state: StrictGameState, cardSnapshot: CardObject, toZone: Zone): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    // Don't trigger if moving to battlefield (that's ETB, not LTB)
+    if (toZone === 'battlefield') return triggers;
+
+    // 1. Check the leaving card itself for LTB triggers
+    const abilities = AbilityParser.parseAbilities(cardSnapshot);
+    for (const ability of abilities) {
+      if (ability.type !== 'triggered') continue;
+      const text = ability.text.toLowerCase();
+
+      // "When this leaves the battlefield" / "When ~ leaves the battlefield"
+      if (/^when (?:this|~|it) leaves the battlefield/i.test(text) ||
+          /^when (?:this creature|this permanent|this artifact|this enchantment) leaves the battlefield/i.test(text)) {
+        const trigger = this.createTriggerStackObject(state, cardSnapshot, ability, cardSnapshot.controllerId);
+        if (trigger) {
+          // Store the snapshot for effect resolution (look-back-in-time)
+          (trigger as any).cardSnapshot = cardSnapshot;
+          (trigger as any).toZone = toZone;
+          triggers.push(trigger);
+          console.log(`[TriggeredAbilityHandler] LTB trigger: ${cardSnapshot.name} left battlefield`);
+        }
+      }
+    }
+
+    // 2. Check other permanents for triggers that care about things leaving
+    const otherPermanents = Object.values(state.cards).filter(c =>
+      c.zone === 'battlefield' && c.instanceId !== cardSnapshot.instanceId
+    );
+
+    for (const permanent of otherPermanents) {
+      const abilities = AbilityParser.parseAbilities(permanent);
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        // "Whenever a creature leaves the battlefield"
+        if (/^whenever a creature leaves the battlefield/i.test(text)) {
+          if (cardSnapshot.types?.includes('Creature')) {
+            const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+            if (trigger) {
+              (trigger as any).leavingCardSnapshot = cardSnapshot;
+              triggers.push(trigger);
+              console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from creature leaving`);
+            }
+          }
+        }
+
+        // "Whenever a creature you control leaves the battlefield"
+        if (/^whenever a creature you control leaves the battlefield/i.test(text)) {
+          if (cardSnapshot.types?.includes('Creature') && cardSnapshot.controllerId === permanent.controllerId) {
+            const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+            if (trigger) {
+              (trigger as any).leavingCardSnapshot = cardSnapshot;
+              triggers.push(trigger);
+              console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from your creature leaving`);
+            }
+          }
+        }
+
+        // "Whenever a permanent leaves the battlefield"
+        if (/^whenever a permanent leaves the battlefield/i.test(text)) {
+          const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+          if (trigger) {
+            (trigger as any).leavingCardSnapshot = cardSnapshot;
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] ${permanent.name} triggers from permanent leaving`);
+          }
+        }
+      }
+    }
+
+    return triggers;
+  }
+
+  // ============================================
+  // SPELL CAST TRIGGERS
+  // ============================================
+
+  /**
+   * Check for triggers that fire when a spell is cast.
+   * Patterns detected:
+   * - "Whenever you cast a spell"
+   * - "Whenever you cast a creature spell"
+   * - "Whenever you cast an instant or sorcery spell"
+   * - "Whenever an opponent casts a spell"
+   * - "Whenever a player casts a spell"
+   *
+   * @param state - Current game state
+   * @param castCard - The spell that was cast
+   * @param casterId - The player who cast the spell
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkSpellCastTriggers(state: StrictGameState, castCard: CardObject, casterId: string): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    // Get the spell's types for filtering
+    const spellTypes = castCard.types || [];
+    const isCreature = spellTypes.includes('Creature');
+    const isInstant = spellTypes.includes('Instant');
+    const isSorcery = spellTypes.includes('Sorcery');
+    const isArtifact = spellTypes.includes('Artifact');
+    const isEnchantment = spellTypes.includes('Enchantment');
+
+    // Check all permanents for spell cast triggers
+    const permanents = Object.values(state.cards).filter(c => c.zone === 'battlefield');
+
+    for (const permanent of permanents) {
+      const abilities = AbilityParser.parseAbilities(permanent);
+
+      for (const ability of abilities) {
+        if (ability.type !== 'triggered') continue;
+        const text = ability.text.toLowerCase();
+
+        let shouldTrigger = false;
+        const isControllerCast = permanent.controllerId === casterId;
+        const isOpponentCast = permanent.controllerId !== casterId;
+
+        // "Whenever you cast a spell"
+        if (/^whenever you cast a spell/i.test(text) && isControllerCast) {
+          shouldTrigger = true;
+        }
+        // "Whenever you cast a creature spell"
+        else if (/^whenever you cast a creature spell/i.test(text) && isControllerCast && isCreature) {
+          shouldTrigger = true;
+        }
+        // "Whenever you cast an instant or sorcery spell"
+        else if (/^whenever you cast an instant or sorcery spell/i.test(text) && isControllerCast && (isInstant || isSorcery)) {
+          shouldTrigger = true;
+        }
+        // "Whenever you cast a noncreature spell"
+        else if (/^whenever you cast a noncreature spell/i.test(text) && isControllerCast && !isCreature) {
+          shouldTrigger = true;
+        }
+        // "Whenever you cast an artifact spell"
+        else if (/^whenever you cast an artifact spell/i.test(text) && isControllerCast && isArtifact) {
+          shouldTrigger = true;
+        }
+        // "Whenever you cast an enchantment spell"
+        else if (/^whenever you cast an enchantment spell/i.test(text) && isControllerCast && isEnchantment) {
+          shouldTrigger = true;
+        }
+        // "Whenever an opponent casts a spell"
+        else if (/^whenever an opponent casts a spell/i.test(text) && isOpponentCast) {
+          shouldTrigger = true;
+        }
+        // "Whenever a player casts a spell"
+        else if (/^whenever a player casts a spell/i.test(text)) {
+          shouldTrigger = true;
+        }
+
+        if (shouldTrigger) {
+          const trigger = this.createTriggerStackObject(state, permanent, ability, permanent.controllerId);
+          if (trigger) {
+            // Store the cast spell info for effect reference
+            (trigger as any).castSpell = {
+              cardId: castCard.instanceId,
+              cardName: castCard.name,
+              casterId: casterId,
+              types: spellTypes
+            };
+            triggers.push(trigger);
+            console.log(`[TriggeredAbilityHandler] Spell cast trigger: ${permanent.name} from casting ${castCard.name}`);
+          }
+        }
+      }
+    }
+
+    return triggers;
   }
 
   /**
@@ -1167,5 +1759,200 @@ export class TriggeredAbilityHandler {
     }
 
     console.log(`[TriggeredAbilityHandler] Unhandled conditional effect: "${effectText}"`);
+  }
+
+  // ============================================
+  // DELAYED TRIGGERS (Rule 603.7)
+  // ============================================
+
+  /**
+   * Creates a delayed triggered ability that will trigger at a later time.
+   * Common patterns:
+   * - "At the beginning of the next end step, exile it"
+   * - "At the beginning of your next upkeep, draw a card"
+   *
+   * @param state - Current game state
+   * @param sourceCard - Card creating the delayed trigger
+   * @param controllerId - Who controls this delayed trigger
+   * @param config - Configuration for when/what the trigger does
+   */
+  static createDelayedTrigger(
+    state: StrictGameState,
+    sourceCard: CardObject,
+    controllerId: string,
+    config: {
+      triggerCondition: DelayedTrigger['triggerCondition'];
+      effectText: string;
+      targetIds?: string[];
+      oneShot?: boolean;
+    }
+  ): void {
+    if (!state.delayedTriggers) {
+      state.delayedTriggers = [];
+    }
+
+    const delayedTrigger: DelayedTrigger = {
+      id: `delayed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sourceCardId: sourceCard.instanceId,
+      sourceCardName: sourceCard.name,
+      controllerId,
+      triggerCondition: config.triggerCondition,
+      effectText: config.effectText,
+      targetIds: config.targetIds,
+      oneShot: config.oneShot ?? true, // Most delayed triggers are one-shot
+      createdAtTurn: state.turnCount,
+      createdAtStep: state.step
+    };
+
+    state.delayedTriggers.push(delayedTrigger);
+    console.log(`[TriggeredAbilityHandler] Created delayed trigger: "${config.effectText}" (triggers at ${config.triggerCondition.step || config.triggerCondition.phase})`);
+  }
+
+  /**
+   * Checks for delayed triggers that should fire at the current phase/step.
+   * Called from PhaseManager at phase/step transitions.
+   *
+   * @param state - Current game state
+   * @param phase - Current phase
+   * @param step - Current step
+   * @returns Array of triggers that should go on the stack
+   */
+  static checkDelayedTriggers(state: StrictGameState, phase: Phase, step: Step): StackObject[] {
+    const triggers: StackObject[] = [];
+
+    if (!state.delayedTriggers || state.delayedTriggers.length === 0) {
+      return triggers;
+    }
+
+    const triggersToRemove: string[] = [];
+
+    for (const delayed of state.delayedTriggers) {
+      let shouldTrigger = false;
+
+      // Check if the trigger condition is met
+      if (delayed.triggerCondition.type === 'beginning_of_step') {
+        if (delayed.triggerCondition.step === step) {
+          // For "next" triggers, make sure we're not in the same step it was created
+          if (delayed.triggerCondition.nextOccurrence) {
+            const isSameStep = delayed.createdAtTurn === state.turnCount && delayed.createdAtStep === step;
+            shouldTrigger = !isSameStep;
+          } else {
+            shouldTrigger = true;
+          }
+        }
+      } else if (delayed.triggerCondition.type === 'beginning_of_phase') {
+        if (delayed.triggerCondition.phase === phase) {
+          shouldTrigger = true;
+        }
+      }
+
+      if (shouldTrigger) {
+        // Create a stack object for this delayed trigger
+        const stackItem: StackObject = {
+          id: `trigger-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          sourceId: delayed.sourceCardId,
+          controllerId: delayed.controllerId,
+          type: 'trigger',
+          name: `Delayed: ${delayed.sourceCardName}`,
+          text: delayed.effectText,
+          targets: delayed.targetIds || [],
+          resolutionState: {
+            choicesMade: []
+          }
+        };
+
+        // Store reference to the delayed trigger for effect resolution
+        (stackItem as any).isDelayedTrigger = true;
+        (stackItem as any).delayedTriggerId = delayed.id;
+
+        triggers.push(stackItem);
+        console.log(`[TriggeredAbilityHandler] Delayed trigger fires: ${delayed.sourceCardName} - "${delayed.effectText}"`);
+
+        // Mark one-shot triggers for removal
+        if (delayed.oneShot) {
+          triggersToRemove.push(delayed.id);
+        }
+      }
+    }
+
+    // Remove one-shot triggers that fired
+    if (triggersToRemove.length > 0) {
+      state.delayedTriggers = state.delayedTriggers.filter(d => !triggersToRemove.includes(d.id));
+    }
+
+    return triggers;
+  }
+
+  /**
+   * Parses effect text for delayed trigger patterns and creates the delayed trigger.
+   * Common patterns:
+   * - "At the beginning of the next end step, exile it"
+   * - "At the beginning of your next upkeep, [effect]"
+   *
+   * @param state - Current game state
+   * @param sourceCard - Card creating the effect
+   * @param controllerId - Controller of the effect
+   * @param effectText - Oracle text to parse
+   * @param targetIds - Any pre-selected targets
+   * @returns True if a delayed trigger was created
+   */
+  static parseAndCreateDelayedTrigger(
+    state: StrictGameState,
+    sourceCard: CardObject,
+    controllerId: string,
+    effectText: string,
+    targetIds?: string[]
+  ): boolean {
+    const lowerText = effectText.toLowerCase();
+
+    // "At the beginning of the next end step, [effect]"
+    const nextEndStepMatch = lowerText.match(/at the beginning of the next end step,?\s*(.+)/i);
+    if (nextEndStepMatch) {
+      this.createDelayedTrigger(state, sourceCard, controllerId, {
+        triggerCondition: {
+          type: 'beginning_of_step',
+          step: 'end',
+          nextOccurrence: true
+        },
+        effectText: nextEndStepMatch[1].trim(),
+        targetIds,
+        oneShot: true
+      });
+      return true;
+    }
+
+    // "At the beginning of your next upkeep, [effect]"
+    const nextUpkeepMatch = lowerText.match(/at the beginning of your next upkeep,?\s*(.+)/i);
+    if (nextUpkeepMatch) {
+      this.createDelayedTrigger(state, sourceCard, controllerId, {
+        triggerCondition: {
+          type: 'beginning_of_step',
+          step: 'upkeep',
+          nextOccurrence: true
+        },
+        effectText: nextUpkeepMatch[1].trim(),
+        targetIds,
+        oneShot: true
+      });
+      return true;
+    }
+
+    // "At the beginning of the next combat, [effect]"
+    const nextCombatMatch = lowerText.match(/at the beginning of the next combat,?\s*(.+)/i);
+    if (nextCombatMatch) {
+      this.createDelayedTrigger(state, sourceCard, controllerId, {
+        triggerCondition: {
+          type: 'beginning_of_step',
+          step: 'beginning_combat',
+          nextOccurrence: true
+        },
+        effectText: nextCombatMatch[1].trim(),
+        targetIds,
+        oneShot: true
+      });
+      return true;
+    }
+
+    return false;
   }
 }

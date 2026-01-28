@@ -256,6 +256,29 @@ export interface DebugSessionInfo {
   actionHistory: PersistedDebugAction[];  // Persisted debug action log
 }
 
+/**
+ * Delayed triggered ability (Rule 603.7)
+ * Created during spell/ability resolution, triggers at a later time.
+ * Example: "At the beginning of the next end step, exile it"
+ */
+export interface DelayedTrigger {
+  id: string;
+  sourceCardId: string;        // Card that created this delayed trigger
+  sourceCardName: string;      // Name for display purposes
+  controllerId: string;        // Who controls this delayed trigger
+  triggerCondition: {
+    type: 'beginning_of_step' | 'beginning_of_phase' | 'event';
+    step?: Step;               // For step-based triggers
+    phase?: Phase;             // For phase-based triggers
+    nextOccurrence?: boolean;  // True = "next end step", False = "each end step"
+  };
+  effectText: string;          // Oracle text of what happens when triggered
+  targetIds?: string[];        // Pre-selected targets, if any
+  oneShot: boolean;            // If true, remove after triggering once
+  createdAtTurn: number;       // Turn when this was created
+  createdAtStep: Step;         // Step when this was created (to skip same-step triggers)
+}
+
 export interface StrictGameState {
   id: string; // Game/Room ID
   roomId: string;
@@ -300,4 +323,8 @@ export interface StrictGameState {
 
   // Debug session info (persisted to Redis for debug games)
   debugSession?: DebugSessionInfo;
+
+  // Delayed triggered abilities (Rule 603.7)
+  // Created during spell/ability resolution, trigger at a later time
+  delayedTriggers?: DelayedTrigger[];
 }

@@ -27,6 +27,10 @@ export class ActionHandler {
     if (card) {
       const fromZone = card.zone;
 
+      // Capture card snapshot BEFORE zone change for LTB triggers (look-back-in-time)
+      const wasOnBattlefield = fromZone === 'battlefield';
+      const cardSnapshot = wasOnBattlefield ? { ...card } : null;
+
       if (toZone === 'battlefield' && card.zone !== 'battlefield') {
         card.controlledSinceTurn = state.turnCount;
       }
@@ -114,6 +118,22 @@ export class ActionHandler {
               card.baseDefense = parseFloat(face.defense);
               card.defense = card.baseDefense;
             }
+          }
+        }
+      }
+
+      // Check for LTB (leaves-the-battlefield) triggers if card left battlefield
+      // Note: Death triggers for creatures are handled separately in StateBasedEffects
+      // LTB triggers fire for: exile, bounce, sacrifice (non-creature), etc.
+      if (wasOnBattlefield && toZone !== 'battlefield' && cardSnapshot) {
+        // Skip creature deaths - those are handled by death triggers in StateBasedEffects
+        const isCreatureDeath = cardSnapshot.types?.includes('Creature') && toZone === 'graveyard';
+        if (!isCreatureDeath) {
+          const ltbTriggers = TriggeredAbilityHandler.checkLTBTriggers(state, cardSnapshot, toZone);
+          if (ltbTriggers.length > 0) {
+            const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, ltbTriggers);
+            TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+            console.log(`[ActionHandler] Added ${ltbTriggers.length} LTB trigger(s) to stack`);
           }
         }
       }
@@ -259,6 +279,14 @@ export class ActionHandler {
       }
     }
 
+    // Check for spell cast triggers from other permanents
+    const spellCastTriggers = TriggeredAbilityHandler.checkSpellCastTriggers(state, card, playerId);
+    if (spellCastTriggers.length > 0) {
+      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, spellCastTriggers);
+      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+      console.log(`[ActionHandler] Added ${spellCastTriggers.length} spell cast trigger(s) to stack`);
+    }
+
     ActionHandler.resetPriority(state, playerId);
     return true;
   }
@@ -369,7 +397,15 @@ export class ActionHandler {
       const source = state.cards[item.sourceId];
       if (source) {
         console.log(`[ActionHandler] Resolving triggered ability from ${source.name}`);
-        TriggeredAbilityHandler.resolveTrigger(state, item);
+        const resolved = TriggeredAbilityHandler.resolveTrigger(state, item);
+
+        // If the trigger is waiting for a choice (e.g., "if you do" optional costs),
+        // push it back onto the stack so it can continue resolving after the choice
+        if (!resolved && state.pendingChoice) {
+          console.log(`[ActionHandler] Trigger waiting for choice, pushing back to stack`);
+          state.stack.push(item);
+          return; // Don't reset priority - let the choice handler manage it
+        }
       } else {
         console.warn(`[ActionHandler] Source card not found for trigger: ${item.sourceId}`);
       }

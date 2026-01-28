@@ -1,5 +1,6 @@
 import { StrictGameState, CardObject } from '../types';
 import { GameLogger } from './GameLogger';
+import { TriggeredAbilityHandler, DamageEvent } from './TriggeredAbilityHandler';
 
 /**
  * CombatManager
@@ -99,6 +100,22 @@ export class CombatManager {
     console.log(`[CombatManager] Player ${playerId} declared ${attackers.length} attackers: ${attackerNames}`);
     state.attackersDeclared = true;
 
+    // Check for attack triggers on each attacker
+    const allTriggers: ReturnType<typeof TriggeredAbilityHandler.checkAttackTriggers> = [];
+    attackers.forEach(({ attackerId, targetId }) => {
+      const card = state.cards[attackerId];
+      if (card) {
+        const triggers = TriggeredAbilityHandler.checkAttackTriggers(state, card, targetId);
+        allTriggers.push(...triggers);
+      }
+    });
+
+    // Put all attack triggers on the stack
+    if (allTriggers.length > 0) {
+      TriggeredAbilityHandler.putTriggersOnStack(state, allTriggers);
+      console.log(`[CombatManager] Added ${allTriggers.length} attack trigger(s) to stack`);
+    }
+
     // Reset priority happens in ActionHandler calling this.
   }
 
@@ -175,6 +192,16 @@ export class CombatManager {
     }).join(", ");
     console.log(`[CombatManager] Player ${playerId} declared ${declaredBlockers.length} blockers: ${blockerDetails}`);
     state.blockersDeclared = true;
+
+    // Check for block triggers on each blocker and blocked attacker
+    if (declaredBlockers.length > 0) {
+      const blockTriggers = TriggeredAbilityHandler.checkBlockTriggers(state, declaredBlockers);
+      if (blockTriggers.length > 0) {
+        const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, blockTriggers);
+        TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+        console.log(`[CombatManager] Added ${blockTriggers.length} block trigger(s) to stack`);
+      }
+    }
   }
 
   /**
@@ -187,6 +214,8 @@ export class CombatManager {
 
     // Track lifelink life gain to apply after all damage
     const lifelinkGains: { playerId: string; amount: number }[] = [];
+    // Track damage events for triggers
+    const damageEvents: DamageEvent[] = [];
 
     for (const attacker of attackers) {
       // Check if this creature should deal damage in this step
@@ -208,15 +237,15 @@ export class CombatManager {
 
       if (blockers.length > 0) {
         // === BLOCKED ===
-        this.resolveBlockedCombat(state, attacker, blockers, lifelinkGains, isFirstStrikeDamage);
+        this.resolveBlockedCombat(state, attacker, blockers, lifelinkGains, damageEvents, isFirstStrikeDamage);
       } else {
         // === UNBLOCKED ===
-        this.resolveUnblockedCombat(state, attacker, lifelinkGains);
+        this.resolveUnblockedCombat(state, attacker, lifelinkGains, damageEvents);
       }
     }
 
     // Process blockers dealing damage to attackers
-    this.resolveBlockerDamage(state, lifelinkGains, isFirstStrikeDamage);
+    this.resolveBlockerDamage(state, lifelinkGains, damageEvents, isFirstStrikeDamage);
 
     // Apply lifelink gains
     for (const gain of lifelinkGains) {
@@ -225,6 +254,16 @@ export class CombatManager {
         player.life += gain.amount;
         console.log(`[Lifelink] ${player.name} gains ${gain.amount} life`);
         GameLogger.log(state, `${player.name} gains ${gain.amount} life (Lifelink)`, 'combat', 'Combat');
+      }
+    }
+
+    // Check for damage triggers after all combat damage is dealt
+    if (damageEvents.length > 0) {
+      const damageTriggers = TriggeredAbilityHandler.checkDamageTriggers(state, damageEvents);
+      if (damageTriggers.length > 0) {
+        const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, damageTriggers);
+        TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+        console.log(`[CombatManager] Added ${damageTriggers.length} damage trigger(s) to stack`);
       }
     }
   }
@@ -237,6 +276,7 @@ export class CombatManager {
     attacker: CardObject,
     blockers: CardObject[],
     lifelinkGains: { playerId: string; amount: number }[],
+    damageEvents: DamageEvent[],
     _isFirstStrikeDamage: boolean
   ) {
     const hasDeathtouch = this.hasKeyword(attacker, 'Deathtouch');
@@ -266,6 +306,17 @@ export class CombatManager {
       const damageToAssign = Math.min(remainingDamage, lethalDamage);
       blocker.damageMarked = (blocker.damageMarked || 0) + damageToAssign;
 
+      // Record damage event
+      if (damageToAssign > 0) {
+        damageEvents.push({
+          sourceId: attacker.instanceId,
+          targetId: blocker.instanceId,
+          amount: damageToAssign,
+          isCombatDamage: true,
+          isToPlayer: false
+        });
+      }
+
       // Mark deathtouch damage
       if (hasDeathtouch && damageToAssign > 0) {
         if (!blocker.modifiers) blocker.modifiers = [];
@@ -294,6 +345,14 @@ export class CombatManager {
         console.log(`${attacker.name} tramples ${remainingDamage} damage to ${targetPlayer.name}`);
         targetPlayer.life -= remainingDamage;
         totalDamageDealt += remainingDamage;
+        // Record trample damage to player
+        damageEvents.push({
+          sourceId: attacker.instanceId,
+          targetId: targetPlayer.id,
+          amount: remainingDamage,
+          isCombatDamage: true,
+          isToPlayer: true
+        });
         GameLogger.log(state, `${attacker.name} tramples ${remainingDamage} damage to ${targetPlayer.name}`, 'combat', 'Combat', [attacker]);
       } else if (targetPlaneswalker && targetPlaneswalker.types?.includes('Planeswalker')) {
         // Damage to planeswalker removes loyalty counters
@@ -301,6 +360,14 @@ export class CombatManager {
         if (loyaltyCounter) {
           loyaltyCounter.count -= remainingDamage;
           totalDamageDealt += remainingDamage;
+          // Record trample damage to planeswalker
+          damageEvents.push({
+            sourceId: attacker.instanceId,
+            targetId: targetPlaneswalker.instanceId,
+            amount: remainingDamage,
+            isCombatDamage: true,
+            isToPlayer: false
+          });
           console.log(`${attacker.name} tramples ${remainingDamage} damage to ${targetPlaneswalker.name}`);
         }
       }
@@ -318,7 +385,8 @@ export class CombatManager {
   private static resolveUnblockedCombat(
     state: StrictGameState,
     attacker: CardObject,
-    lifelinkGains: { playerId: string; amount: number }[]
+    lifelinkGains: { playerId: string; amount: number }[],
+    damageEvents: DamageEvent[]
   ) {
     const hasLifelink = this.hasKeyword(attacker, 'Lifelink');
     const targetId = attacker.attacking!;
@@ -331,6 +399,14 @@ export class CombatManager {
       console.log(`${attacker.name} deals ${attacker.power} damage to Player ${targetPlayer.name}`);
       targetPlayer.life -= attacker.power;
       damageDealt = attacker.power;
+      // Record damage event to player
+      damageEvents.push({
+        sourceId: attacker.instanceId,
+        targetId: targetPlayer.id,
+        amount: attacker.power,
+        isCombatDamage: true,
+        isToPlayer: true
+      });
       GameLogger.logCombatDamage(state, attacker, targetId, attacker.power);
     } else if (targetPlaneswalker && targetPlaneswalker.types?.includes('Planeswalker')) {
       // Damage to planeswalker removes loyalty counters
@@ -338,6 +414,14 @@ export class CombatManager {
       if (loyaltyCounter) {
         loyaltyCounter.count -= attacker.power;
         damageDealt = attacker.power;
+        // Record damage event to planeswalker
+        damageEvents.push({
+          sourceId: attacker.instanceId,
+          targetId: targetPlaneswalker.instanceId,
+          amount: attacker.power,
+          isCombatDamage: true,
+          isToPlayer: false
+        });
         console.log(`${attacker.name} deals ${attacker.power} damage to ${targetPlaneswalker.name}`);
         GameLogger.logCombatDamage(state, attacker, targetPlaneswalker, attacker.power);
       }
@@ -355,6 +439,7 @@ export class CombatManager {
   private static resolveBlockerDamage(
     state: StrictGameState,
     lifelinkGains: { playerId: string; amount: number }[],
+    damageEvents: DamageEvent[],
     isFirstStrikeDamage: boolean
   ) {
     const blockers = Object.values(state.cards).filter(c =>
@@ -385,6 +470,17 @@ export class CombatManager {
         const damageToAssign = blocker.power;
 
         attacker.damageMarked = (attacker.damageMarked || 0) + damageToAssign;
+
+        // Record damage event
+        if (damageToAssign > 0) {
+          damageEvents.push({
+            sourceId: blocker.instanceId,
+            targetId: attacker.instanceId,
+            amount: damageToAssign,
+            isCombatDamage: true,
+            isToPlayer: false
+          });
+        }
 
         // Mark deathtouch damage
         if (hasDeathtouch && damageToAssign > 0) {

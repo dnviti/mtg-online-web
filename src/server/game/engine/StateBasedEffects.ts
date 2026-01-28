@@ -1,7 +1,8 @@
-import { StrictGameState, CardObject } from '../types';
+import { StrictGameState, CardObject, StackObject } from '../types';
 import { Layers } from './Layers';
 import { GameLogger } from './GameLogger';
 import { LorwynMechanics } from './LorwynMechanics';
+import { TriggeredAbilityHandler } from './TriggeredAbilityHandler';
 
 /**
  * StateBasedEffects (SBA)
@@ -19,6 +20,8 @@ import { LorwynMechanics } from './LorwynMechanics';
 export class StateBasedEffects {
   // Track creatures that died this SBA check cycle for persist processing
   private static pendingPersistCreatures: CardObject[] = [];
+  // Track death triggers to be put on stack after SBA loop completes
+  private static pendingDeathTriggers: StackObject[] = [];
 
   /**
    * Checks for any applicable SBAs and applies them. 
@@ -56,12 +59,20 @@ export class StateBasedEffects {
         console.log(`SBA: ${c.name} put to GY (Zero Toughness).`);
         GameLogger.logCreatureDied(state, c, 'zero toughness');
 
+        // Capture card snapshot for death triggers (look-back-in-time)
+        const cardSnapshot = { ...c };
+
         // Check for persist before moving to graveyard
         if (LorwynMechanics.canPersist(c)) {
           StateBasedEffects.pendingPersistCreatures.push({ ...c }); // Clone to preserve state
         }
 
         c.zone = 'graveyard';
+
+        // Check for death triggers using the snapshot
+        const deathTriggers = TriggeredAbilityHandler.checkDeathTriggers(state, cardSnapshot);
+        StateBasedEffects.pendingDeathTriggers.push(...deathTriggers);
+
         sbaPerformed = true;
         continue;
       }
@@ -79,12 +90,20 @@ export class StateBasedEffects {
         console.log(`SBA: ${c.name} destroyed (Deathtouch damage: ${c.damageMarked}).`);
         GameLogger.logCreatureDied(state, c, 'deathtouch');
 
+        // Capture card snapshot for death triggers (look-back-in-time)
+        const cardSnapshot = { ...c };
+
         // Check for persist before moving to graveyard
         if (LorwynMechanics.canPersist(c)) {
           StateBasedEffects.pendingPersistCreatures.push({ ...c });
         }
 
         c.zone = 'graveyard';
+
+        // Check for death triggers using the snapshot
+        const deathTriggers = TriggeredAbilityHandler.checkDeathTriggers(state, cardSnapshot);
+        StateBasedEffects.pendingDeathTriggers.push(...deathTriggers);
+
         sbaPerformed = true;
         continue;
       }
@@ -94,12 +113,20 @@ export class StateBasedEffects {
         console.log(`SBA: ${c.name} destroyed (Lethal Damage: ${c.damageMarked}/${c.toughness}).`);
         GameLogger.logCreatureDied(state, c, 'lethal damage');
 
+        // Capture card snapshot for death triggers (look-back-in-time)
+        const cardSnapshot = { ...c };
+
         // Check for persist before moving to graveyard
         if (LorwynMechanics.canPersist(c)) {
           StateBasedEffects.pendingPersistCreatures.push({ ...c });
         }
 
         c.zone = 'graveyard';
+
+        // Check for death triggers using the snapshot
+        const deathTriggers = TriggeredAbilityHandler.checkDeathTriggers(state, cardSnapshot);
+        StateBasedEffects.pendingDeathTriggers.push(...deathTriggers);
+
         sbaPerformed = true;
       }
     }
@@ -156,8 +183,9 @@ export class StateBasedEffects {
 
   // This method encapsulates the SBA loop and recalculation of layers
   static process(state: StrictGameState) {
-    // Reset pending persist creatures at start of SBA processing
+    // Reset pending lists at start of SBA processing
     StateBasedEffects.pendingPersistCreatures = [];
+    StateBasedEffects.pendingDeathTriggers = [];
 
     Layers.recalculate(state);
 
@@ -169,6 +197,19 @@ export class StateBasedEffects {
         break;
       }
       Layers.recalculate(state);
+    }
+
+    // Process death triggers after SBA loop completes (before persist)
+    // Death triggers go on the stack with APNAP ordering
+    if (StateBasedEffects.pendingDeathTriggers.length > 0) {
+      console.log(`[StateBasedEffects] Processing ${StateBasedEffects.pendingDeathTriggers.length} death trigger(s)`);
+
+      // Order triggers by APNAP (Active Player, Non-Active Player)
+      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, StateBasedEffects.pendingDeathTriggers);
+      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+
+      // Clear the pending list
+      StateBasedEffects.pendingDeathTriggers = [];
     }
 
     // Process persist triggers after SBA loop completes

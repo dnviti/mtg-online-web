@@ -1,6 +1,7 @@
 import { StrictGameState, Phase, Step } from '../types';
 import { ActionHandler } from './ActionHandler';
 import { CombatManager } from './CombatManager';
+import { TriggeredAbilityHandler } from './TriggeredAbilityHandler';
 
 /**
  * PhaseManager
@@ -132,6 +133,15 @@ export class PhaseManager {
         }
       });
       state.step = 'upkeep'; // Skip priority in untap
+      // Check for upkeep triggers now that we're in upkeep
+      this.checkAndFireBeginningTriggers(state);
+      ActionHandler.resetPriority(state, activePlayerId);
+      return;
+    }
+
+    // Check for upkeep triggers if we entered upkeep directly
+    if (step === 'upkeep') {
+      this.checkAndFireBeginningTriggers(state);
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
@@ -152,6 +162,13 @@ export class PhaseManager {
       return;
     }
 
+    if (step === 'end') {
+      // Check for end step triggers ("at the beginning of the end step")
+      this.checkAndFireBeginningTriggers(state);
+      ActionHandler.resetPriority(state, activePlayerId);
+      return;
+    }
+
     if (step === 'cleanup') {
       Object.values(state.cards).forEach(c => {
         c.damageMarked = 0;
@@ -162,6 +179,13 @@ export class PhaseManager {
       state.attackersDeclared = false;
       state.blockersDeclared = false;
       this.advanceTurn(state);
+      return;
+    }
+
+    if (step === 'beginning_combat') {
+      // Check for beginning of combat triggers
+      this.checkAndFireBeginningTriggers(state);
+      ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
 
@@ -252,5 +276,26 @@ export class PhaseManager {
       console.log(`[PhaseManager] Priority passed to ${state.priorityPlayerId}`);
     }
     return true;
+  }
+
+  /**
+   * Helper to check and fire beginning-of-phase/step triggers.
+   * Checks for both regular triggers and delayed triggers that match the current phase/step.
+   */
+  private static checkAndFireBeginningTriggers(state: StrictGameState): void {
+    // Check for regular beginning-of-phase/step triggers
+    const beginningTriggers = TriggeredAbilityHandler.checkBeginningTriggers(state, state.phase, state.step);
+
+    // Check for delayed triggers that should fire now
+    const delayedTriggers = TriggeredAbilityHandler.checkDelayedTriggers(state, state.phase, state.step);
+
+    // Combine all triggers
+    const allTriggers = [...beginningTriggers, ...delayedTriggers];
+
+    if (allTriggers.length > 0) {
+      console.log(`[PhaseManager] Found ${beginningTriggers.length} beginning trigger(s) and ${delayedTriggers.length} delayed trigger(s) at ${state.step}`);
+      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, allTriggers);
+      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+    }
   }
 }
