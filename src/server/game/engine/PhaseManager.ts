@@ -119,7 +119,16 @@ export class PhaseManager {
     if (step === 'untap') {
       Object.values(state.cards).forEach(card => {
         if (card.controllerId === activePlayerId && card.zone === 'battlefield') {
-          card.tapped = false;
+          // Check for "can't untap" modifiers (e.g., from auras like Blossombind)
+          const cantUntap = card.modifiers?.some(m =>
+            m.type === 'ability_grant' && m.value === 'cant_untap'
+          );
+
+          if (cantUntap) {
+            console.log(`[PhaseManager] ${card.name} can't untap due to modifier`);
+          } else {
+            card.tapped = false;
+          }
         }
       });
       state.step = 'upkeep'; // Skip priority in untap

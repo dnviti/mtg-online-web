@@ -210,6 +210,97 @@ export class GameLogger {
   }
 
   /**
+   * Log spell countered
+   */
+  static logSpellCountered(state: StrictGameState, card: CardObject) {
+    const msg = `{${card.name}} was countered`;
+    this.log(state, msg, 'action', 'Game', [card]);
+  }
+
+  /**
+   * Log damage dealt (non-combat)
+   */
+  static logDamageDealt(state: StrictGameState, source: CardObject, targetName: string, damage: number) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} dealt ${damage} damage to ${targetName}`;
+    this.log(state, msg, 'action', sourceName, [source]);
+  }
+
+  /**
+   * Log board wipe
+   */
+  static logBoardWipe(state: StrictGameState, source: CardObject, count: number) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} destroyed ${count} permanent(s)`;
+    this.log(state, msg, 'action', sourceName, [source]);
+  }
+
+  /**
+   * Log destruction effect
+   */
+  static logDestroy(state: StrictGameState, source: CardObject, target: CardObject) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} destroyed {${target.name}}`;
+    this.log(state, msg, 'action', sourceName, [source, target]);
+  }
+
+  /**
+   * Log exile effect
+   */
+  static logExile(state: StrictGameState, source: CardObject, target: CardObject) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} exiled {${target.name}}`;
+    this.log(state, msg, 'action', sourceName, [source, target]);
+  }
+
+  /**
+   * Log bounce effect (return to hand)
+   */
+  static logBounce(state: StrictGameState, source: CardObject, target: CardObject) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} returned {${target.name}} to its owner's hand`;
+    this.log(state, msg, 'action', sourceName, [source, target]);
+  }
+
+  /**
+   * Log pump effect (+X/+X)
+   */
+  static logPump(state: StrictGameState, source: CardObject, target: CardObject, power: number, toughness: number) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const sign = (n: number) => n >= 0 ? `+${n}` : `${n}`;
+    const msg = `{${source.name}} gave {${target.name}} ${sign(power)}/${sign(toughness)}`;
+    this.log(state, msg, 'action', sourceName, [source, target]);
+  }
+
+  /**
+   * Log card draw effect
+   */
+  static logDraw(state: StrictGameState, source: CardObject, playerName: string, count: number) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const plural = count !== 1 ? 's' : '';
+    const msg = `{${source.name}} caused ${playerName} to draw ${count} card${plural}`;
+    this.log(state, msg, 'action', sourceName, [source]);
+  }
+
+  /**
+   * Log life gain
+   */
+  static logLifeGain(state: StrictGameState, source: CardObject, playerName: string, amount: number) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} caused ${playerName} to gain ${amount} life`;
+    this.log(state, msg, 'action', sourceName, [source]);
+  }
+
+  /**
+   * Log tap effect
+   */
+  static logTap(state: StrictGameState, source: CardObject, target: CardObject) {
+    const sourceName = state.players[source.controllerId]?.name || 'Unknown';
+    const msg = `{${source.name}} tapped {${target.name}}`;
+    this.log(state, msg, 'action', sourceName, [source, target]);
+  }
+
+  /**
    * Clear pending logs (call after sending to clients)
    */
   static clearPendingLogs(state: StrictGameState) {

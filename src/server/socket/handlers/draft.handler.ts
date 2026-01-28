@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { roomManager, draftManager, tournamentManager, scryfallService, gameManager } from '../../singletons';
+import { roomManager, draftManager, tournamentManager, scryfallService, gameManager, cardService } from '../../singletons';
 
 export const registerDraftHandlers = (io: Server, socket: Socket) => {
   const getContext = async () => roomManager.getPlayerBySocket(socket.id);
@@ -260,6 +260,38 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
           }
         }
       }));
+
+      // Determine primary set code from loaded cards and cache tokens
+      const allSetCodes = new Set<string>();
+      readyRoom.players.forEach((p: any) => {
+        if (p.deck && Array.isArray(p.deck)) {
+          p.deck.forEach((c: any) => {
+            // Check multiple property names for set code
+            const setCode = c.setCode || c.set || c.definition?.set;
+            if (setCode) allSetCodes.add(setCode.toLowerCase());
+          });
+        }
+      });
+
+      if (allSetCodes.size > 0) {
+        const primarySetCode = Array.from(allSetCodes)[0];
+        console.log(`[DeckTester] Primary set code: ${primarySetCode}. Caching tokens...`);
+
+        try {
+          const tokens = await scryfallService.getTokensForSet(primarySetCode);
+          if (tokens.length > 0) {
+            // Download token images to local storage
+            const cachedCount = await cardService.cacheImages(tokens);
+            if (cachedCount > 0) {
+              console.log(`[DeckTester] Downloaded ${cachedCount} token images for set ${primarySetCode}`);
+            }
+            await gameManager.cacheTokensForGame(readyRoom.id, primarySetCode, tokens);
+            console.log(`[DeckTester] Cached ${tokens.length} tokens for set ${primarySetCode}`);
+          }
+        } catch (e) {
+          console.warn(`[DeckTester] Failed to cache tokens for set ${primarySetCode}:`, e);
+        }
+      }
 
       // Start game (draw 7 cards, etc)
       const initializedGame = await gameManager.startGame(readyRoom.id);

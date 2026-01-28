@@ -163,6 +163,8 @@ export interface StrictGameState {
   id: string; // Game/Room ID
   roomId: string;
   format?: string; // e.g., 'commander' | 'standard'
+  setCode?: string; // Primary set code for token lookups
+  cachedTokens?: any[]; // Cached tokens from the set for effect resolution
   players: Record<string, PlayerState>;
   cards: Record<string, CardObject>;
   stack: StackObject[];

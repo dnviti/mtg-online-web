@@ -3,6 +3,7 @@ import { CardUtils } from './CardUtils';
 import { ManaUtils } from './ManaUtils';
 import { StateBasedEffects } from './StateBasedEffects';
 import { GameLogger } from './GameLogger';
+import { OracleEffectResolver } from './OracleEffectResolver';
 
 /**
  * ActionHandler
@@ -275,6 +276,9 @@ export class ActionHandler {
               this.moveCardToZone(state, card.instanceId, 'battlefield', false, item.resolutionPosition);
               card.attachedTo = target.instanceId;
               console.log(`${card.name} enters attached to ${target.name}`);
+
+              // Resolve aura effects (e.g., Pacifism-style enchantments)
+              OracleEffectResolver.resolveSpellEffects(state, card, item);
             } else {
               console.log(`${card.name} failed to attach. Putting into GY.`);
               this.moveCardToZone(state, card.instanceId, 'graveyard');
@@ -287,8 +291,13 @@ export class ActionHandler {
             if (CardUtils.isBattle(card) && card.baseDefense) {
               this.addCounter(state, state.activePlayerId, card.instanceId, 'defense', card.baseDefense);
             }
+
+            // Resolve ETB effects for permanents (creatures, artifacts, enchantments, planeswalkers)
+            OracleEffectResolver.resolveSpellEffects(state, card, item);
           }
         } else {
+          // Non-permanent spell (instant/sorcery) - resolve effects THEN move to graveyard
+          OracleEffectResolver.resolveSpellEffects(state, card, item);
           this.moveCardToZone(state, card.instanceId, 'graveyard');
         }
       }
@@ -356,14 +365,16 @@ export class ActionHandler {
     const oracleText = definition.oracle_text || face?.oracle_text || '';
     const keywords = definition.keywords || face?.keywords || [];
     const colors = definition.colors || face?.colors || [];
-    const imageUrl = definition.local_path_full || definition.imageUrl ||
-                     definition.image_uris?.normal || face?.image_uris?.normal || '';
-    const imageArtCrop = definition.local_path_crop || definition.imageArtCrop ||
-                         definition.image_uris?.art_crop || face?.image_uris?.art_crop || '';
+
+    // For token images, use ONLY local cached paths (Scryfall URLs are only for downloading to cache)
+    const imageUrl = definition.local_path_full || definition.imageUrl || '/images/token.jpg';
+    const imageArtCrop = definition.local_path_crop || definition.imageArtCrop || '';
 
     const token: any = {
       instanceId: Math.random().toString(36).substring(7),
-      oracleId: 'token-' + Math.random(),
+      oracleId: definition.oracle_id || 'token-' + Math.random(),
+      scryfallId: definition.id || definition.scryfallId, // Store Scryfall ID for client-side lookups
+      setCode: definition.set || definition.setCode, // Store set code for debugging
       name: definition.name || face?.name,
       controllerId: playerId,
       ownerId: playerId,
@@ -396,7 +407,7 @@ export class ActionHandler {
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }
     };
     state.cards[token.instanceId] = token;
-    console.log(`[ActionHandler] Player ${playerId} created token: ${token.name} (${typeLine}) P/T: ${power}/${toughness}`);
+    console.log(`[ActionHandler] Player ${playerId} created token: ${token.name} (${typeLine}) P/T: ${power}/${toughness} | Image: ${imageUrl ? 'Yes' : 'No'} | ScryfallId: ${token.scryfallId || 'none'}`);
 
     const playerName = state.players[playerId]?.name || 'Unknown';
     GameLogger.logTokenCreated(state, token, playerName);

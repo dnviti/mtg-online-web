@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { roomManager, gameManager, scryfallService } from '../../singletons';
+import { roomManager, gameManager, scryfallService, cardService } from '../../singletons';
 import { GameLogger } from '../../game/engine/GameLogger';
 
 export const registerGameHandlers = (io: Server, socket: Socket) => {
@@ -150,6 +150,47 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
           console.warn(`[GameStart] ⚠️ No deck found for player ${p.name} (${p.id})! IsBot=${p.isBot}`);
         }
       }));
+
+      // Determine primary set code from loaded cards and cache tokens
+      const allSetCodes = new Set<string>();
+      authoritativeCards.forEach(c => {
+        if (c.set) allSetCodes.add(c.set.toLowerCase());
+      });
+
+      // Fallback: collect set codes from deck cards directly if authoritative data is missing
+      if (allSetCodes.size === 0) {
+        console.log(`[GameStart] No set codes from authoritative data, checking deck cards...`);
+        updatedRoom.players.forEach(p => {
+          const finalDeck = (decks && decks[p.id]) ? decks[p.id] : p.deck;
+          if (finalDeck && Array.isArray(finalDeck)) {
+            finalDeck.forEach((card: any) => {
+              const setCode = card.setCode || card.set || card.definition?.set;
+              if (setCode) allSetCodes.add(setCode.toLowerCase());
+            });
+          }
+        });
+      }
+
+      if (allSetCodes.size > 0) {
+        // Use the most common set code as the primary
+        const primarySetCode = Array.from(allSetCodes)[0];
+        console.log(`[GameStart] Primary set code: ${primarySetCode}. Caching tokens...`);
+
+        try {
+          const tokens = await scryfallService.getTokensForSet(primarySetCode);
+          if (tokens.length > 0) {
+            // Download token images to local storage
+            const cachedCount = await cardService.cacheImages(tokens);
+            if (cachedCount > 0) {
+              console.log(`[GameStart] Downloaded ${cachedCount} token images for set ${primarySetCode}`);
+            }
+            await gameManager.cacheTokensForGame(room.id, primarySetCode, tokens);
+            console.log(`[GameStart] Cached ${tokens.length} tokens for set ${primarySetCode}`);
+          }
+        } catch (e) {
+          console.warn(`[GameStart] Failed to cache tokens for set ${primarySetCode}:`, e);
+        }
+      }
 
       // Initialize Game Engine (Draw 7 cards, etc)
       const initializedGame = await gameManager.startGame(room.id);

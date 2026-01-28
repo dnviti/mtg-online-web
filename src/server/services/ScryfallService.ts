@@ -601,4 +601,134 @@ export class ScryfallService {
     }
   }
 
+  /**
+   * Find a matching token from a list of cached tokens based on characteristics.
+   * Used by OracleEffectResolver to create real Scryfall tokens instead of generic ones.
+   *
+   * @param cachedTokens - Pre-cached tokens from the set (from game state)
+   * @param criteria - Token characteristics to match against
+   * @returns Matching token or null if not found
+   */
+  findMatchingToken(
+    cachedTokens: ScryfallCard[],
+    criteria: {
+      name?: string;
+      power?: string | number;
+      toughness?: string | number;
+      subtypes?: string[];
+      colors?: string[];
+      isCreature?: boolean;
+      isArtifact?: boolean;
+    }
+  ): ScryfallCard | null {
+    if (!cachedTokens || cachedTokens.length === 0) return null;
+
+    const { name, power, toughness, subtypes, colors, isCreature, isArtifact } = criteria;
+
+    // Normalize power/toughness to strings for comparison
+    const targetPower = power?.toString();
+    const targetToughness = toughness?.toString();
+
+    // Score-based matching to find the best match
+    let bestMatch: ScryfallCard | null = null;
+    let bestScore = 0;
+
+    for (const token of cachedTokens) {
+      let score = 0;
+      const tokenTypeLine = (token.type_line || '').toLowerCase();
+      const tokenFace = token.card_faces?.[0];
+
+      // Get token characteristics from root or card_faces (cast to any for extended properties)
+      const face = tokenFace as any;
+      const tokenPower = token.power ?? face?.power;
+      const tokenToughness = token.toughness ?? face?.toughness;
+      const tokenColors = token.colors || face?.colors || [];
+      const tokenName = token.name || face?.name || '';
+
+      // Type check
+      if (isCreature !== undefined) {
+        const isTokenCreature = tokenTypeLine.includes('creature');
+        if (isCreature !== isTokenCreature) continue;
+      }
+
+      if (isArtifact !== undefined) {
+        const isTokenArtifact = tokenTypeLine.includes('artifact');
+        if (isArtifact && !isTokenArtifact) continue;
+      }
+
+      // Name match (highest priority)
+      if (name) {
+        const normalizedName = name.toLowerCase().trim();
+        const normalizedTokenName = tokenName.toLowerCase().trim();
+        if (normalizedTokenName === normalizedName) {
+          score += 100; // Exact name match
+        } else if (normalizedTokenName.includes(normalizedName) || normalizedName.includes(normalizedTokenName)) {
+          score += 50; // Partial name match
+        }
+      }
+
+      // Power/toughness match
+      if (targetPower !== undefined && tokenPower !== undefined) {
+        if (tokenPower === targetPower) score += 30;
+      }
+      if (targetToughness !== undefined && tokenToughness !== undefined) {
+        if (tokenToughness === targetToughness) score += 30;
+      }
+
+      // Subtype match
+      if (subtypes && subtypes.length > 0) {
+        for (const subtype of subtypes) {
+          if (tokenTypeLine.includes(subtype.toLowerCase())) {
+            score += 20;
+          }
+        }
+      }
+
+      // Color match
+      if (colors && colors.length > 0) {
+        const matchingColors = colors.filter(c => tokenColors.includes(c));
+        score += matchingColors.length * 10;
+
+        // Penalty for extra colors
+        const extraColors = tokenColors.filter((c: string) => !colors.includes(c));
+        score -= extraColors.length * 5;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = token;
+      }
+    }
+
+    // Only return if we have a reasonable match (at least power/toughness or name)
+    if (bestScore >= 30) {
+      console.log(`[ScryfallService] Found matching token: ${bestMatch?.name} (score: ${bestScore})`);
+      return bestMatch;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find a specific common token type (Treasure, Food, Clue, Blood, etc.)
+   * These tokens are standardized across sets.
+   */
+  findCommonToken(
+    cachedTokens: ScryfallCard[],
+    tokenType: 'Treasure' | 'Food' | 'Clue' | 'Blood' | 'Map' | 'Powerstone'
+  ): ScryfallCard | null {
+    if (!cachedTokens || cachedTokens.length === 0) return null;
+
+    const token = cachedTokens.find(t => {
+      const name = t.name || t.card_faces?.[0]?.name || '';
+      return name.toLowerCase() === tokenType.toLowerCase();
+    });
+
+    if (token) {
+      console.log(`[ScryfallService] Found ${tokenType} token from cache`);
+    }
+
+    return token || null;
+  }
+
 }

@@ -1,5 +1,5 @@
 import { Server, Socket } from 'socket.io';
-import { roomManager, gameManager, tournamentManager, scryfallService } from '../../singletons';
+import { roomManager, gameManager, tournamentManager, scryfallService, cardService } from '../../singletons';
 
 export const registerTournamentHandlers = (io: Server, socket: Socket) => {
   const getContext = async () => await roomManager.getPlayerBySocket(socket.id);
@@ -218,6 +218,45 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
 
             await loadDeck(p1, d1 as any[]);
             await loadDeck(p2, d2 as any[]);
+
+            // Determine primary set code from loaded cards and cache tokens
+            const allSetCodes = new Set<string>();
+            authoritativeCards.forEach(c => {
+              if (c.set) allSetCodes.add(c.set.toLowerCase());
+            });
+
+            // Fallback: collect set codes from deck cards directly if authoritative data is missing
+            if (allSetCodes.size === 0) {
+              console.log(`[TournamentStart] No set codes from authoritative data, checking deck cards...`);
+              [d1, d2].forEach(deck => {
+                if (deck && Array.isArray(deck)) {
+                  deck.forEach((card: any) => {
+                    const setCode = card.setCode || card.set || card.definition?.set;
+                    if (setCode) allSetCodes.add(setCode.toLowerCase());
+                  });
+                }
+              });
+            }
+
+            if (allSetCodes.size > 0) {
+              const primarySetCode = Array.from(allSetCodes)[0];
+              console.log(`[TournamentStart] Primary set code: ${primarySetCode}. Caching tokens...`);
+
+              try {
+                const tokens = await scryfallService.getTokensForSet(primarySetCode);
+                if (tokens.length > 0) {
+                  // Download token images to local storage
+                  const cachedCount = await cardService.cacheImages(tokens);
+                  if (cachedCount > 0) {
+                    console.log(`[TournamentStart] Downloaded ${cachedCount} token images for set ${primarySetCode}`);
+                  }
+                  await gameManager.cacheTokensForGame(matchId, primarySetCode, tokens);
+                  console.log(`[TournamentStart] Cached ${tokens.length} tokens for set ${primarySetCode}`);
+                }
+              } catch (e) {
+                console.warn(`[TournamentStart] Failed to cache tokens for set ${primarySetCode}:`, e);
+              }
+            }
 
             // Start Game (Draw Hands)
             await gameManager.startGame(matchId);

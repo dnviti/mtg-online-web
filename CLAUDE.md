@@ -168,7 +168,8 @@ USE_LLM_PICK=true
 # Database (auto-configured for Docker)
 DATABASE_URL=file:./dev.db
 
-# Redis (optional, falls back to local FS)
+# Redis (REQUIRED for production - stores card metadata indexing)
+# Falls back to local FS for development only
 REDIS_URL=redis://localhost:6379
 ```
 
@@ -203,12 +204,137 @@ Socket.IO handles all real-time features:
 - State survives server restarts
 - User reconnection restores their session
 
+## Card & Image Caching Architecture (MANDATORY)
+
+**CRITICAL**: This caching strategy is MANDATORY for all card and token handling. Redis is REQUIRED for production deployments.
+
+### Core Principle: Local Paths Only
+
+**NEVER serve Scryfall URLs directly to clients.** All card and token images MUST use local cached paths.
+
+```
+✅ CORRECT: imageUrl = "/cards/images/blb/full/abc123.jpg"
+❌ WRONG:   imageUrl = "https://cards.scryfall.io/normal/front/a/b/abc123.jpg"
+```
+
+Scryfall URLs are **ONLY** used internally to download images to local cache. They should never appear in:
+- Game state (`StrictGameState.cards`)
+- Token definitions passed to `ActionHandler.createToken()`
+- Any data sent to clients
+
+### Redis Indexing (MANDATORY)
+
+Redis stores all card metadata and indexing. The following Redis structures are used:
+
+| Key Pattern | Type | Purpose |
+|-------------|------|---------|
+| `set:{code}` | Hash | Card metadata by ID for each set (e.g., `set:blb`) |
+| `card_indexes` | Hash | Maps card ID → set code for lookups |
+| `sets` | Hash | Set metadata (name, release date, etc.) |
+
+### Local File Structure
+
+```
+src/server/public/cards/
+├── images/
+│   ├── {set}/              # e.g., "blb", "tblb" (token set)
+│   │   ├── full/           # Full card images
+│   │   │   └── {id}.jpg    # Named by Scryfall ID
+│   │   └── crop/           # Art crop images
+│   │       └── {id}.jpg
+├── metadata/
+│   └── {set}/
+│       └── {id}.json       # Card metadata JSON
+└── sets/
+    ├── {set}.json          # Full set card list
+    ├── {set}_info.json     # Set metadata
+    └── t{set}.json         # Token set card list
+```
+
+### Path Generation
+
+`ScryfallService.normalizeCard()` automatically adds local paths:
+
+```typescript
+card.local_path_full = `/cards/images/${card.set}/full/${card.id}.jpg`;
+card.local_path_crop = `/cards/images/${card.set}/crop/${card.id}.jpg`;
+```
+
+### Token Set Naming Convention
+
+Tokens are stored in separate sets with a `t` prefix:
+- Main set: `ecl` → Token set: `tecl`
+- Main set: `blb` → Token set: `tblb`
+
+This applies to both Redis keys (`set:tecl`) and filesystem paths (`sets/tecl.json`).
+
+### Token Caching Flow
+
+When a game starts:
+
+1. **Fetch tokens**: `scryfallService.getTokensForSet(setCode)` fetches token data (automatically adds `t` prefix)
+2. **Download images**: `cardService.cacheImages(tokens)` downloads images to local storage
+3. **Cache in game state**: `gameManager.cacheTokensForGame(roomId, setCode, tokens)` stores tokens
+4. **Use in effects**: `OracleEffectResolver` finds real tokens from `state.cachedTokens`
+5. **Create with local paths**: `ActionHandler.createToken()` uses `local_path_full` only
+
+### On-Demand Token Loading (Fallback)
+
+If game state has no cached tokens when a spell tries to create one, `OracleEffectResolver.findRealToken()` will:
+
+1. **Get set code** from source card (`sourceCard.setCode` or `sourceCard.definition.set`)
+2. **Load from filesystem**: Read `sets/t{setCode}.json` synchronously (mirrors Redis)
+3. **Normalize paths**: Add `local_path_full` and `local_path_crop` to each token
+4. **Cache in game state**: Store in `state.cachedTokens` for subsequent calls
+
+```typescript
+// OracleEffectResolver.loadTokensFromCache(setCode)
+const tokenSetCode = `t${setCode}`.toLowerCase();
+const tokensCachePath = path.join(SETS_DIR, `${tokenSetCode}.json`);
+// Read, parse, normalize paths, return tokens
+```
+
+This ensures tokens are **always** available even if initial caching was skipped.
+
+### Image URL Resolution Order
+
+In `ActionHandler.createToken()`:
+
+```typescript
+// CORRECT - Local paths only
+const imageUrl = definition.local_path_full || definition.imageUrl || '/images/token.jpg';
+```
+
+### Key Files
+
+| File | Responsibility |
+|------|----------------|
+| `ScryfallService.ts` | Fetch from API, normalize cards, manage Redis cache |
+| `CardService.ts` | Download and cache images to local filesystem |
+| `ActionHandler.ts` | Create tokens using local paths only |
+| `OracleEffectResolver.ts` | Find real tokens from cached data, **load from filesystem on-demand if missing** |
+| `GameManager.ts` | Store cached tokens in game state |
+
+### Enforcement Checklist
+
+When working with cards or tokens:
+
+- [ ] All `imageUrl` fields use local paths (`/cards/images/...`)
+- [ ] Scryfall URLs only used in `CardService.cacheImages()` for downloading
+- [ ] `local_path_full` and `local_path_crop` are set via `normalizeCard()`
+- [ ] Token images are cached before game starts (with on-demand fallback from `sets/t{set}.json`)
+- [ ] Redis is used for all metadata lookups (filesystem mirrors Redis for fallback)
+- [ ] Token sets use `t` prefix convention (e.g., `tecl` for `ecl` tokens)
+
 ## Key Services
 
 ### ScryfallService
 - Fetches card data and sets from Scryfall API
-- Implements local caching for offline support
+- **Normalizes cards** with `local_path_full` and `local_path_crop` for local image paths
+- Stores metadata in **Redis** (`set:{code}` hashes, `card_indexes` mapping)
+- Falls back to filesystem cache (`metadata/{set}/{id}.json`)
 - Handles rate limiting and retries
+- **Important**: Scryfall URLs are only used internally for downloading - never exposed to clients
 
 ### PackGeneratorService
 - Generates booster packs from card pools
@@ -313,14 +439,16 @@ GitHub Actions workflow (`.github/workflows/ci.yml`):
 
 ## Important Notes
 
-1. **Card Images**: Cached locally in `src/server/public/cards/`. This directory is gitignored.
+1. **Card Images**: Cached locally in `src/server/public/cards/`. This directory is gitignored. **NEVER use Scryfall URLs directly** - always use local cached paths.
 
 2. **Database**: SQLite file at `src/dev.db` (dev) or `/app/server-data/mtgate.db` (Docker)
 
-3. **Redis**: Optional - app falls back to local filesystem if unavailable
+3. **Redis**: **MANDATORY for production**. Redis stores all card metadata indexing (`set:{code}`, `card_indexes`, `sets`). The app can fall back to local filesystem for development only, but Redis is required for proper card/token lookup and caching.
 
-4. **Scryfall API**: Respect rate limits (100ms delay between requests)
+4. **Scryfall API**: Respect rate limits (100ms delay between requests). **Scryfall URLs are ONLY used for downloading images to local cache** - never serve them directly to clients.
 
 5. **Socket.IO Buffer**: Set to 1GB for large pack transfers
 
 6. **PWA**: Application installable as Progressive Web App
+
+7. **Token Images**: When creating tokens programmatically (via `OracleEffectResolver`), always use real Scryfall token data from cached tokens. Token images must be downloaded to local storage before game starts using `cardService.cacheImages()`.

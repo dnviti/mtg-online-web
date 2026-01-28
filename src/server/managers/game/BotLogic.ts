@@ -767,6 +767,12 @@ export class BotLogic {
       if (!c.types?.includes('Creature') && !c.typeLine?.includes('Creature')) return false;
       if (c.tapped) return false;
 
+      // Check for "can't attack" modifier (e.g., from Pacifism-style auras)
+      const cantAttack = c.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'cant_attack'
+      );
+      if (cantAttack) return false;
+
       // Check summoning sickness
       const hasHaste = c.keywords?.includes('Haste') ||
                        c.oracleText?.toLowerCase().includes('haste');
@@ -893,12 +899,20 @@ export class BotLogic {
     }
 
     // Get all potential blockers (untapped creatures controlled by defender)
-    const potentialBlockers = Object.values(game.cards).filter(c =>
-      c.controllerId === defenderId &&
-      c.zone === 'battlefield' &&
-      !c.tapped &&
-      (c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
-    );
+    const potentialBlockers = Object.values(game.cards).filter(c => {
+      if (c.controllerId !== defenderId) return false;
+      if (c.zone !== 'battlefield') return false;
+      if (c.tapped) return false;
+      if (!c.types?.includes('Creature') && !c.typeLine?.includes('Creature')) return false;
+
+      // Check for "can't block" modifier
+      const cantBlock = c.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'cant_block'
+      );
+      if (cantBlock) return false;
+
+      return true;
+    });
 
     if (potentialBlockers.length === 0) {
       console.log(`[Bot] ${game.players[defenderId].name} has no untapped creatures to block with`);

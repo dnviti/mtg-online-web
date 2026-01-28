@@ -30,6 +30,14 @@ export class CombatManager {
       if (!card || card.controllerId !== playerId || card.zone !== 'battlefield') throw new Error(`Invalid attacker ${attackerId}`);
       if (!card.types?.includes('Creature')) throw new Error(`${card.name} is not a creature.`);
 
+      // Check for "can't attack" modifier (e.g., from Pacifism-style auras)
+      const cantAttack = card.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'cant_attack'
+      );
+      if (cantAttack) {
+        throw new Error(`${card.name} can't attack.`);
+      }
+
       // Summoning Sickness
       const hasHaste = card.keywords.includes('Haste');
       if (card.controlledSinceTurn === state.turnCount && !hasHaste) {
@@ -69,6 +77,14 @@ export class CombatManager {
 
       if (!blocker || blocker.controllerId !== playerId || blocker.zone !== 'battlefield') throw new Error(`Invalid blocker ${blockerId}`);
       if (blocker.tapped) throw new Error(`${blocker.name} is tapped.`);
+
+      // Check for "can't block" modifier
+      const cantBlock = blocker.modifiers?.some(m =>
+        m.type === 'ability_grant' && m.value === 'cant_block'
+      );
+      if (cantBlock) {
+        throw new Error(`${blocker.name} can't block.`);
+      }
 
       if (!attacker || !attacker.attacking) throw new Error(`Invalid attacker target ${attackerId}`);
 

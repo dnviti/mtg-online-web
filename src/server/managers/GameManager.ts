@@ -121,6 +121,27 @@ export class GameManager extends EventEmitter {
     }
   }
 
+  /**
+   * Cache tokens for a game - stores the set code and cached tokens in game state
+   * for use by OracleEffectResolver when creating tokens programmatically.
+   */
+  async cacheTokensForGame(roomId: string, setCode: string, tokens: any[]) {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
+
+      game.setCode = setCode;
+      game.cachedTokens = tokens;
+
+      await this.saveGameState(game);
+      console.log(`[GameManager] Cached ${tokens.length} tokens for game ${roomId} (set: ${setCode})`);
+      return game;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
   async triggerBotCheck(roomId: string) {
     if (!await this.acquireLock(roomId)) return null;
     try {
