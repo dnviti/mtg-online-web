@@ -28,6 +28,13 @@ export interface ScryfallCard {
   type_line: string;
   colors?: string[];
   edhrec_rank?: number;
+  loyalty?: string;  // Planeswalker starting loyalty (e.g., "3")
+  power?: string;    // Creature power
+  toughness?: string; // Creature toughness
+  defense?: string;  // Battle defense
+  oracle_text?: string;
+  mana_cost?: string;
+  keywords?: string[];
   image_uris?: { normal: string; small?: string; large?: string; png?: string; art_crop?: string; border_crop?: string };
   card_faces?: {
     name: string;
@@ -35,6 +42,9 @@ export interface ScryfallCard {
     type_line?: string;
     mana_cost?: string;
     oracle_text?: string;
+    loyalty?: string;  // For double-faced planeswalkers
+    power?: string;
+    toughness?: string;
   }[];
   // Local Path Extensions
   local_path_full?: string;

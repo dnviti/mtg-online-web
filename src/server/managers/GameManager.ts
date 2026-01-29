@@ -5,6 +5,7 @@ import { GameLifecycle } from './game/GameLifecycle';
 import { StateStoreManager } from './StateStoreManager';
 import { ChoiceHandler } from '../game/engine/ChoiceHandler';
 import { OracleEffectResolver } from '../game/engine/OracleEffectResolver';
+import { GameLogger } from '../game/engine/GameLogger';
 import { DebugManager } from '../game/engine/DebugManager';
 import { DebugPauseEvent, DebugStateEvent } from '../game/types/debug';
 import { EventEmitter } from 'events';
@@ -345,13 +346,30 @@ export class GameManager extends EventEmitter {
                 }
               }
 
-              // Handle target selection for triggered abilities
-              if (choiceResult.type === 'target_selection' && resolvedStackItem.type === 'trigger') {
+              // Handle target selection for triggered abilities and spells
+              if (choiceResult.type === 'target_selection') {
                 // Store selected targets in the stack item
                 resolvedStackItem.targets = choiceResult.selectedCardIds || [];
-                console.log(`[GameManager] Stored targets for trigger: ${resolvedStackItem.targets.join(', ')}`);
-                // Don't resolve yet - let priority pass and resolve normally
-                break;
+                console.log(`[GameManager] Stored targets for ${resolvedStackItem.type}: ${resolvedStackItem.targets.join(', ')}`);
+
+                // For spells (including Auras), don't resolve yet - let priority pass
+                // The spell will resolve when both players pass priority
+                if (resolvedStackItem.type === 'spell') {
+                  const sourceCard = game.cards[resolvedStackItem.sourceId];
+                  console.log(`[GameManager] ${sourceCard?.name || 'Spell'} now has targets, waiting for priority`);
+                  // Log the spell cast with targets now that we have them
+                  if (sourceCard) {
+                    const playerName = game.players[resolvedStackItem.controllerId]?.name || 'Unknown';
+                    const targetCards = resolvedStackItem.targets.map(t => game.cards[t]).filter(Boolean);
+                    GameLogger.logCastSpell(game, sourceCard, playerName, targetCards);
+                  }
+                  break;
+                }
+
+                // For triggers, also don't resolve yet
+                if (resolvedStackItem.type === 'trigger') {
+                  break;
+                }
               }
 
               const sourceCard = game.cards[resolvedStackItem.sourceId];

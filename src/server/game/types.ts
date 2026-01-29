@@ -23,6 +23,7 @@ export interface MinimalCardFace {
   power?: string;
   toughness?: string;
   defense?: string;
+  loyalty?: string;  // For double-faced planeswalkers (e.g., Nicol Bolas, the Ravager)
   image_uris?: { normal?: string; art_crop?: string; };
 }
 

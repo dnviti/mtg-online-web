@@ -7,6 +7,7 @@ import { OracleEffectResolver } from './OracleEffectResolver';
 import { AbilityParser, ParsedAbility } from './AbilityParser';
 import { WardHandler } from './WardHandler';
 import { TriggeredAbilityHandler } from './TriggeredAbilityHandler';
+import { ChoiceHandler } from './ChoiceHandler';
 
 /**
  * ActionHandler
@@ -246,8 +247,49 @@ export class ActionHandler {
       }
     }
 
-    if (CardUtils.isAura(card)) {
-      if (targets.length === 0) throw new Error("Aura requires a target.");
+    // Handle Aura targeting - if no targets provided, create a pending choice
+    if (CardUtils.isAura(card) && targets.length === 0) {
+      const validTargets = CardUtils.getValidAuraTargets(state, card);
+
+      if (validTargets.length === 0) {
+        throw new Error("No valid targets for this Aura.");
+      }
+
+      // Put the spell on the stack first (with empty targets)
+      card.zone = 'stack';
+
+      const stackItem: StackObject = {
+        id: Math.random().toString(36).substr(2, 9),
+        sourceId: cardId,
+        controllerId: playerId,
+        type: 'spell',
+        name: name,
+        text: text,
+        targets: [], // Will be filled when target is chosen
+        resolutionPosition: position,
+        faceIndex: faceIndex
+      } as any;
+
+      state.stack.push(stackItem);
+
+      // Create a pending choice for target selection
+      ChoiceHandler.createChoice(state, stackItem, {
+        type: 'target_selection',
+        sourceStackId: stackItem.id,
+        sourceCardId: cardId,
+        sourceCardName: name,
+        choosingPlayerId: playerId,
+        controllingPlayerId: playerId,
+        prompt: `Choose a target for ${name}`,
+        selectableIds: validTargets,
+        constraints: {
+          exactCount: 1,
+          filter: { zones: ['battlefield'] }
+        }
+      });
+
+      console.log(`[ActionHandler] Player ${playerId} cast ${name} - waiting for target selection (${validTargets.length} valid targets)`);
+      return true;
     }
 
     card.zone = 'stack';
@@ -350,10 +392,14 @@ export class ActionHandler {
             // Planeswalkers enter with loyalty counters (Rule 306.5b)
             if (CardUtils.isPlaneswalker(card)) {
               // Check multiple possible locations for loyalty value
-              const loyaltyStr = card.definition?.loyalty || (card as any).loyalty ||
-                                 card.definition?.card_faces?.[0]?.loyalty || '0';
-              const baseLoyalty = parseInt(loyaltyStr);
-              console.log(`[ActionHandler] Planeswalker ${card.name} loyalty check: definition.loyalty=${card.definition?.loyalty}, parsed=${baseLoyalty}`);
+              // For DFCs, loyalty might be on either face (e.g., transform planeswalkers have loyalty on back face)
+              const faces = card.definition?.card_faces;
+              const faceLoyalty = faces?.[0]?.loyalty || faces?.[1]?.loyalty;
+              // Check: definition.loyalty, card.baseLoyalty (pre-set during game load), card.loyalty, card_faces loyalty
+              const loyaltyStr = card.definition?.loyalty || (card as any).loyalty || faceLoyalty;
+              // Also check if baseLoyalty was pre-set during card loading (numeric)
+              const baseLoyalty = card.baseLoyalty || (loyaltyStr ? parseInt(loyaltyStr) : 0);
+              console.log(`[ActionHandler] Planeswalker ${card.name} loyalty check: definition.loyalty=${card.definition?.loyalty}, card.baseLoyalty=${card.baseLoyalty}, faceLoyalty=${faceLoyalty}, parsed=${baseLoyalty}`);
               if (baseLoyalty > 0) {
                 card.baseLoyalty = baseLoyalty;
                 card.loyalty = baseLoyalty;

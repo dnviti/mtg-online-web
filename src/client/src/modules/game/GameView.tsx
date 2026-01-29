@@ -778,6 +778,7 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
               choice={gameState.pendingChoice}
               cards={gameState.cards}
               currentPlayerId={currentPlayerId}
+              onCardHover={setHoveredCard}
               onSubmit={(result) => {
                 socketService.socket.emit('game_strict_action', {
                   action: {
@@ -1201,14 +1202,16 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
                             <DraggableCardWrapper card={card} disabled={!hasPriority}>
                               {/* Render Attachments UNDER the card */}
                               {attachedCards.length > 0 && (
-                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 hover:space-y-4 hover:bottom-[-200px] transition-all duration-300 z-[-1] hover:z-50">
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 z-[-1]">
                                   {attachedCards.map((att, idx) => (
-                                    <div key={att.instanceId} className="relative transition-transform hover:scale-110" style={{ zIndex: idx }}>
+                                    <div key={att.instanceId} className="relative" style={{ zIndex: idx }}>
                                       <CardComponent
                                         card={att}
                                         viewMode="cutout"
                                         onClick={() => { }}
                                         onDragStart={() => { }}
+                                        onMouseEnter={() => setHoveredCard(att)}
+                                        onMouseLeave={() => setHoveredCard(null)}
                                         className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
                                         isDebugHighlighted={highlightedCardIds.has(att.instanceId) || sourceCardId === att.instanceId}
                                         debugHighlightType={sourceCardId === att.instanceId ? 'source' : 'affected'}

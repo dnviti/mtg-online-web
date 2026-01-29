@@ -71,6 +71,10 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
             // Use the fetched Scryfall data to populate definition
             const authCard = cardMap.get(scryfallId);
             if (authCard) {
+              // Debug: Log planeswalker loyalty data
+              if (authCard.type_line?.includes('Planeswalker')) {
+                console.log(`[GameStart] Planeswalker ${authCard.name}: loyalty=${authCard.loyalty}, card_faces loyalty=[${authCard.card_faces?.[0]?.loyalty}, ${authCard.card_faces?.[1]?.loyalty}]`);
+              }
               // If we found the card in Scryfall Service, use it as the source of truth
               // We construct a definition on the fly from the reliable data if one doesn't exist 
               // OR we prioritize the auth data over the potentially weak client data
@@ -92,7 +96,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                 mana_cost: authCard.mana_cost || (authCard.card_faces ? authCard.card_faces[0].mana_cost : ''),
                 power: authCard.power,
                 toughness: authCard.toughness,
-                loyalty: authCard.loyalty,  // Planeswalker loyalty
+                loyalty: authCard.loyalty || authCard.card_faces?.[0]?.loyalty || authCard.card_faces?.[1]?.loyalty,  // Planeswalker loyalty (check both card_faces for DFCs)
                 defense: authCard.defense,  // Battle defense
                 colors: authCard.colors,
                 card_faces: authCard.card_faces,
@@ -123,7 +127,7 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                 mana_cost: card.mana_cost || card.manaCost,
                 power: card.power?.toString(),
                 toughness: card.toughness?.toString(),
-                loyalty: card.loyalty,  // Planeswalker loyalty
+                loyalty: card.loyalty || card.card_faces?.[0]?.loyalty || card.card_faces?.[1]?.loyalty || card.cardFaces?.[0]?.loyalty || card.cardFaces?.[1]?.loyalty,  // Planeswalker loyalty (check both card_faces for DFCs)
                 defense: card.defense,  // Battle defense
                 colors: card.colors,
                 card_faces: card.card_faces || card.cardFaces,
@@ -149,6 +153,9 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               cardTypes = cardTypeLine.split('—')[0].trim().split(' ').filter(Boolean);
             }
 
+            // Extract loyalty for planeswalkers (stored at top level in Scryfall data)
+            const loyaltyValue = card.definition?.loyalty || card.loyalty;
+
             await gameManager.addCardToGame(room.id, {
               ownerId: p.id,
               controllerId: p.id,
@@ -167,6 +174,8 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
               keywords: card.keywords || card.definition?.keywords || [],
               power: (typeof card.power === 'number' ? card.power : parseFloat(card.power || card.definition?.power || '0')) || 0,
               toughness: (typeof card.toughness === 'number' ? card.toughness : parseFloat(card.toughness || card.definition?.toughness || '0')) || 0,
+              // Planeswalker loyalty - store as baseLoyalty for ActionHandler to use
+              baseLoyalty: loyaltyValue ? parseInt(loyaltyValue) : undefined,
               damageMarked: 0,
               controlledSinceTurn: 0,
               definition: card.definition

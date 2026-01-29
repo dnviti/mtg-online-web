@@ -8,13 +8,15 @@ interface ChoiceModalProps {
   cards: Record<string, CardInstance>;
   currentPlayerId: string;
   onSubmit: (result: ChoiceResult) => void;
+  onCardHover?: (card: CardInstance | null) => void;
 }
 
 export const ChoiceModal: React.FC<ChoiceModalProps> = ({
   choice,
   cards,
   currentPlayerId,
-  onSubmit
+  onSubmit,
+  onCardHover
 }) => {
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
@@ -252,19 +254,22 @@ export const ChoiceModal: React.FC<ChoiceModalProps> = ({
                   <div
                     key={cardId}
                     onClick={() => toggleCard(cardId)}
-                    className={`relative cursor-pointer transition-all duration-200 ${
-                      isSelected ? 'scale-105 -translate-y-2' : 'hover:scale-102 hover:-translate-y-1'
-                    } ${!isMyChoice ? 'pointer-events-none' : ''}`}
+                    onMouseEnter={() => onCardHover?.(card)}
+                    onMouseLeave={() => onCardHover?.(null)}
+                    className={`relative cursor-pointer ${!isMyChoice ? 'pointer-events-none opacity-50' : ''}`}
                   >
                     <CardComponent
                       card={card}
-                      viewMode="large"
+                      viewMode="cutout"
                       onDragStart={() => {}}
                       onClick={() => toggleCard(cardId)}
-                      className={isSelected ? 'ring-4 ring-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.5)]' : ''}
+                      className={isSelected
+                        ? 'ring-4 ring-purple-500 shadow-[0_0_30px_rgba(168,85,247,0.5)]'
+                        : 'ring-2 ring-slate-500'
+                      }
                     />
                     {isSelected && (
-                      <div className="absolute top-2 right-2 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                      <div className="absolute top-2 right-2 w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center shadow-lg z-20">
                         <Check size={20} className="text-white" />
                       </div>
                     )}
