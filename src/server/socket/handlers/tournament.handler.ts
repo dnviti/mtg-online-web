@@ -153,21 +153,31 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                   // --- AUTHORITATIVE DATA MERGE ---
                   const authCard = cardMap.get(scryfallId);
                   if (authCard) {
+                    // Parse types from type_line for quick access
+                    const typeLine = authCard.type_line || '';
+                    const typeParts = typeLine.split('—');
+                    const parsedTypes = typeParts[0].trim().split(' ').filter(Boolean);
+                    const parsedSubtypes = typeParts[1] ? typeParts[1].trim().split(' ').filter(Boolean) : [];
+
                     card.definition = {
+                      ...card.definition, // Keep extra props (placed FIRST so authoritative data wins)
                       name: authCard.name,
                       id: authCard.id,
                       oracle_id: authCard.oracle_id,
                       type_line: authCard.type_line,
+                      types: parsedTypes,        // Parsed types (e.g., ['Legendary', 'Planeswalker'])
+                      subtypes: parsedSubtypes,  // Parsed subtypes
                       oracle_text: authCard.oracle_text || (authCard.card_faces ? authCard.card_faces[0].oracle_text : ''),
                       mana_cost: authCard.mana_cost || (authCard.card_faces ? authCard.card_faces[0].mana_cost : ''),
                       power: authCard.power,
                       toughness: authCard.toughness,
+                      loyalty: authCard.loyalty,  // Planeswalker loyalty
+                      defense: authCard.defense,  // Battle defense
                       colors: authCard.colors,
                       card_faces: authCard.card_faces,
                       image_uris: authCard.image_uris,
                       keywords: authCard.keywords || [],
                       set: authCard.set,
-                      ...card.definition,
                       // Force authoritative paths from Redis
                       local_path_full: authCard.local_path_full,
                       local_path_crop: authCard.local_path_crop
@@ -175,21 +185,41 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                   }
 
                   if (!card.definition) {
+                    const fallbackTypeLine = card.type_line || card.typeLine || '';
+                    const fallbackTypeParts = fallbackTypeLine.split('—');
+                    const fallbackTypes = fallbackTypeParts[0].trim().split(' ').filter(Boolean);
+                    const fallbackSubtypes = fallbackTypeParts[1] ? fallbackTypeParts[1].trim().split(' ').filter(Boolean) : [];
+
                     card.definition = {
                       name: card.name,
                       id: card.id,
                       oracle_id: card.oracle_id || card.oracleId,
-                      type_line: card.type_line || card.typeLine,
+                      type_line: fallbackTypeLine,
+                      types: card.types || fallbackTypes,
+                      subtypes: card.subtypes || fallbackSubtypes,
                       oracle_text: card.oracle_text || card.oracleText,
                       mana_cost: card.mana_cost || card.manaCost,
                       power: card.power?.toString(),
                       toughness: card.toughness?.toString(),
+                      loyalty: card.loyalty,  // Planeswalker loyalty
+                      defense: card.defense,  // Battle defense
                       colors: card.colors,
                       card_faces: card.card_faces || card.cardFaces,
                       image_uris: card.image_uris,
                       keywords: card.keywords,
                       set: card.set || card.setCode
                     };
+                  }
+
+                  // Parse types properly - prefer definition.types, then parse from type_line
+                  // Handle empty arrays ([] is truthy in JS, so we need length check)
+                  const cardTypeLine = card.typeLine || card.type_line || card.definition?.type_line || '';
+                  let cardTypes = card.definition?.types;
+                  if (!cardTypes || cardTypes.length === 0) {
+                    cardTypes = card.types;
+                  }
+                  if (!cardTypes || cardTypes.length === 0) {
+                    cardTypes = cardTypeLine.split('—')[0].trim().split(' ').filter(Boolean);
                   }
 
                   await gameManager.addCardToGame(matchId, {
@@ -202,7 +232,8 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
                     imageUrl: card.definition?.local_path_full || ((setCode && scryfallId) ? "" : (card.image_uris?.normal || card.image_uris?.large || card.imageUrl || "")),
                     imageArtCrop: card.definition?.local_path_crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || "",
                     zone: 'library',
-                    typeLine: card.typeLine || card.type_line || card.definition?.type_line || '',
+                    typeLine: cardTypeLine,
+                    types: cardTypes,
                     oracleText: card.oracleText || card.oracle_text || card.definition?.oracle_text || '',
                     manaCost: card.manaCost || card.mana_cost || card.definition?.mana_cost || '',
                     keywords: card.keywords || card.definition?.keywords || [],

@@ -303,9 +303,13 @@ export class ActionHandler {
     if (item.type === 'spell') {
       const card = state.cards[item.sourceId];
       if (card) {
-        // Ensure types is populated
-        if (!card.types && card.typeLine) {
-          card.types = card.typeLine.split('—')[0].trim().split(' ');
+        // Ensure types is populated (handle empty arrays too - [] is truthy in JS)
+        if (!card.types || card.types.length === 0) {
+          const typeLine = card.typeLine || card.definition?.type_line || '';
+          if (typeLine) {
+            card.types = typeLine.split('—')[0].trim().split(' ').filter(Boolean);
+            console.log(`[ActionHandler] Populated card.types from typeLine: ${card.types.join(', ')}`);
+          }
         }
         const isPermanent = CardUtils.isPermanent(card);
 
