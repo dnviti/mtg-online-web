@@ -151,6 +151,9 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
       if (actionType === 'DECLARE_ATTACKERS') {
         payload.attackers = contextData?.attackers || [];
       }
+      if (actionType === 'DECLARE_BLOCKERS') {
+        payload.blockers = contextData?.blockers || [];
+      }
       onAction('game_strict_action', payload);
     }
   };

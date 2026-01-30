@@ -21,6 +21,7 @@ import { InspectorOverlay } from './InspectorOverlay';
 import { CreateTokenModal } from './CreateTokenModal'; // Import Modal
 import { TokenPickerModal } from './TokenPickerModal';
 import { DoubleFacedCardModal } from './DoubleFacedCardModal';
+import { GameOverScreen } from './GameOverScreen';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
 import { calculateAutoTap } from '../../utils/manaUtils';
 import { useDebug } from '../../contexts/DebugContext';
@@ -640,6 +641,27 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
           onClose={() => setContextMenu(null)}
           onAction={handleMenuAction}
         />
+
+        {/* Game Over Screen */}
+        {gameState.gameOver && (
+          <GameOverScreen
+            winnerId={gameState.winnerId}
+            winnerName={gameState.winnerName}
+            currentPlayerId={currentPlayerId}
+            endReason={gameState.endReason}
+            players={Object.values(gameState.players).map(p => ({
+              id: p.id,
+              name: p.name,
+              life: p.life
+            }))}
+            onRematch={() => {
+              socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
+            }}
+            onExitToLobby={() => {
+              window.location.href = '/';
+            }}
+          />
+        )}
 
         {
           viewingZone && (
@@ -1517,7 +1539,6 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
               </div>
 
               {/* Mana Pool Display */}
-              {/* Mana Pool Display */}
               <div className="w-full bg-slate-800/50 rounded-lg p-2 grid grid-cols-3 gap-x-1 gap-y-1 border border-white/5">
                 {['W', 'U', 'B', 'R', 'G', 'C'].map(color => {
                   const count = myPlayer?.manaPool?.[color] || 0;
@@ -1550,6 +1571,35 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
                   );
                 })}
               </div>
+
+              {/* I Lose Button - Shows when life is 0 or below */}
+              {(myPlayer?.life ?? 20) <= 0 && (
+                <button
+                  className="w-full mt-2 px-3 py-2 bg-red-700 hover:bg-red-600 border-2 border-red-500 rounded text-white text-xs font-bold uppercase tracking-wider transition-all animate-pulse"
+                  onClick={() => {
+                    socketService.socket.emit('game_strict_action', { action: { type: 'DECLARE_LOSS' } });
+                  }}
+                >
+                  I Lose (Life: {myPlayer?.life})
+                </button>
+              )}
+
+              {/* Surrender Button */}
+              <button
+                className="w-full mt-2 px-3 py-2 bg-red-900/30 hover:bg-red-700/50 border border-red-700 rounded text-red-400 hover:text-red-200 text-xs font-bold uppercase tracking-wider transition-all"
+                onClick={async () => {
+                  if (await confirm({
+                    title: 'Surrender?',
+                    message: 'Are you sure you want to concede this game?',
+                    confirmLabel: 'Surrender',
+                    type: 'warning'
+                  })) {
+                    socketService.socket.emit('game_strict_action', { action: { type: 'SURRENDER' } });
+                  }
+                }}
+              >
+                Surrender
+              </button>
 
             </div>
 

@@ -102,6 +102,15 @@ export class GameManager extends EventEmitter {
     return this.getGameState(gameId);
   }
 
+  /**
+   * Delete game state from Redis
+   */
+  async deleteGame(gameId: string): Promise<boolean> {
+    console.log(`[GameManager] Deleting game state for ${gameId}`);
+    await this.store.del(`game:${gameId}`);
+    return true;
+  }
+
   // --- Facade Methods ---
 
   async addCardToGame(roomId: string, cardData: any) {
@@ -271,6 +280,99 @@ export class GameManager extends EventEmitter {
             break;
           case 'restart_game':
             GameLifecycle.restartGame(game);
+            break;
+          case 'surrender':
+            const surrenderingPlayer = game.players[actorId];
+            if (surrenderingPlayer) {
+              surrenderingPlayer.life = 0;
+              console.log(`[GameManager] Player ${actorId} (${surrenderingPlayer.name}) surrendered`);
+
+              const remainingPlayersAfterSurrender = Object.values(game.players).filter(p => p.life > 0);
+              if (remainingPlayersAfterSurrender.length <= 1) {
+                game.gameOver = true;
+                game.winnerId = remainingPlayersAfterSurrender[0]?.id;
+                game.winnerName = remainingPlayersAfterSurrender[0]?.name;
+                game.endReason = 'surrender';
+                game.gameEndedAt = Date.now();
+                console.log(`[GameManager] Game over! Winner: ${game.winnerName}`);
+              }
+            }
+            break;
+          case 'declare_loss':
+            const losingPlayer = game.players[actorId];
+            if (losingPlayer) {
+              console.log(`[GameManager] Player ${actorId} (${losingPlayer.name}) declared loss`);
+
+              const remainingPlayersAfterLoss = Object.values(game.players).filter(p => p.id !== actorId && p.life > 0);
+              game.gameOver = true;
+              if (remainingPlayersAfterLoss.length === 1) {
+                game.winnerId = remainingPlayersAfterLoss[0].id;
+                game.winnerName = remainingPlayersAfterLoss[0].name;
+              } else if (remainingPlayersAfterLoss.length === 0) {
+                // Draw scenario - no winner
+                game.endReason = 'draw';
+              }
+              game.endReason = game.endReason || 'life_loss';
+              game.gameEndedAt = Date.now();
+              console.log(`[GameManager] Game over! Winner: ${game.winnerName || 'Draw'}`);
+            }
+            break;
+          case 'modify_card':
+            const cardToModify = game.cards[action.cardId];
+            if (!cardToModify || cardToModify.zone !== 'battlefield') {
+              console.warn(`[GameManager] Cannot modify card: ${action.cardId}`);
+              break;
+            }
+
+            if (!cardToModify.modifiers) cardToModify.modifiers = [];
+            const mod = action.modification;
+
+            if (mod.type === 'clear_all') {
+              cardToModify.modifiers = [];
+              cardToModify.power = cardToModify.basePower;
+              cardToModify.toughness = cardToModify.baseToughness;
+              cardToModify.keywords = cardToModify.definition?.keywords || [];
+              console.log(`[GameManager] Cleared all modifications from ${cardToModify.name}`);
+            } else if (mod.type === 'pt_boost') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'pt_boost',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              cardToModify.power = (cardToModify.power ?? 0) + mod.value.power;
+              cardToModify.toughness = (cardToModify.toughness ?? 0) + mod.value.toughness;
+              console.log(`[GameManager] ${cardToModify.name} got ${mod.value.power >= 0 ? '+' : ''}${mod.value.power}/${mod.value.toughness >= 0 ? '+' : ''}${mod.value.toughness}`);
+            } else if (mod.type === 'ability_grant') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'ability_grant',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              if (!cardToModify.keywords) cardToModify.keywords = [];
+              if (!cardToModify.keywords.includes(mod.value)) {
+                cardToModify.keywords.push(mod.value);
+              }
+              console.log(`[GameManager] ${cardToModify.name} gained ${mod.value}`);
+            } else if (mod.type === 'type_change') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'type_change',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              if (mod.value.addTypes) {
+                cardToModify.types = [...new Set([...(cardToModify.types || []), ...mod.value.addTypes])];
+              }
+              if (mod.value.basePT) {
+                cardToModify.basePower = mod.value.basePT.power;
+                cardToModify.baseToughness = mod.value.basePT.toughness;
+                cardToModify.power = mod.value.basePT.power;
+                cardToModify.toughness = mod.value.basePT.toughness;
+              }
+              console.log(`[GameManager] ${cardToModify.name} type changed to: ${cardToModify.types?.join(', ')}`);
+            }
             break;
           default:
             console.warn(`[GameManager] Unknown action type: ${normalizedType}`);

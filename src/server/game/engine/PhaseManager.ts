@@ -1,6 +1,7 @@
 import { StrictGameState, Phase, Step } from '../types';
 import { ActionHandler } from './ActionHandler';
-import { CombatManager } from './CombatManager';
+// CombatManager import kept for potential future "assisted mode" toggle
+// import { CombatManager } from './CombatManager';
 
 /**
  * PhaseManager
@@ -215,26 +216,12 @@ export class PhaseManager {
     }
 
     if (step === 'combat_damage') {
-      // Check if any creatures have First Strike or Double Strike
-      const hasFirstStrikers = CombatManager.hasFirstStrikeCreatures(state);
-
-      if (hasFirstStrikers) {
-        // First Strike damage step
-        console.log('[PhaseManager] Resolving First Strike damage...');
-        CombatManager.resolveCombatDamage(state, true);
-
-        // Check state-based effects after first strike damage (creatures may die)
-        const { StateBasedEffects } = require('./StateBasedEffects');
-        StateBasedEffects.process(state);
-
-        // Normal damage step (non-first-strikers and double-strikers)
-        console.log('[PhaseManager] Resolving Normal combat damage...');
-        CombatManager.resolveCombatDamage(state, false);
-      } else {
-        // No first strikers, just resolve normal damage
-        CombatManager.resolveCombatDamage(state, false);
-      }
-
+      // MANUAL PLAY MODE: Combat damage is NOT automatically applied.
+      // Players resolve damage manually by:
+      // 1. Using the +/- life buttons to adjust life totals
+      // 2. Moving creatures to graveyard via context menu when they should die
+      // This gives players full control over combat resolution.
+      console.log('[PhaseManager] Combat damage step - manual resolution mode');
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }

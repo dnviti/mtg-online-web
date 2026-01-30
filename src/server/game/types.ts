@@ -333,4 +333,11 @@ export interface StrictGameState {
   // Planeswalker loyalty tracking (Rule 606.3)
   // instanceIds of planeswalkers that have activated a loyalty ability this turn
   loyaltyActivatedThisTurn?: string[];
+
+  // Game ending state
+  gameOver?: boolean;
+  winnerId?: string;
+  winnerName?: string;
+  endReason?: 'surrender' | 'life_loss' | 'deck_out' | 'poison' | 'draw';
+  gameEndedAt?: number;
 }

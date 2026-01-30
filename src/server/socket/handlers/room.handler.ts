@@ -22,6 +22,12 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
           }
           return;
         }
+      } else {
+        // forceNew=true: Close all existing rooms for this player to ensure clean state
+        const closedCount = await roomManager.closePlayerRooms(hostId);
+        if (closedCount > 0) {
+          console.log(`[Handler] Closed ${closedCount} existing room(s) for player ${hostName} (forceNew)`);
+        }
       }
 
       const room = await roomManager.createRoom(hostId, hostName, packs, basicLands || [], socket.id, format);

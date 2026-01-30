@@ -70,6 +70,14 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
   const executeCreateRoom = async (packsToUse: Pack[], forceNew: boolean = false) => {
     setLoading(true);
     setLocalError('');
+
+    // CRITICAL: Signal that we're intentionally creating a new room
+    // This prevents auto-reconnect logic from interfering
+    setIsCreatingNewRoom(true);
+
+    // Clear old room reference BEFORE creating a new room
+    localStorage.removeItem('active_room_id');
+
     connect();
 
     try {
@@ -117,6 +125,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     } finally {
       setLoading(false);
       setShowBoxSelection(false);
+      setIsCreatingNewRoom(false);
     }
   };
 
@@ -208,8 +217,17 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     }
   };
 
+  // Track if user is intentionally creating a new room (to skip auto-reconnect)
+  const [isCreatingNewRoom, setIsCreatingNewRoom] = useState(false);
+
   // Reconnection Logic using Hook
   useEffect(() => {
+    // Skip auto-reconnect if user is intentionally creating a new room
+    if (isCreatingNewRoom) {
+      console.log(`[LobbyManager] Skipping auto-reconnect - user is creating a new room`);
+      return;
+    }
+
     const savedRoomId = localStorage.getItem('active_room_id');
     if (savedRoomId && !activeRoom && playerId && isConnected) {
       console.log(`[LobbyManager] Found saved session ${savedRoomId}. Rejoining...`);
@@ -217,7 +235,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       rejoinRoom({ roomId: savedRoomId, playerId })
         .then(response => {
           if (response.success) {
-            // Server emits 'draft_update' manually to this socket on rejoin. 
+            // Server emits 'draft_update' manually to this socket on rejoin.
             // Context listener should pick it up.
             // Ensure we update activeRoom if response returns it, and MERGE tournament data if present
             if (response.room) {
@@ -228,19 +246,22 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               setActiveRoom(roomToSet);
             }
           } else {
-            if (response.message !== 'Connection error') {
-              // Only clear if confirmed invalid
-              localStorage.removeItem('active_room_id');
-            }
+            // Clear invalid room reference to prevent future auto-reconnect attempts
+            console.log(`[LobbyManager] Rejoin failed: ${response.message}. Clearing saved room.`);
+            localStorage.removeItem('active_room_id');
           }
         })
-        .catch(console.warn)
+        .catch((err) => {
+          console.warn('[LobbyManager] Rejoin error:', err);
+          // On error, also clear to prevent stuck state
+          localStorage.removeItem('active_room_id');
+        })
         .finally(() => setLoading(false));
     } else if (savedRoomId && !isConnected) {
       connect();
       // Effect will re-run when isConnected becomes true
     }
-  }, [isConnected, playerId, activeRoom, rejoinRoom, connect]);
+  }, [isConnected, playerId, activeRoom, rejoinRoom, connect, isCreatingNewRoom]);
 
   // Persist session
   useEffect(() => {
@@ -260,6 +281,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
   const handleRejoinExistingRoom = async (room: any) => {
     setShowExistingRoomsDialog(false);
+    setIsCreatingNewRoom(false); // Reset flag since user chose to rejoin instead
     setLoading(true);
     setLocalError('');
 
@@ -403,6 +425,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         onClose={() => {
           setShowExistingRoomsDialog(false);
           setPendingRoomCreation(null);
+          setIsCreatingNewRoom(false);
         }}
         title="Existing Open Rooms Found"
         message="You have existing open rooms. Would you like to rejoin one of them or create a new room?"
@@ -451,6 +474,7 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               onClick={() => {
                 setShowExistingRoomsDialog(false);
                 setPendingRoomCreation(null);
+                setIsCreatingNewRoom(false);
               }}
               className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm font-bold"
             >

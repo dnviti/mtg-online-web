@@ -187,6 +187,65 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
               </div>
             </div>
 
+            {/* Modify Card Submenu */}
+            <div className="relative group">
+              <MenuItem label="Modify Card" hasSubmenu />
+              <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-56">
+                <div className="bg-slate-900 border border-slate-700 rounded shadow-lg max-h-96 overflow-y-auto">
+                  <div className="px-3 py-1 font-bold text-xs text-purple-400 uppercase tracking-widest border-b border-slate-800 mb-1">
+                    Type Changes
+                  </div>
+                  <MenuItem
+                    label="Become Creature (0/0)"
+                    onClick={() => handleAction('MODIFY_CARD', {
+                      cardId: card.instanceId,
+                      modification: { type: 'type_change', value: { addTypes: ['Creature'], basePT: { power: 0, toughness: 0 } } },
+                      untilEndOfTurn: true
+                    })}
+                  />
+                  <MenuItem
+                    label="Become Artifact Creature"
+                    onClick={() => handleAction('MODIFY_CARD', {
+                      cardId: card.instanceId,
+                      modification: { type: 'type_change', value: { addTypes: ['Artifact', 'Creature'], basePT: { power: 0, toughness: 0 } } },
+                      untilEndOfTurn: true
+                    })}
+                  />
+
+                  <div className="px-3 py-1 font-bold text-xs text-purple-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
+                    P/T Boosts (until EOT)
+                  </div>
+                  <MenuItem label="+1/+1" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: 1, toughness: 1 } }, untilEndOfTurn: true })} />
+                  <MenuItem label="+2/+2" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: 2, toughness: 2 } }, untilEndOfTurn: true })} />
+                  <MenuItem label="+3/+3" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: 3, toughness: 3 } }, untilEndOfTurn: true })} />
+                  <MenuItem label="-1/-1" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: -1, toughness: -1 } }, untilEndOfTurn: true })} />
+                  <MenuItem label="-2/-2" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: -2, toughness: -2 } }, untilEndOfTurn: true })} />
+                  <MenuItem label="+X/+0 (power only)" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'pt_boost', value: { power: 1, toughness: 0 } }, untilEndOfTurn: true })} />
+
+                  <div className="px-3 py-1 font-bold text-xs text-purple-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
+                    Grant Abilities (until EOT)
+                  </div>
+                  <MenuItem label="Flying" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Flying' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Haste" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Haste' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Trample" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Trample' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Lifelink" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Lifelink' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Deathtouch" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Deathtouch' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Indestructible" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Indestructible' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Hexproof" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Hexproof' }, untilEndOfTurn: true })} />
+                  <MenuItem label="First Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'First strike' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Double Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Double strike' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Vigilance" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Vigilance' }, untilEndOfTurn: true })} />
+
+                  <div className="h-px bg-slate-800 my-1 mx-2"></div>
+                  <MenuItem
+                    label="Clear All Modifications"
+                    className="text-red-400 hover:bg-red-900/30 hover:text-red-300"
+                    onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'clear_all' } })}
+                  />
+                </div>
+              </div>
+            </div>
+
             <MenuItem label="Clone (Copy)" onClick={() => handleAction('CREATE_TOKEN', {
               tokenData: {
                 name: `${card.name} (Copy)`,

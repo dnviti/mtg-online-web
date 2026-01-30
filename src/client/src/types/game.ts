@@ -190,6 +190,13 @@ export interface GameState {
     playerId: string;
     cardIds: string[];
   };
+
+  // Game ending state
+  gameOver?: boolean;
+  winnerId?: string;
+  winnerName?: string;
+  endReason?: 'surrender' | 'life_loss' | 'deck_out' | 'poison' | 'draw';
+  gameEndedAt?: number;
 }
 
 // ============================================

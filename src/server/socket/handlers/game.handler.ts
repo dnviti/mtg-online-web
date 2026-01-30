@@ -397,4 +397,44 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
       console.error(`[Socket] Error in debug_clear_history:`, error);
     }
   });
+
+  // Handle player leaving a game explicitly (for clean exit to lobby)
+  socket.on('leave_game', async () => {
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    const targetGameId = player.matchId || room.id;
+
+    // Notify other players
+    io.to(room.id).emit('player_left_game', { playerId: player.id, playerName: player.name });
+
+    console.log(`[Socket] Player ${player.name} left game ${targetGameId}`);
+  });
+
+  // Handle ending a game and cleaning up state (host only)
+  socket.on('end_game', async () => {
+    const context = await getContext();
+    if (!context) return;
+    const { room, player } = context;
+
+    // Only host can end game
+    if (room.hostId !== player.id) {
+      console.log(`[Socket] Non-host ${player.name} attempted to end game`);
+      return;
+    }
+
+    const targetGameId = player.matchId || room.id;
+
+    // Delete game state
+    await gameManager.deleteGame(targetGameId);
+
+    // Reset room to waiting status so a new game can start
+    const updatedRoom = await roomManager.resetRoomToWaiting(room.id, player.id);
+    if (updatedRoom) {
+      io.to(room.id).emit('room_update', updatedRoom);
+    }
+
+    console.log(`[Socket] Game ${targetGameId} ended by host ${player.name}`);
+  });
 };

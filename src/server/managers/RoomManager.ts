@@ -102,7 +102,11 @@ export class RoomManager {
   // --- Methods ---
 
   async createRoom(hostId: string, hostName: string, packs: any[], basicLands: any[] = [], socketId?: string, format: string = 'standard'): Promise<Room> {
-    console.log(`[RoomManager] createRoom called for ${hostName}`);
+    console.log(`[RoomManager] createRoom called for ${hostName} (hostId: ${hostId})`);
+
+    // IMPORTANT: Mark player as leaving any existing rooms they're in
+    // This prevents game state contamination between rooms
+    await this.markPlayerLeavingAllRooms(hostId);
 
     // Generate unique room ID and ensure no collision
     let roomId: string;
@@ -218,6 +222,10 @@ export class RoomManager {
   }
 
   async joinRoom(roomId: string, playerId: string, playerName: string, socketId?: string): Promise<Room | null> {
+    // IMPORTANT: Mark player as leaving any OTHER rooms they're in
+    // This prevents being active in multiple rooms simultaneously
+    await this.markPlayerLeavingOtherRooms(playerId, roomId);
+
     if (!await this.acquireLock(roomId)) return null;
     try {
       const room = await this.getRoomState(roomId);
@@ -258,6 +266,10 @@ export class RoomManager {
 
   // Simplified update without full lock? No, concurrency implies lock.
   async updatePlayerSocket(roomId: string, playerId: string, socketId: string): Promise<Room | null> {
+    // IMPORTANT: Mark player as leaving any OTHER rooms they're in
+    // This ensures they're only active in one room at a time
+    await this.markPlayerLeavingOtherRooms(playerId, roomId);
+
     if (!await this.acquireLock(roomId)) return null;
     try {
       const room = await this.getRoomState(roomId);
@@ -362,6 +374,11 @@ export class RoomManager {
       room.closedBy = playerId;
       room.closedAt = Date.now();
       room.lastActive = Date.now();
+
+      // Also delete associated game and draft state to prevent stale state persistence
+      await this.store.del(`game:${roomId}`);
+      await this.store.del(`draft:${roomId}`);
+      console.log(`[RoomManager] Deleted game and draft state for closed room ${roomId}`);
 
       await this.saveRoomState(room);
       console.log(`Room ${roomId} has been closed by host ${playerId}.`);
@@ -495,6 +512,44 @@ export class RoomManager {
     }
   }
 
+  /**
+   * Reset a room from any game state back to waiting (for use after game ends)
+   */
+  async resetRoomToWaiting(roomId: string, playerId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      // Only host can reset
+      const player = room.players.find(p => p.id === playerId);
+      if (!player?.isHost) {
+        console.log(`[RoomManager] Player ${playerId} attempted to reset room but is not host`);
+        return null;
+      }
+
+      // Reset to waiting status
+      room.status = 'waiting';
+      room.lastActive = Date.now();
+
+      // Clear any deck selections and ready states
+      room.players.forEach(p => {
+        p.ready = false;
+        p.deck = undefined;
+      });
+
+      // Delete associated game state to ensure clean slate
+      await this.store.del(`game:${roomId}`);
+      await this.store.del(`draft:${roomId}`);
+
+      await this.saveRoomState(room);
+      console.log(`[RoomManager] Room ${roomId} reset to waiting status`);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
   async addMessage(roomId: string, sender: string, text: string): Promise<{ message: ChatMessage, room: Room } | null> {
     if (!await this.acquireLock(roomId)) return null;
     try {
@@ -562,6 +617,96 @@ export class RoomManager {
     }
 
     return openRooms;
+  }
+
+  /**
+   * Close all open rooms for a player and delete associated game/draft state.
+   * Used when forceNew=true to ensure clean slate.
+   */
+  async closePlayerRooms(playerId: string): Promise<number> {
+    const openRooms = await this.findPlayerOpenRooms(playerId);
+    let closedCount = 0;
+
+    for (const room of openRooms) {
+      if (!await this.acquireLock(room.id)) continue;
+      try {
+        const currentRoom = await this.getRoomState(room.id);
+        if (!currentRoom) continue;
+
+        console.log(`[RoomManager] Closing room ${room.id} for player ${playerId} (forceNew)`);
+
+        // Mark room as closed
+        currentRoom.closed = true;
+        currentRoom.lastActive = Date.now();
+        await this.saveRoomState(currentRoom);
+
+        // Delete associated game and draft state
+        await this.store.del(`game:${room.id}`);
+        await this.store.del(`draft:${room.id}`);
+
+        // Remove from active rooms set
+        await this.store.srem('active_rooms', room.id);
+
+        closedCount++;
+        console.log(`[RoomManager] ✅ Room ${room.id} closed and game/draft state deleted`);
+      } finally {
+        await this.releaseLock(room.id);
+      }
+    }
+
+    return closedCount;
+  }
+
+  /**
+   * Mark a player as offline/leaving in all rooms they're currently in.
+   * This is used when a player creates a new room to ensure they're
+   * not considered "active" in multiple rooms simultaneously.
+   *
+   * IMPORTANT: This prevents game state contamination between rooms.
+   * The player's data is preserved for history, but they're marked as offline.
+   */
+  private async markPlayerLeavingAllRooms(playerId: string): Promise<void> {
+    await this.markPlayerLeavingOtherRooms(playerId, null);
+  }
+
+  /**
+   * Mark a player as offline/leaving in all rooms EXCEPT the specified one.
+   * This is used when a player joins a room to ensure they're only active in one room.
+   *
+   * @param playerId - The player to mark as leaving
+   * @param excludeRoomId - The room to exclude (the one they're joining), or null to include all
+   */
+  private async markPlayerLeavingOtherRooms(playerId: string, excludeRoomId: string | null): Promise<void> {
+    const keys = await this.store.smembers('active_rooms');
+
+    for (const roomId of keys) {
+      // Skip the room we're joining/creating
+      if (excludeRoomId && roomId === excludeRoomId) continue;
+
+      const room = await this.getRoomState(roomId);
+      if (!room || room.closed) continue;
+
+      const playerInRoom = room.players.find(p => p.id === playerId);
+      if (playerInRoom && !playerInRoom.isOffline) {
+        if (!await this.acquireLock(roomId)) continue;
+        try {
+          // Re-fetch after lock to ensure consistency
+          const currentRoom = await this.getRoomState(roomId);
+          if (!currentRoom) continue;
+
+          const player = currentRoom.players.find(p => p.id === playerId);
+          if (player) {
+            player.isOffline = true;
+            player.socketId = undefined;
+            currentRoom.lastActive = Date.now();
+            await this.saveRoomState(currentRoom);
+            console.log(`[RoomManager] Marked player ${playerId} as offline in room ${roomId} (joining/creating another room)`);
+          }
+        } finally {
+          await this.releaseLock(roomId);
+        }
+      }
+    }
   }
 
   private async cleanupRooms() {

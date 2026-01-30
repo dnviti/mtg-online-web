@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { socketService } from '../services/SocketService';
 import { GameState } from '../types/game';
 
@@ -34,6 +34,14 @@ export const useGameSocket = (): GameSocketHook => {
   const [error, setError] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<any | null>(null); // Track draft state too if needed
 
+  // Ref to track current room ID for validation in event listeners
+  const activeRoomIdRef = useRef<string | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    activeRoomIdRef.current = activeRoom?.id || null;
+  }, [activeRoom]);
+
   // Listen for connection status
   useEffect(() => {
     const onConnect = () => setIsConnected(true);
@@ -57,6 +65,14 @@ export const useGameSocket = (): GameSocketHook => {
       // If arg1 is the game, utilize it.
 
       if (game && game.id) {
+        // CRITICAL: Validate that this game update is for the current room
+        // This prevents game state from old rooms bleeding into new rooms
+        const currentRoomId = activeRoomIdRef.current;
+        if (currentRoomId && game.roomId && game.roomId !== currentRoomId) {
+          console.warn(`[useGameSocket] Ignoring game_update for different room. Current: ${currentRoomId}, Received: ${game.roomId}`);
+          return;
+        }
+
         console.log('[useGameSocket] Game Update Received', game.turnCount, game.phase, game.step);
         setGameState(game);
       } else {
@@ -65,10 +81,22 @@ export const useGameSocket = (): GameSocketHook => {
     };
 
     const onRoomUpdate = (room: any) => {
+      // CRITICAL: Validate that this room update is for the current room
+      const currentRoomId = activeRoomIdRef.current;
+      if (currentRoomId && room && room.id && room.id !== currentRoomId) {
+        console.warn(`[useGameSocket] Ignoring room_update for different room. Current: ${currentRoomId}, Received: ${room.id}`);
+        return;
+      }
       setActiveRoom(room);
     };
 
     const onDraftUpdate = (state: any) => {
+      // CRITICAL: Validate that this draft update is for the current room
+      const currentRoomId = activeRoomIdRef.current;
+      if (currentRoomId && state && state.roomId && state.roomId !== currentRoomId) {
+        console.warn(`[useGameSocket] Ignoring draft_update for different room. Current: ${currentRoomId}, Received: ${state.roomId}`);
+        return;
+      }
       setDraftState(state);
     }
 
@@ -133,6 +161,11 @@ export const useGameSocket = (): GameSocketHook => {
   }, []);
 
   const createRoom = useCallback(async (payload: any) => {
+    // CRITICAL: Clear any existing game/draft state BEFORE creating a new room
+    // This prevents old game state from bleeding into the new room
+    setGameState(null);
+    setDraftState(null);
+
     const response = await socketService.emitPromise('create_room', payload);
     if (response.success) {
       // payload has hostId. room has id.
@@ -146,6 +179,11 @@ export const useGameSocket = (): GameSocketHook => {
   }, []);
 
   const joinRoom = useCallback(async (payload: any) => {
+    // CRITICAL: Clear any existing state BEFORE joining a new room
+    // This prevents old state from bleeding into the new room
+    setGameState(null);
+    setDraftState(null);
+
     const response = await socketService.emitPromise('join_room', payload);
     if (response.success) {
       if (response.gameState) setGameState(response.gameState);
@@ -160,6 +198,11 @@ export const useGameSocket = (): GameSocketHook => {
   }, []);
 
   const rejoinRoom = useCallback(async (payload: any) => {
+    // Clear existing state before rejoining to prevent stale data
+    // Note: We clear BEFORE the request, so if rejoin fails, state is clean
+    setGameState(null);
+    setDraftState(null);
+
     const response = await socketService.emitPromise('rejoin_room', payload);
     if (response.success) {
       if (response.gameState) setGameState(response.gameState);
