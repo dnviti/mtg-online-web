@@ -35,7 +35,7 @@ interface UserContextType {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
-  saveDeck: (deck: any, format?: string) => Promise<void>;
+  saveDeck: (deck: any, format?: string) => Promise<SavedDeck>;
   updateDeck: (deckId: string, deckData: any, format?: string) => Promise<void>;
   deleteDeck: (deckId: string) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -113,10 +113,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('authToken');
   };
 
-  const saveDeck = async (deck: any, format?: string) => {
+  const saveDeck = async (deck: any, format?: string): Promise<SavedDeck> => {
     if (!token) throw new Error("Not logged in");
-    await ApiService.post('/api/user/decks', { ...deck, format });
+    const savedDeck = await ApiService.post<SavedDeck>('/api/user/decks', { ...deck, format });
     await refreshUser();
+    return savedDeck;
   };
 
   const updateDeck = async (deckId: string, deckData: any, format?: string) => {

@@ -16,11 +16,14 @@ interface VisualDeckEditorProps {
 import { DeckMetadataModal } from '../draft/DeckMetadataModal';
 import { Pencil } from 'lucide-react';
 
-export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck, initialName, initialFormat, onSave, onCancel }) => {
+export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck, initialName, initialFormat, onSave: _onSave, onCancel }) => {
   const { saveDeck, updateDeck, user } = useUser();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [basicLands, setBasicLands] = useState<any[]>([]);
+
+  // Track the current deck ID (for new decks, this gets set after first save)
+  const [currentDeckId, setCurrentDeckId] = useState<string | undefined>(existingDeck?.id);
 
   // Metadata State
   const [deckName, setDeckName] = useState(existingDeck?.name || initialName || 'New Deck');
@@ -54,20 +57,23 @@ export const VisualDeckEditor: React.FC<VisualDeckEditorProps> = ({ existingDeck
     setLoading(true);
 
     try {
-      if (existingDeck) {
-        await updateDeck(existingDeck.id, {
+      // Use currentDeckId if available (either from existingDeck or from previous save)
+      if (currentDeckId) {
+        await updateDeck(currentDeckId, {
           name: deckName,
           cards: deckCards
         }, deckFormat);
-        showToast('Deck updated successfully', 'success');
+        showToast('Deck salvato', 'success');
       } else {
-        await saveDeck({
+        // Create new deck and store its ID for subsequent saves
+        const newDeck = await saveDeck({
           name: deckName,
           cards: deckCards
         }, deckFormat);
-        showToast('Deck saved successfully', 'success');
+        setCurrentDeckId(newDeck.id);
+        showToast('Deck creato', 'success');
       }
-      onSave();
+      // Don't call onSave() - stay in the editor
     } catch (e: any) {
       console.error(e);
       showToast(e.message || 'Failed to save deck', 'error');
