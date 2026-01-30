@@ -4,11 +4,15 @@
  * Also handles text-based imports (MTGO/Arena format)
  */
 
+import { scryfallService, cardService } from '../singletons';
+
 export interface ImportedCard {
     name: string;
     quantity: number;
     section?: 'mainboard' | 'sideboard' | 'commander' | 'companion' | 'maybeboard';
     scryfallId?: string;
+    setCode?: string;
+    collectorNumber?: string;
 }
 
 export interface ImportedDeck {
@@ -72,23 +76,32 @@ export class ExternalDeckImportService {
 
     /**
      * Import deck from URL (auto-detect platform)
+     * @param url - The deck URL (Archidekt or Moxfield)
+     * @param formatOverride - Optional format to override the detected one
      */
-    async importFromUrl(url: string): Promise<ImportedDeck> {
+    async importFromUrl(url: string, formatOverride?: string): Promise<ImportedDeck> {
         const parsed = this.parseDeckUrl(url);
 
         if (parsed.source === 'unknown' || !parsed.deckId) {
             throw new Error('URL non riconosciuta. Supportati: Archidekt, Moxfield');
         }
 
+        let deck: ImportedDeck;
+
         if (parsed.source === 'archidekt') {
-            return this.importFromArchidekt(parsed.deckId, url);
+            deck = await this.importFromArchidekt(parsed.deckId, url);
+        } else if (parsed.source === 'moxfield') {
+            deck = await this.importFromMoxfield(parsed.deckId, url);
+        } else {
+            throw new Error('Piattaforma non supportata');
         }
 
-        if (parsed.source === 'moxfield') {
-            return this.importFromMoxfield(parsed.deckId, url);
+        // Apply format override if provided
+        if (formatOverride && formatOverride.trim()) {
+            deck.format = formatOverride;
         }
 
-        throw new Error('Piattaforma non supportata');
+        return deck;
     }
 
     /**
@@ -130,9 +143,18 @@ export class ExternalDeckImportService {
 
                 if (!cardName) continue;
 
+                // Extract Scryfall identifiers from Archidekt
+                // Archidekt provides: card.uid (scryfall_id), card.edition.editioncode (set), card.collectorNumber
+                const scryfallId = cardEntry.card?.uid || cardEntry.card?.scryfall_id;
+                const setCode = cardEntry.card?.edition?.editioncode || cardEntry.card?.set;
+                const collectorNumber = cardEntry.card?.collectorNumber || cardEntry.card?.collector_number;
+
                 const importedCard: ImportedCard = {
                     name: cardName,
-                    quantity
+                    quantity,
+                    scryfallId,
+                    setCode,
+                    collectorNumber
                 };
 
                 // Check if commander
@@ -232,7 +254,9 @@ export class ExternalDeckImportService {
                     name: cardData.card?.name || cardName,
                     quantity: cardData.quantity || 1,
                     section: 'mainboard',
-                    scryfallId: cardData.card?.scryfall_id
+                    scryfallId: cardData.card?.scryfall_id,
+                    setCode: cardData.card?.set,
+                    collectorNumber: cardData.card?.cn || cardData.card?.collector_number
                 });
             }
         }
@@ -244,7 +268,9 @@ export class ExternalDeckImportService {
                     name: cardData.card?.name || cardName,
                     quantity: cardData.quantity || 1,
                     section: 'commander',
-                    scryfallId: cardData.card?.scryfall_id
+                    scryfallId: cardData.card?.scryfall_id,
+                    setCode: cardData.card?.set,
+                    collectorNumber: cardData.card?.cn || cardData.card?.collector_number
                 });
             }
         }
@@ -256,7 +282,9 @@ export class ExternalDeckImportService {
                     name: cardData.card?.name || cardName,
                     quantity: cardData.quantity || 1,
                     section: 'sideboard',
-                    scryfallId: cardData.card?.scryfall_id
+                    scryfallId: cardData.card?.scryfall_id,
+                    setCode: cardData.card?.set,
+                    collectorNumber: cardData.card?.cn || cardData.card?.collector_number
                 });
             }
         }
@@ -268,7 +296,9 @@ export class ExternalDeckImportService {
                     name: cardData.card?.name || cardName,
                     quantity: cardData.quantity || 1,
                     section: 'companion',
-                    scryfallId: cardData.card?.scryfall_id
+                    scryfallId: cardData.card?.scryfall_id,
+                    setCode: cardData.card?.set,
+                    collectorNumber: cardData.card?.cn || cardData.card?.collector_number
                 });
             }
         }
@@ -403,6 +433,146 @@ export class ExternalDeckImportService {
             commanders: commanders.length > 0 ? commanders : undefined,
             sideboard: sideboard.length > 0 ? sideboard : undefined,
             source: 'text'
+        };
+    }
+
+    /**
+     * Resolve imported cards to full Scryfall card objects
+     * Uses scryfallId if available, otherwise falls back to name + setCode
+     * @param importedCards - Array of imported cards with optional identifiers
+     * @returns Array of full Scryfall card objects with quantities
+     */
+    async resolveCardsToScryfall(importedCards: ImportedCard[]): Promise<any[]> {
+        if (!importedCards || importedCards.length === 0) return [];
+
+        // Build identifiers for Scryfall collection API
+        // Priority: scryfallId > name+set > name only
+        const identifiers: { id?: string; name?: string; set?: string }[] = [];
+        const cardInfoMap = new Map<string, ImportedCard>(); // Map to preserve quantity and section
+
+        for (const card of importedCards) {
+            let identifier: { id?: string; name?: string; set?: string };
+            let key: string;
+
+            if (card.scryfallId) {
+                // Best case: we have the exact Scryfall ID
+                identifier = { id: card.scryfallId };
+                key = card.scryfallId;
+            } else if (card.setCode && card.name) {
+                // Second best: name + set code
+                identifier = { name: card.name, set: card.setCode.toLowerCase() };
+                key = `${card.name.toLowerCase()}|${card.setCode.toLowerCase()}`;
+            } else {
+                // Fallback: just the name
+                identifier = { name: card.name };
+                key = card.name.toLowerCase();
+            }
+
+            // Only add unique identifiers (we'll expand by quantity later)
+            if (!cardInfoMap.has(key)) {
+                identifiers.push(identifier);
+                cardInfoMap.set(key, card);
+            }
+        }
+
+        // Fetch cards from Scryfall
+        let scryfallCards: any[] = [];
+        try {
+            scryfallCards = await scryfallService.fetchCollection(identifiers);
+
+            // Cache images for the fetched cards
+            if (scryfallCards.length > 0) {
+                // Debug: Check if cards have image_uris
+                const withImages = scryfallCards.filter(c => c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal);
+                const withoutImages = scryfallCards.filter(c => !c.image_uris?.normal && !c.card_faces?.[0]?.image_uris?.normal);
+
+                console.log(`[ExternalDeckImportService] Caching images for ${scryfallCards.length} imported cards...`);
+                console.log(`[ExternalDeckImportService] Cards with image_uris: ${withImages.length}, without: ${withoutImages.length}`);
+
+                if (withoutImages.length > 0) {
+                    console.log(`[ExternalDeckImportService] Sample card without images:`, JSON.stringify(withoutImages[0], null, 2).substring(0, 500));
+                }
+
+                const downloadedCount = await cardService.cacheImages(scryfallCards);
+                console.log(`[ExternalDeckImportService] Downloaded ${downloadedCount} new images`);
+            }
+        } catch (e: any) {
+            console.error('[ExternalDeckImportService] Failed to fetch cards from Scryfall:', e.message);
+        }
+
+        // Build result array with quantities expanded
+        const results: any[] = [];
+        const scryfallMap = new Map<string, any>();
+
+        // Index Scryfall cards by multiple keys for matching
+        for (const card of scryfallCards) {
+            scryfallMap.set(card.id, card);
+            if (card.name) {
+                scryfallMap.set(card.name.toLowerCase(), card);
+                if (card.set) {
+                    scryfallMap.set(`${card.name.toLowerCase()}|${card.set.toLowerCase()}`, card);
+                }
+            }
+        }
+
+        // Match imported cards to Scryfall cards and expand by quantity
+        for (const importedCard of importedCards) {
+            let scryfallCard: any = null;
+
+            // Try to find by scryfallId first
+            if (importedCard.scryfallId) {
+                scryfallCard = scryfallMap.get(importedCard.scryfallId);
+            }
+
+            // Try by name + set
+            if (!scryfallCard && importedCard.setCode && importedCard.name) {
+                scryfallCard = scryfallMap.get(`${importedCard.name.toLowerCase()}|${importedCard.setCode.toLowerCase()}`);
+            }
+
+            // Fallback to name only
+            if (!scryfallCard && importedCard.name) {
+                scryfallCard = scryfallMap.get(importedCard.name.toLowerCase());
+            }
+
+            if (scryfallCard) {
+                // Expand by quantity and preserve section info
+                for (let i = 0; i < importedCard.quantity; i++) {
+                    results.push({
+                        ...scryfallCard,
+                        _importSection: importedCard.section // Preserve section for commander/sideboard handling
+                    });
+                }
+            } else {
+                console.warn(`[ExternalDeckImportService] Card not found in Scryfall: ${importedCard.name}`);
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Import and resolve a full deck with all card metadata from Scryfall
+     * @param url - The deck URL (Archidekt or Moxfield)
+     * @param formatOverride - Optional format to override the detected one
+     * @returns ImportedDeck with resolvedCards containing full Scryfall data
+     */
+    async importFromUrlWithFullData(url: string, formatOverride?: string): Promise<ImportedDeck & { resolvedCards?: any[] }> {
+        // First, get the basic import
+        const deck = await this.importFromUrl(url, formatOverride);
+
+        // Collect all cards for resolution
+        const allCards: ImportedCard[] = [
+            ...deck.cards,
+            ...(deck.commanders || []),
+            ...(deck.sideboard || [])
+        ];
+
+        // Resolve to full Scryfall data
+        const resolvedCards = await this.resolveCardsToScryfall(allCards);
+
+        return {
+            ...deck,
+            resolvedCards
         };
     }
 }

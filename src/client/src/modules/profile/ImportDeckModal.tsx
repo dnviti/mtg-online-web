@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Link, FileText, Loader2, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Link, FileText, Loader2, ExternalLink, AlertCircle, CheckCircle, Upload } from 'lucide-react';
 import { ApiService } from '../../services/ApiService';
 
 interface ImportedCard {
@@ -16,6 +16,7 @@ interface ImportedDeck {
     sideboard?: ImportedCard[];
     source: string;
     originalUrl?: string;
+    resolvedCards?: any[]; // Full Scryfall card data when resolved
 }
 
 interface ImportDeckModalProps {
@@ -46,11 +47,37 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
     // URL Import state
     const [url, setUrl] = useState('');
     const [detectedSource, setDetectedSource] = useState<string | null>(null);
+    const [urlFormat, setUrlFormat] = useState('Standard');
 
     // Text Import state
     const [text, setText] = useState('');
     const [deckName, setDeckName] = useState('');
     const [selectedFormat, setSelectedFormat] = useState('Standard');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target?.result as string;
+            if (content) {
+                setText(content);
+                // Use filename as deck name if not set
+                if (!deckName) {
+                    const nameWithoutExt = file.name.replace(/\.(csv|txt)$/i, '');
+                    setDeckName(nameWithoutExt);
+                }
+            }
+        };
+        reader.readAsText(file);
+        // Reset input so same file can be selected again
+        e.target.value = '';
+    };
+
+    // Preview format (can be edited before saving)
+    const [previewFormat, setPreviewFormat] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
@@ -94,9 +121,15 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
         setPreview(null);
 
         try {
-            const response = await ApiService.post<{ success: boolean; deck: ImportedDeck; error?: string }>('/api/import/url', { url });
+            // Request full Scryfall card resolution for complete metadata
+            const response = await ApiService.post<{ success: boolean; deck: ImportedDeck; error?: string }>('/api/import/url', {
+                url,
+                format: urlFormat,
+                resolveCards: true
+            });
             if (response.success && response.deck) {
                 setPreview(response.deck);
+                setPreviewFormat(response.deck.format);
             } else {
                 setError(response.error || 'Errore durante l\'import');
             }
@@ -125,6 +158,7 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
             });
             if (response.success && response.deck) {
                 setPreview(response.deck);
+                setPreviewFormat(response.deck.format);
             } else {
                 setError(response.error || 'Errore durante l\'import');
             }
@@ -137,7 +171,11 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
 
     const handleConfirmImport = () => {
         if (preview) {
-            onImport(preview);
+            // Use the edited format if available
+            const deckToImport = previewFormat && previewFormat !== preview.format
+                ? { ...preview, format: previewFormat }
+                : preview;
+            onImport(deckToImport);
             handleClose();
         }
     };
@@ -147,8 +185,10 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
         setText('');
         setDeckName('');
         setSelectedFormat('Standard');
+        setUrlFormat('Standard');
         setError(null);
         setPreview(null);
+        setPreviewFormat(null);
         setDetectedSource(null);
         onClose();
     };
@@ -224,6 +264,24 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                                 )}
                             </div>
 
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
+                                    Formato
+                                </label>
+                                <select
+                                    value={urlFormat}
+                                    onChange={(e) => setUrlFormat(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                                >
+                                    {FORMATS.map(f => (
+                                        <option key={f} value={f}>{f}</option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Specifica il formato manualmente (quello rilevato automaticamente potrebbe non essere corretto)
+                                </p>
+                            </div>
+
                             <div className="text-xs text-slate-500 space-y-1">
                                 <p className="font-medium text-slate-400">Piattaforme supportate:</p>
                                 <ul className="list-disc list-inside space-y-0.5">
@@ -281,9 +339,27 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">
-                                    Decklist (formato MTGO/Arena)
-                                </label>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="block text-sm font-medium text-slate-300">
+                                        Decklist (formato MTGO/Arena o CSV)
+                                    </label>
+                                    <div>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            accept=".csv,.txt"
+                                            onChange={handleFileUpload}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                                        >
+                                            <Upload className="w-3.5 h-3.5" /> Carica File
+                                        </button>
+                                    </div>
+                                </div>
                                 <textarea
                                     value={text}
                                     onChange={(e) => setText(e.target.value)}
@@ -297,6 +373,7 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                                 <p className="font-medium text-slate-400">Formati supportati:</p>
                                 <ul className="list-disc list-inside space-y-0.5">
                                     <li>MTGO/Arena: "4 Lightning Bolt" o "4x Lightning Bolt"</li>
+                                    <li>CSV Archidekt (colonne: Quantity, Name)</li>
                                     <li>Sezioni: "Commander:", "Sideboard:", "Companion:"</li>
                                     <li>Una carta per riga, quantità opzionale (default 1)</li>
                                 </ul>
@@ -326,8 +403,16 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
 
                             <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
                                 <h3 className="text-lg font-bold text-white mb-2">{preview.name}</h3>
-                                <div className="flex gap-4 text-sm text-slate-400 mb-4">
-                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">{preview.format}</span>
+                                <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
+                                    <select
+                                        value={previewFormat || preview.format}
+                                        onChange={(e) => setPreviewFormat(e.target.value)}
+                                        className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                                    >
+                                        {FORMATS.map(f => (
+                                            <option key={f} value={f} className="bg-slate-800 text-white">{f}</option>
+                                        ))}
+                                    </select>
                                     <span>{totalCards} carte totali</span>
                                     {preview.source && (
                                         <span className="capitalize">da {preview.source}</span>

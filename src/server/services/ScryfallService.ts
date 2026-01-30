@@ -167,6 +167,8 @@ export class ScryfallService {
         const json = await store.hget(`set:${setCode}`, id);
         if (json) {
           const card = JSON.parse(json);
+          // IMPORTANT: Always normalize to ensure local_path_full/crop are set
+          this.normalizeCard(card, setCode);
           this.cacheById.set(id, card);
           return card;
         }
@@ -511,7 +513,11 @@ export class ScryfallService {
       try {
         const allMap = await store.hgetall(`set:${tokenSetCode}`);
         const cards = Object.values(allMap).map(s => JSON.parse(s));
-        if (cards.length > 0) return cards;
+        if (cards.length > 0) {
+          // Normalize to ensure local_path_full/crop are set
+          cards.forEach(c => this.normalizeCard(c));
+          return cards;
+        }
       } catch (e) { }
     }
 
@@ -520,6 +526,8 @@ export class ScryfallService {
     if (fs.existsSync(tokensCachePath)) {
       try {
         const cards = JSON.parse(fs.readFileSync(tokensCachePath, 'utf-8'));
+        // Normalize to ensure local_path_full/crop are set
+        cards.forEach((c: ScryfallCard) => this.normalizeCard(c));
         if (store) { for (const c of cards) await this.saveCardToRedis(c); }
         return cards;
       } catch { }
@@ -570,7 +578,11 @@ export class ScryfallService {
         // Filter for lands if mixed set? j25 is a set.
         // We only want Basic Lands.
         const lands = cards.filter((c: ScryfallCard) => c.type_line.includes('Basic Land'));
-        if (lands.length > 0) return lands;
+        if (lands.length > 0) {
+          // Normalize to ensure local_path_full/crop are set
+          lands.forEach(c => this.normalizeCard(c));
+          return lands;
+        }
       } catch (e) { }
     }
 
@@ -579,6 +591,8 @@ export class ScryfallService {
     if (fs.existsSync(landsCachePath)) {
       try {
         const cards = JSON.parse(fs.readFileSync(landsCachePath, 'utf-8'));
+        // Normalize to ensure local_path_full/crop are set
+        cards.forEach((c: ScryfallCard) => this.normalizeCard(c));
         if (store) { for (const c of cards) await this.saveCardToRedis(c); }
         return cards;
       } catch { }

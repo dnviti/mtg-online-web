@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { socketService } from '../../services/SocketService';
 import { ApiService } from '../../services/ApiService';
-import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, Loader2, SlidersHorizontal } from 'lucide-react';
+import { Save, Layers, Clock, Columns, LayoutTemplate, List, LayoutGrid, ChevronDown, Check, Search, Upload, X, SlidersHorizontal } from 'lucide-react';
 import { StackView } from '../../components/StackView';
 import { FoilOverlay } from '../../components/CardPreview';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
@@ -17,6 +17,7 @@ import { validateDeck } from '../../utils/deckValidation';
 
 
 import { DeckValidationDisplay } from './DeckValidationDisplay';
+import { ImportDeckModal } from '../profile/ImportDeckModal';
 interface DeckBuilderViewProps {
   roomId: string;
   currentPlayerId: string;
@@ -1099,130 +1100,87 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     setDraggedCard(null);
   };
 
-  // --- Import Logic ---
+  // --- Import Logic (using unified ImportDeckModal) ---
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [isImporting, setIsImporting] = useState(false);
 
-  const handleImport = async () => {
-    if (!importText.trim()) return;
-    setIsImporting(true);
+  const handleImportDeck = async (importedDeck: {
+    name: string;
+    format: string;
+    cards: { name: string; quantity: number; scryfallId?: string; setCode?: string }[];
+    commanders?: { name: string; quantity: number; scryfallId?: string; setCode?: string }[];
+    sideboard?: { name: string; quantity: number; scryfallId?: string; setCode?: string }[];
+    resolvedCards?: any[]; // Full Scryfall data if available
+  }) => {
     try {
-      const res = await fetch('/api/cards/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: importText })
-      });
+      let cardsToAdd: any[] = [];
 
-      if (!res.ok) throw new Error("Import failed");
-
-      const cards = await res.json();
-      if (Array.isArray(cards) && cards.length > 0) {
-        // Add to deck preserving ID
-        const newCards = cards.map((c: any) => ({
+      // If we have pre-resolved cards from URL import with full data, use them directly
+      if (importedDeck.resolvedCards && importedDeck.resolvedCards.length > 0) {
+        cardsToAdd = importedDeck.resolvedCards.map((c: any) => ({
           ...c,
-          id: `${c.id}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          id: `${c.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           scryfallId: c.id,
           setCode: c.set,
-          image: c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
-          imageArtCrop: c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop
+          // IMPORTANT: Prioritize local cached paths over Scryfall URLs (per CLAUDE.md guidelines)
+          image: c.local_path_full || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+          imageArtCrop: c.local_path_crop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop,
+          isCommander: c._importSection === 'commander'
         }));
+      } else {
+        // Fallback: Build decklist text from imported deck to parse via API
+        const lines: string[] = [];
 
-        setDeck(prev => [...prev, ...newCards]);
-        setIsImportOpen(false);
-        setImportText('');
+        // Add commanders first if present
+        if (importedDeck.commanders && importedDeck.commanders.length > 0) {
+          for (const card of importedDeck.commanders) {
+            lines.push(`${card.quantity} ${card.name}`);
+          }
+        }
+
+        // Add mainboard cards
+        for (const card of importedDeck.cards) {
+          lines.push(`${card.quantity} ${card.name}`);
+        }
+
+        // Add sideboard cards
+        if (importedDeck.sideboard && importedDeck.sideboard.length > 0) {
+          for (const card of importedDeck.sideboard) {
+            lines.push(`${card.quantity} ${card.name}`);
+          }
+        }
+
+        const deckText = lines.join('\n');
+
+        const res = await fetch('/api/cards/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: deckText })
+        });
+
+        if (!res.ok) throw new Error("Import failed");
+
+        const cards = await res.json();
+        if (Array.isArray(cards) && cards.length > 0) {
+          cardsToAdd = cards.map((c: any) => ({
+            ...c,
+            id: `${c.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            scryfallId: c.id,
+            setCode: c.set,
+            // IMPORTANT: Prioritize local cached paths over Scryfall URLs
+            image: c.local_path_full || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+            imageArtCrop: c.local_path_crop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop,
+            isCommander: importedDeck.commanders?.some(cmd => cmd.name.toLowerCase() === c.name.toLowerCase())
+          }));
+        }
+      }
+
+      if (cardsToAdd.length > 0) {
+        setDeck(prev => [...prev, ...cardsToAdd]);
       }
     } catch (e) {
       console.error("Import error", e);
-      alert("Failed to import cards. Please checks your format.");
-    } finally {
-      setIsImporting(false);
+      alert("Failed to import cards. Please check your format.");
     }
-  };
-
-  const ImportModal = () => {
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        if (text) {
-          setImportText(text);
-        }
-      };
-      reader.readAsText(file);
-    };
-
-    if (!isImportOpen) return null;
-    return (
-      <div className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
-          <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-950">
-            <h3 className="font-bold text-white flex items-center gap-2">
-              <Upload className="w-5 h-5 text-indigo-400" /> Import Deck
-            </h3>
-            <button onClick={() => setIsImportOpen(false)} className="text-slate-500 hover:text-white transition-colors">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="p-4 flex flex-col gap-4">
-            <div className="bg-slate-800/50 p-3 rounded text-xs text-slate-400 border border-slate-700/50 flex justify-between items-start">
-              <div>
-                <p className="mb-1 font-bold text-slate-300">Supported Formats:</p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>MTG Arena / Magic Online (Quantity Name)</li>
-                  <li>Archidekt CSV (Headers: Quantity, Name)</li>
-                  <li>Simple List (1 Lightning Bolt)</li>
-                </ul>
-              </div>
-              <div>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  className="hidden"
-                  accept=".csv,.txt"
-                  onChange={handleFileUpload}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-2"
-                >
-                  <Upload className="w-3 h-3" /> Upload File
-                </button>
-              </div>
-            </div>
-            <textarea
-              className="w-full h-48 bg-slate-950 border border-slate-700 rounded p-3 text-xs font-mono text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-              placeholder={`4 Lightning Bolt\n4 Counterspell\n\nOR Paste CSV...`}
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              disabled={isImporting}
-            />
-          </div>
-          <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end gap-2">
-            <button
-              onClick={() => setIsImportOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors"
-              disabled={isImporting}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleImport}
-              disabled={isImporting || !importText.trim()}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95 text-xs"
-            >
-              {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {isImporting ? 'Importing...' : 'Import Cards'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
 
@@ -1781,7 +1739,11 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
         onClose={() => setIsAdvancedSearchOpen(false)}
         onSearch={handleAdvancedSearch}
       />
-      <ImportModal />
+      <ImportDeckModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onImport={handleImportDeck}
+      />
     </div >
   );
 };

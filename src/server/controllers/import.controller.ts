@@ -5,18 +5,26 @@ export class ImportController {
     /**
      * Import deck from URL (auto-detect Archidekt/Moxfield)
      * POST /api/import/url
-     * Body: { url: string }
+     * Body: { url: string, format?: string, resolveCards?: boolean }
+     * If resolveCards is true, returns full Scryfall card data in resolvedCards array
      */
     static async importFromUrl(req: Request, res: Response) {
         try {
-            const { url } = req.body;
+            const { url, format, resolveCards } = req.body;
 
             if (!url || typeof url !== 'string') {
                 return res.status(400).json({ error: 'URL richiesta' });
             }
 
-            const deck = await externalDeckImportService.importFromUrl(url);
-            return res.json({ success: true, deck });
+            if (resolveCards) {
+                // Import with full Scryfall card data resolution
+                const deck = await externalDeckImportService.importFromUrlWithFullData(url, format);
+                return res.json({ success: true, deck });
+            } else {
+                // Basic import with card names only
+                const deck = await externalDeckImportService.importFromUrl(url, format);
+                return res.json({ success: true, deck });
+            }
         } catch (error: any) {
             console.error('[ImportController] Error importing from URL:', error.message);
             return res.status(400).json({ error: error.message || 'Errore durante l\'import' });

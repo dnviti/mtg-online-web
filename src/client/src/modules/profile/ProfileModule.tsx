@@ -189,12 +189,37 @@ export const ProfileModule: React.FC = () => {
                 isOpen={isImporting}
                 onClose={() => setIsImporting(false)}
                 onImport={(importedDeck) => {
-                    // Convert imported deck to our format and open editor
-                    const cards = [
-                        ...(importedDeck.commanders || []).map(c => ({ ...c, isCommander: true })),
-                        ...importedDeck.cards,
-                        ...(importedDeck.sideboard || []).map(c => ({ ...c, isSideboard: true }))
-                    ];
+                    let cards: any[] = [];
+
+                    // If we have pre-resolved cards with full Scryfall data, use them
+                    if (importedDeck.resolvedCards && importedDeck.resolvedCards.length > 0) {
+                        cards = importedDeck.resolvedCards.map((c: any) => ({
+                            ...c,
+                            id: `${c.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            scryfallId: c.id,
+                            setCode: c.set,
+                            // IMPORTANT: Prioritize local cached paths over Scryfall URLs (per CLAUDE.md guidelines)
+                            image: c.local_path_full || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+                            imageArtCrop: c.local_path_crop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop,
+                            isCommander: c._importSection === 'commander',
+                            isSideboard: c._importSection === 'sideboard'
+                        }));
+                    } else {
+                        // Fallback: use basic card info (name + quantity only)
+                        const basicCards = [
+                            ...(importedDeck.commanders || []).map(c => ({ ...c, isCommander: true })),
+                            ...importedDeck.cards,
+                            ...(importedDeck.sideboard || []).map(c => ({ ...c, isSideboard: true }))
+                        ];
+                        cards = basicCards.map(c => ({
+                            id: `card-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            name: c.name,
+                            quantity: c.quantity,
+                            isCommander: (c as any).isCommander,
+                            isSideboard: (c as any).isSideboard
+                        }));
+                    }
+
                     setNewDeckDetails({
                         name: importedDeck.name,
                         format: importedDeck.format
@@ -202,12 +227,7 @@ export const ProfileModule: React.FC = () => {
                     setEditingDeck({
                         name: importedDeck.name,
                         format: importedDeck.format,
-                        cards: cards.map(c => ({
-                            name: c.name,
-                            quantity: c.quantity,
-                            isCommander: (c as any).isCommander,
-                            isSideboard: (c as any).isSideboard
-                        }))
+                        cards
                     });
                     setIsImporting(false);
                     setIsCreating(true);
