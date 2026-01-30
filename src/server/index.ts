@@ -75,6 +75,13 @@ if (cluster.isPrimary) {
 
   const PORT = process.env.PORT || 3000;
 
+  // Stripe webhook needs raw body for signature verification
+  // This must be BEFORE express.json() middleware
+  app.post('/api/payment/stripe/webhook',
+    express.raw({ type: 'application/json' }),
+    (await import('./controllers/payment.controller')).PaymentController.handleWebhook
+  );
+
   app.use(express.json({ limit: '1000mb' }));
 
   // Session middleware (required for Passport)

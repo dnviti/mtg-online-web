@@ -10,6 +10,14 @@ interface User {
   decks: SavedDeck[];
   matchHistory: any[];
   createdAt: number;
+  // Premium subscription fields
+  isPremium: boolean;
+  premiumSince?: string;
+  premiumUntil?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionPlan?: 'monthly' | 'yearly';
+  subscriptionStatus?: 'active' | 'canceled' | 'past_due';
 }
 
 export interface SavedDeck {
@@ -23,6 +31,7 @@ export interface SavedDeck {
 interface UserContextType {
   user: User | null;
   token: string | null;
+  isPremium: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -30,6 +39,9 @@ interface UserContextType {
   updateDeck: (deckId: string, deckData: any, format?: string) => Promise<void>;
   deleteDeck: (deckId: string) => Promise<void>;
   refreshUser: () => Promise<void>;
+  // Premium subscription methods
+  subscribe: (plan: 'monthly' | 'yearly') => Promise<void>;
+  openBillingPortal: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -119,8 +131,40 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await refreshUser();
   }
 
+  // Premium convenience getter
+  const isPremium = user?.isPremium ?? false;
+
+  // Subscribe to premium plan
+  const subscribe = async (plan: 'monthly' | 'yearly') => {
+    if (!token) throw new Error("Not logged in");
+    const data = await ApiService.post<{ url: string }>('/api/payment/stripe/create-session', { plan });
+    // Redirect to Stripe Checkout
+    window.location.href = data.url;
+  };
+
+  // Open Stripe Customer Portal for managing subscription
+  const openBillingPortal = async () => {
+    if (!token) throw new Error("Not logged in");
+    const data = await ApiService.post<{ url: string }>('/api/payment/stripe/portal', {});
+    // Redirect to Stripe Portal
+    window.location.href = data.url;
+  };
+
   return (
-    <UserContext.Provider value={{ user, token, login, register, logout, saveDeck, updateDeck, deleteDeck, refreshUser }}>
+    <UserContext.Provider value={{
+      user,
+      token,
+      isPremium,
+      login,
+      register,
+      logout,
+      saveDeck,
+      updateDeck,
+      deleteDeck,
+      refreshUser,
+      subscribe,
+      openBillingPortal
+    }}>
       {children}
     </UserContext.Provider>
   );

@@ -1,14 +1,33 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useUser } from '../../contexts/UserContext';
 import { LogOut, Trash2, Calendar, Layers, Clock, Download } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 import { VisualDeckEditor } from './VisualDeckEditor';
 import { CreateDeckModal } from './CreateDeckModal';
 import { ImportDeckModal } from './ImportDeckModal';
+import { PremiumUpgrade } from './PremiumUpgrade';
 
 export const ProfileModule: React.FC = () => {
-    const { user, logout, deleteDeck } = useUser();
+    const { user, logout, deleteDeck, refreshUser } = useUser();
     const { showToast } = useToast();
+
+    // Handle payment callback URL parameters
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const paymentStatus = params.get('payment');
+
+        if (paymentStatus === 'success') {
+            showToast('Pagamento completato! Sei ora un membro Premium.', 'success');
+            // Clean URL
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+            // Refresh user data to get updated premium status
+            refreshUser();
+        } else if (paymentStatus === 'cancelled') {
+            showToast('Pagamento annullato.', 'info');
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
 
     const [editingDeck, setEditingDeck] = React.useState<any>(null);
     const [isCreating, setIsCreating] = React.useState(false);
@@ -98,6 +117,11 @@ export const ProfileModule: React.FC = () => {
                         <LogOut className="w-4 h-4" /> Sign Out
                     </button>
                 </div>
+            </div>
+
+            {/* Premium Subscription Section */}
+            <div className="mb-8">
+                <PremiumUpgrade />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

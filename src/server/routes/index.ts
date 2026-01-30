@@ -4,6 +4,7 @@ import deckRoutes from './deck.routes';
 import cardRoutes from './card.routes';
 import packRoutes from './pack.routes';
 import importRoutes from './import.routes';
+import paymentRoutes from './payment.routes';
 
 const router = Router();
 
@@ -57,5 +58,6 @@ router.get('/lands/fallback', CardController.getFallbackLands); // Original: /ap
 
 router.use('/packs', packRoutes);
 router.use('/import', importRoutes);
+router.use('/payment', paymentRoutes);
 
 export default router;

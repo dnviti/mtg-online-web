@@ -17,6 +17,14 @@ export interface User {
     googleId?: string;
     authProvider: 'local' | 'google';
     createdAt: Date;
+    // Premium subscription fields
+    isPremium: boolean;
+    premiumSince?: Date;
+    premiumUntil?: Date;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionPlan?: 'monthly' | 'yearly';
+    subscriptionStatus?: 'active' | 'canceled' | 'past_due';
 }
 
 export interface SavedDeck {
@@ -73,7 +81,8 @@ export class UserManager {
             username,
             passwordHash,
             authProvider: 'local',
-            createdAt: new Date(now)
+            createdAt: new Date(now),
+            isPremium: false
         };
 
         // Transaction to save user and update lookup
@@ -83,7 +92,8 @@ export class UserManager {
             username,
             passwordHash,
             authProvider: 'local',
-            createdAt: now
+            createdAt: now,
+            isPremium: 'false'
         });
         pipeline.hset('users:lookup:username', username.toLowerCase(), userId);
         await pipeline.exec();
@@ -123,7 +133,14 @@ export class UserManager {
             email: userData.email,
             googleId: userData.googleId,
             authProvider: (userData.authProvider as 'local' | 'google') || 'local',
-            createdAt: new Date(userData.createdAt)
+            createdAt: new Date(userData.createdAt),
+            isPremium: userData.isPremium === 'true',
+            premiumSince: userData.premiumSince ? new Date(userData.premiumSince) : undefined,
+            premiumUntil: userData.premiumUntil ? new Date(userData.premiumUntil) : undefined,
+            stripeCustomerId: userData.stripeCustomerId,
+            stripeSubscriptionId: userData.stripeSubscriptionId,
+            subscriptionPlan: userData.subscriptionPlan as 'monthly' | 'yearly' | undefined,
+            subscriptionStatus: userData.subscriptionStatus as 'active' | 'canceled' | 'past_due' | undefined
         };
 
         // 4. Fetch Details (Decks, Match History)
@@ -184,6 +201,13 @@ export class UserManager {
             googleId: user.googleId,
             authProvider: user.authProvider,
             createdAt: user.createdAt,
+            isPremium: user.isPremium,
+            premiumSince: user.premiumSince,
+            premiumUntil: user.premiumUntil,
+            stripeCustomerId: user.stripeCustomerId,
+            stripeSubscriptionId: user.stripeSubscriptionId,
+            subscriptionPlan: user.subscriptionPlan,
+            subscriptionStatus: user.subscriptionStatus,
             decks: parsedDecks,
             matchHistory: history
         };
@@ -211,7 +235,14 @@ export class UserManager {
             email: userData.email,
             googleId: userData.googleId,
             authProvider: (userData.authProvider as 'local' | 'google') || 'local',
-            createdAt: new Date(userData.createdAt)
+            createdAt: new Date(userData.createdAt),
+            isPremium: userData.isPremium === 'true',
+            premiumSince: userData.premiumSince ? new Date(userData.premiumSince) : undefined,
+            premiumUntil: userData.premiumUntil ? new Date(userData.premiumUntil) : undefined,
+            stripeCustomerId: userData.stripeCustomerId,
+            stripeSubscriptionId: userData.stripeSubscriptionId,
+            subscriptionPlan: userData.subscriptionPlan as 'monthly' | 'yearly' | undefined,
+            subscriptionStatus: userData.subscriptionStatus as 'active' | 'canceled' | 'past_due' | undefined
         };
     }
 
@@ -336,7 +367,8 @@ export class UserManager {
             email: profile.email,
             googleId: profile.googleId,
             authProvider: 'google',
-            createdAt: new Date(now)
+            createdAt: new Date(now),
+            isPremium: false
         };
 
         // Transaction to save user and update lookups
@@ -348,7 +380,8 @@ export class UserManager {
             email: profile.email || '',
             googleId: profile.googleId,
             authProvider: 'google',
-            createdAt: now
+            createdAt: now,
+            isPremium: 'false'
         });
         pipeline.hset('users:lookup:username', username.toLowerCase(), userId);
         pipeline.hset('users:lookup:google', profile.googleId, userId);
@@ -369,6 +402,127 @@ export class UserManager {
         const userId = await this.redis.hget('users:lookup:google', googleId);
         if (!userId) return null;
         return this.getUser(userId);
+    }
+
+    // ==================== Premium Subscription Methods ====================
+
+    /**
+     * Set user as premium after successful Stripe subscription
+     */
+    async setPremiumStatus(
+        userId: string,
+        stripeCustomerId: string,
+        stripeSubscriptionId: string,
+        subscriptionPlan: 'monthly' | 'yearly',
+        premiumUntil: Date
+    ): Promise<void> {
+        const now = new Date().toISOString();
+
+        await this.redis.hset(`users:${userId}`, {
+            isPremium: 'true',
+            premiumSince: now,
+            premiumUntil: premiumUntil.toISOString(),
+            stripeCustomerId,
+            stripeSubscriptionId,
+            subscriptionPlan,
+            subscriptionStatus: 'active'
+        });
+
+        // Also store reverse lookup for webhooks
+        await this.redis.hset('users:lookup:stripe', stripeCustomerId, userId);
+    }
+
+    /**
+     * Update subscription status (for webhook events)
+     */
+    async updateSubscriptionStatus(
+        stripeCustomerId: string,
+        status: 'active' | 'canceled' | 'past_due',
+        premiumUntil?: Date
+    ): Promise<void> {
+        const userId = await this.redis.hget('users:lookup:stripe', stripeCustomerId);
+        if (!userId) {
+            console.error(`[UserManager] No user found for Stripe customer ${stripeCustomerId}`);
+            return;
+        }
+
+        const updates: Record<string, string> = {
+            subscriptionStatus: status
+        };
+
+        // If subscription is canceled or past due, set isPremium based on premiumUntil
+        if (status === 'canceled') {
+            // Keep premium until the period ends
+            if (premiumUntil) {
+                updates.premiumUntil = premiumUntil.toISOString();
+            }
+        } else if (status === 'past_due') {
+            // Payment failed, but keep premium for grace period
+            updates.subscriptionStatus = 'past_due';
+        } else if (status === 'active' && premiumUntil) {
+            // Renewed successfully
+            updates.premiumUntil = premiumUntil.toISOString();
+            updates.isPremium = 'true';
+        }
+
+        await this.redis.hset(`users:${userId}`, updates);
+    }
+
+    /**
+     * Cancel subscription (set to expire at period end)
+     */
+    async cancelSubscription(userId: string): Promise<void> {
+        await this.redis.hset(`users:${userId}`, {
+            subscriptionStatus: 'canceled'
+        });
+    }
+
+    /**
+     * Remove premium status completely (when subscription period ends)
+     */
+    async removePremiumStatus(stripeCustomerId: string): Promise<void> {
+        const userId = await this.redis.hget('users:lookup:stripe', stripeCustomerId);
+        if (!userId) {
+            console.error(`[UserManager] No user found for Stripe customer ${stripeCustomerId}`);
+            return;
+        }
+
+        await this.redis.hset(`users:${userId}`, {
+            isPremium: 'false',
+            subscriptionStatus: ''
+        });
+
+        // Clean up subscription-specific fields (keep customer ID for re-subscription)
+        await this.redis.hdel(`users:${userId}`, 'stripeSubscriptionId', 'subscriptionPlan', 'premiumUntil');
+    }
+
+    /**
+     * Get user by Stripe customer ID (for webhook handling)
+     */
+    async getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | null> {
+        const userId = await this.redis.hget('users:lookup:stripe', stripeCustomerId);
+        if (!userId) return null;
+        return this.getUser(userId);
+    }
+
+    /**
+     * Check if user's premium has expired and update status
+     */
+    async checkAndUpdatePremiumExpiry(userId: string): Promise<boolean> {
+        const user = await this.getUser(userId);
+        if (!user) return false;
+
+        if (user.isPremium && user.premiumUntil) {
+            const now = new Date();
+            if (now > user.premiumUntil) {
+                // Premium has expired
+                await this.redis.hset(`users:${userId}`, {
+                    isPremium: 'false'
+                });
+                return false;
+            }
+        }
+        return user.isPremium;
     }
 }
 

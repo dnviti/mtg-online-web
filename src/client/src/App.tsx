@@ -13,6 +13,7 @@ import { UserProvider, useUser } from './contexts/UserContext';
 import { GameSocketProvider } from './contexts/GameSocketContext';
 import { AuthModule } from './modules/auth/AuthModule';
 import { ProfileModule } from './modules/profile/ProfileModule';
+import { AdSidebar } from './components/AdSidebar';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'profile'>(() => {
@@ -117,30 +118,36 @@ const MainLayout: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-hidden relative">
-        {activeTab === 'draft' && (
-          <CubeManager
-            packs={generatedPacks}
-            setPacks={setGeneratedPacks}
-            availableLands={availableLands}
-            setAvailableLands={setAvailableLands}
-            onGoToLobby={() => setActiveTab('lobby')}
-          />
-        )}
-        {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
+      <div className="flex-1 flex overflow-hidden">
+        <AdSidebar position="left" />
 
-        {activeTab === 'profile' && (
-          user ? <ProfileModule /> : <AuthModule onSuccess={() => { }} />
-          // onSuccess could redirect to profile or just stay, state update will handle re-render
-        )}
-        {activeTab === 'bracket' && (
-          <div className="flex flex-col items-center justify-center h-full text-slate-400">
-            <Trophy className="w-16 h-16 mb-4 opacity-50" />
-            <h2 className="text-xl font-bold">Tournament Manager</h2>
-            <p>Tournaments are now managed within the Online Lobby.</p>
-          </div>
-        )}
-      </main>
+        <main className="flex-1 overflow-hidden relative">
+          {activeTab === 'draft' && (
+            <CubeManager
+              packs={generatedPacks}
+              setPacks={setGeneratedPacks}
+              availableLands={availableLands}
+              setAvailableLands={setAvailableLands}
+              onGoToLobby={() => setActiveTab('lobby')}
+            />
+          )}
+          {activeTab === 'lobby' && <LobbyManager generatedPacks={generatedPacks} availableLands={availableLands} />}
+
+          {activeTab === 'profile' && (
+            user ? <ProfileModule /> : <AuthModule onSuccess={() => { }} />
+            // onSuccess could redirect to profile or just stay, state update will handle re-render
+          )}
+          {activeTab === 'bracket' && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <Trophy className="w-16 h-16 mb-4 opacity-50" />
+              <h2 className="text-xl font-bold">Tournament Manager</h2>
+              <p>Tournaments are now managed within the Online Lobby.</p>
+            </div>
+          )}
+        </main>
+
+        <AdSidebar position="right" />
+      </div>
     </div>
   );
 };
