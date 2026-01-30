@@ -749,7 +749,27 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       )}
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} {...modalConfig} />
-      <DeckSelectionModal isOpen={isDeckSelectionOpen} onClose={() => setIsDeckSelectionOpen(false)} format={room.format} onSelect={(deck) => { setSelectedDeckCards(deck.cards); setIsDeckSelectionOpen(false); showToast(`Loaded: ${deck.name}`, 'success'); }} />
+      <DeckSelectionModal
+        isOpen={isDeckSelectionOpen}
+        onClose={() => setIsDeckSelectionOpen(false)}
+        format={room.format}
+        onSelect={(deck) => {
+          setSelectedDeckCards(deck.cards);
+          setIsDeckSelectionOpen(false);
+          showToast(`Loaded: ${deck.name}`, 'success');
+        }}
+        onCancel={() => {
+          socketService.socket.emit('cancel_game', { roomId: room.id }, (response: any) => {
+            if (response?.success) {
+              setIsDeckSelectionOpen(false);
+              setSelectedDeckCards([]);
+              showToast('Game cancelled', 'info');
+            } else {
+              showToast(response?.message || 'Failed to cancel game', 'error');
+            }
+          });
+        }}
+      />
     </div>
   );
 };

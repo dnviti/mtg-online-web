@@ -2,12 +2,13 @@
 import React, { useState } from 'react';
 import { useUser, SavedDeck } from '../contexts/UserContext';
 
-import { Layers, Search, Clock, Hash, Check } from 'lucide-react';
+import { Layers, Search, Clock, Hash, Check, X } from 'lucide-react';
 
 interface DeckSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (deck: SavedDeck) => void;
+  onCancel?: () => void; // Cancel game and return to waiting
   format?: string;
 }
 
@@ -15,6 +16,7 @@ export const DeckSelectionModal: React.FC<DeckSelectionModalProps> = ({
   isOpen,
   onClose,
   onSelect,
+  onCancel,
   format
 }) => {
   const { user } = useUser();
@@ -117,15 +119,24 @@ export const DeckSelectionModal: React.FC<DeckSelectionModalProps> = ({
               {format ? <span className="text-emerald-400 font-bold ml-1">{format}</span> : ''} game.
             </p>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search decks..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:ring-2 focus:ring-purple-500 outline-none w-64"
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search decks..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white focus:ring-2 focus:ring-purple-500 outline-none w-64"
+              />
+            </div>
+            <button
+              onClick={onCancel || onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              title="Cancel"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
 
@@ -219,20 +230,30 @@ export const DeckSelectionModal: React.FC<DeckSelectionModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end gap-3 rounded-b-xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            Create New Deck
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!selectedDeck}
-            className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-lg shadow-purple-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
-            Select Deck <Check className="w-4 h-4" />
-          </button>
+        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-between rounded-b-xl">
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+          <div className={`flex gap-3 ${!onCancel ? 'ml-auto' : ''}`}>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              Create New Deck
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={!selectedDeck}
+              className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow-lg shadow-purple-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              Select Deck <Check className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -190,6 +190,29 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
+  // Cancel game and return to waiting status (host only)
+  socket.on('cancel_game', async ({ roomId }, callback) => {
+    const context = await getContext();
+    if (!context) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    if (!context.player.isHost) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Only the host can cancel the game' });
+      return;
+    }
+
+    const room = await roomManager.cancelGame(roomId, context.player.id);
+    if (room) {
+      io.to(roomId).emit('room_update', room);
+      console.log(`Game cancelled in room ${roomId} by host ${context.player.id}`);
+      if (typeof callback === 'function') callback({ success: true, room });
+    } else {
+      if (typeof callback === 'function') callback({ success: false, message: 'Failed to cancel game' });
+    }
+  });
+
   // Note: add_bot and remove_bot handlers removed - manual play mode does not support bots
 
   socket.on('save_deck', async ({ roomId, deck }) => {

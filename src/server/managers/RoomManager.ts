@@ -458,6 +458,43 @@ export class RoomManager {
     }
   }
 
+  async cancelGame(roomId: string, playerId: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      // Only host can cancel
+      const player = room.players.find(p => p.id === playerId);
+      if (!player?.isHost) {
+        console.log(`[RoomManager] Player ${playerId} attempted to cancel game but is not host`);
+        return null;
+      }
+
+      // Only allow cancel from deck_building status (before game actually starts)
+      if (room.status !== 'deck_building') {
+        console.log(`[RoomManager] Cannot cancel game in status ${room.status}`);
+        return null;
+      }
+
+      // Reset to waiting status
+      room.status = 'waiting';
+      room.lastActive = Date.now();
+
+      // Clear any deck selections
+      room.players.forEach(p => {
+        p.ready = false;
+        p.deck = undefined;
+      });
+
+      await this.saveRoomState(room);
+      console.log(`[RoomManager] Game cancelled in room ${roomId}, returning to waiting`);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
   async addMessage(roomId: string, sender: string, text: string): Promise<{ message: ChatMessage, room: Room } | null> {
     if (!await this.acquireLock(roomId)) return null;
     try {
