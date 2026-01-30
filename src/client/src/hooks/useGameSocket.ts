@@ -88,11 +88,27 @@ export const useGameSocket = (): GameSocketHook => {
       }, 2000);
     };
 
+    const onNewMessage = (message: { id: string; sender: string; text: string; timestamp: string }) => {
+      setActiveRoom((prevRoom: any) => {
+        if (!prevRoom) return prevRoom;
+        const existingMessages = prevRoom.messages || [];
+        // Prevent duplicate messages
+        if (existingMessages.some((m: any) => m.id === message.id)) {
+          return prevRoom;
+        }
+        return {
+          ...prevRoom,
+          messages: [...existingMessages, message]
+        };
+      });
+    };
+
     socketService.socket.on('game_update', onGameUpdate);
     socketService.socket.on('room_update', onRoomUpdate);
     socketService.socket.on('draft_update', onDraftUpdate);
     socketService.socket.on('error', onError);
     socketService.socket.on('room_closed', onRoomClosed);
+    socketService.socket.on('new_message', onNewMessage);
 
     return () => {
       socketService.socket.off('game_update', onGameUpdate);
@@ -100,6 +116,7 @@ export const useGameSocket = (): GameSocketHook => {
       socketService.socket.off('draft_update', onDraftUpdate);
       socketService.socket.off('error', onError);
       socketService.socket.off('room_closed', onRoomClosed);
+      socketService.socket.off('new_message', onNewMessage);
     };
   }, []);
 

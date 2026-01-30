@@ -128,7 +128,6 @@ export interface PlayerState {
   handKept?: boolean; // For Mulligan phase
   mulliganCount?: number;
   manaPool: Record<string, number>; // { W: 0, U: 1, ... }
-  isBot?: boolean;
   stopRequested?: boolean; // Server-side stop/suspend state
 }
 
@@ -244,7 +243,6 @@ export interface PersistedDebugAction {
   actionType: string;
   actorId: string;
   actorName: string;
-  isBot: boolean;
   description: string;
   status: 'executed' | 'cancelled';
   sourceCardName?: string;

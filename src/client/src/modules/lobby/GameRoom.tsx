@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameContext } from '../../contexts/GameSocketContext';
 import { socketService } from '../../services/SocketService';
-import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Bot, Layers, Swords, ScrollText, Loader2, Bug } from 'lucide-react';
+import { Users, LogOut, Copy, Check, MessageSquare, Send, Bell, BellOff, X, Layers, Swords, ScrollText, Loader2, Bug } from 'lucide-react';
 import { Modal } from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 import { GameLogProvider, useGameLog } from '../../contexts/GameLogContext';
@@ -20,7 +20,6 @@ interface Player {
   isHost: boolean;
   role: 'player' | 'spectator';
   isOffline?: boolean;
-  isBot?: boolean;
 }
 
 interface ChatMessage {
@@ -515,13 +514,6 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
             >
               {room.format === 'draft' ? <Layers className="w-5 h-5" /> : <Swords className="w-5 h-5" />}
               {room.format === 'draft' ? 'Start Draft' : 'Start Game'}
-            </button>
-            <button
-              onClick={() => socketService.socket.emit('add_bot', { roomId: room.id })}
-              disabled={room.status !== 'waiting' || room.players.length >= 8}
-              className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 shadow-lg shadow-indigo-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Bot className="w-5 h-5" /> Add Bot
             </button>
             <button
               onClick={() => {

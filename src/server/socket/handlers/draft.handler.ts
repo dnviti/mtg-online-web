@@ -16,7 +16,7 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
       }
 
       if (room.format === 'draft') {
-        const draft = await draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id, isBot: !!p.isBot })), room.packs, room.basicLands);
+        const draft = await draftManager.createDraft(room.id, room.players.map(p => ({ id: p.id })), room.packs, room.basicLands);
         room.status = 'drafting';
         await roomManager.saveRoom(room);
 
@@ -46,22 +46,6 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
         await roomManager.saveRoom(room);
         io.to(room.id).emit('room_update', room);
 
-        // Sync Bot Readiness
-        const currentRoom = await roomManager.getRoom(room.id);
-        if (currentRoom) {
-          Object.values(draft.players).forEach(async (draftPlayer) => {
-            if (draftPlayer.isBot && draftPlayer.deck) {
-              const roomPlayer = currentRoom.players.find(rp => rp.id === draftPlayer.id);
-              if (roomPlayer && (!roomPlayer.ready || !roomPlayer.deck || roomPlayer.deck.length === 0)) {
-                const updatedRoom = await roomManager.setPlayerReady(room.id, draftPlayer.id, draftPlayer.deck);
-                if (updatedRoom) {
-                  io.to(room.id).emit('room_update', updatedRoom);
-                  console.log(`Bot ${draftPlayer.id} marked ready with deck (${draftPlayer.deck.length} cards).`);
-                }
-              }
-            }
-          });
-        }
       }
     } else {
       // Could send error to client: "Pick failed (race condition?)"
@@ -139,7 +123,6 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
         const tournament = tournamentManager.createTournament(room.id, updatedRoom.players.map(p => ({
           id: p.id,
           name: p.name,
-          isBot: !!p.isBot,
           deck: p.deck
         })));
 
@@ -154,195 +137,165 @@ export const registerDraftHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('start_solo_test', async ({ playerId, playerName, packs, basicLands, deck }, callback) => {
-    // Handle two modes:
-    // 1. Draft mode: packs and basicLands provided
-    // 2. Direct game mode: deck provided
-
+  /**
+   * Start a test game - supports three modes:
+   * 1. Playtest mode (playtest: true): Single player testing their deck alone
+   * 2. Joinable room mode (deck provided, no playtest): Creates an online room others can join
+   * 3. Draft mode (packs provided): Creates a draft room for online players to join
+   */
+  socket.on('start_solo_test', async ({ playerId, playerName, packs, basicLands, deck, playtest }, callback) => {
     if (deck && Array.isArray(deck) && deck.length > 0) {
-      // DIRECT GAME MODE - Start game immediately with provided deck
-      console.log(`[DeckTester] Starting Solo Game for ${playerName} (${playerId}) with ${deck.length} card deck`);
+      if (playtest) {
+        // PLAYTEST MODE - Single player testing their deck alone
+        console.log(`[Playtest] Starting playtest for ${playerName} (${playerId}) with ${deck.length} card deck`);
 
-      const room = await roomManager.createRoom(playerId, playerName, [], [], socket.id, 'constructed');
-      socket.join(room.id);
-      console.log(`[DeckTester] Created room ${room.id}, human player: ${room.players[0].name} (${room.players[0].id}), isBot: ${room.players[0].isBot}`);
+        const room = await roomManager.createRoom(playerId, playerName, [], [], socket.id, 'playtest');
+        socket.join(room.id);
 
-      // Add ONE bot opponent (not 7 for draft)
-      await roomManager.addBot(room.id);
-      console.log(`[DeckTester] Added bot opponent to room ${room.id}`);
-
-      // Refresh room after adding bot
-      const roomWithBot = await roomManager.getRoom(room.id);
-      if (!roomWithBot) {
-        if (typeof callback === 'function') callback({ success: false, message: "Failed to create room" });
-        return;
-      }
-
-      // Set player deck
-      const updatedRoom = await roomManager.setPlayerReady(room.id, playerId, deck);
-      if (!updatedRoom) {
-        if (typeof callback === 'function') callback({ success: false, message: "Failed to set player deck" });
-        return;
-      }
-      console.log(`[DeckTester] Set deck for human player ${playerId}`);
-
-      // Get bot player and set their deck (copy of human's deck for testing)
-      const botPlayer = updatedRoom.players.find(p => p.isBot);
-      if (botPlayer) {
-        console.log(`[DeckTester] Found bot player: ${botPlayer.name} (${botPlayer.id}), isBot: ${botPlayer.isBot}`);
-        await roomManager.setPlayerReady(room.id, botPlayer.id, deck);
-        console.log(`[DeckTester] Set deck for bot player ${botPlayer.id}`);
-      } else {
-        console.warn(`[DeckTester] ⚠️ No bot player found in room!`);
-      }
-
-      // Refresh room after setting decks
-      const readyRoom = await roomManager.getRoom(room.id);
-      if (!readyRoom) {
-        if (typeof callback === 'function') callback({ success: false, message: "Failed to refresh room" });
-        return;
-      }
-
-      console.log(`[DeckTester] Room players after deck setup:`, readyRoom.players.map((p: any) => `${p.name} (${p.id}) isBot=${p.isBot}`));
-
-      // Set status to 'playing' directly (skip drafting/deck_building)
-      readyRoom.status = 'playing';
-      await roomManager.saveRoom(readyRoom);
-
-      io.to(readyRoom.id).emit('room_update', readyRoom);
-
-      // Initialize game engine
-      console.log(`[DeckTester] Creating game with players:`, readyRoom.players.map((p: any) => `${p.name} (${p.id}) isBot=${p.isBot}`));
-      await gameManager.createGame(readyRoom.id, readyRoom.players, readyRoom.format);
-
-      // Load decks into game (similar to game.handler.ts start_game)
-      await Promise.all(readyRoom.players.map(async (p: any) => {
-        if (p.deck && Array.isArray(p.deck)) {
-          for (const card of p.deck) {
-            // Cast to any since deck cards from client have Scryfall format
-            const c = card as any;
-
-            await gameManager.addCardToGame(readyRoom.id, {
-              ownerId: p.id,
-              controllerId: p.id,
-              oracleId: c.oracle_id || c.id || `temp-${Math.random()}`,
-              scryfallId: c.id || 'unknown',
-              setCode: c.set || 'unknown',
-              name: c.name || "Unknown Card",
-              imageUrl: c.image_uris?.normal || "",
-              imageArtCrop: c.image_uris?.art_crop || "",
-              zone: 'library',
-              typeLine: c.type_line || '',
-              types: (c.type_line || '').split('—')[0].trim().split(' '),
-              oracleText: c.oracle_text || '',
-              manaCost: c.mana_cost || '',
-              keywords: c.keywords || [],
-              power: parseFloat(c.power || '0') || 0,
-              toughness: parseFloat(c.toughness || '0') || 0,
-              damageMarked: 0,
-              controlledSinceTurn: 0,
-              definition: {
-                name: c.name,
-                id: c.id,
-                oracle_id: c.oracle_id,
-                type_line: c.type_line,
-                oracle_text: c.oracle_text,
-                mana_cost: c.mana_cost,
-                power: c.power,
-                toughness: c.toughness,
-                colors: c.colors,
-                card_faces: c.card_faces,
-                image_uris: c.image_uris,
-                keywords: c.keywords,
-                set: c.set
-              }
-            });
-          }
+        // Set player deck
+        const updatedRoom = await roomManager.setPlayerReady(room.id, playerId, deck);
+        if (!updatedRoom) {
+          if (typeof callback === 'function') callback({ success: false, message: "Failed to set player deck" });
+          return;
         }
-      }));
 
-      // Determine primary set code from loaded cards and cache tokens
-      const allSetCodes = new Set<string>();
-      readyRoom.players.forEach((p: any) => {
-        if (p.deck && Array.isArray(p.deck)) {
-          p.deck.forEach((c: any) => {
-            // Check multiple property names for set code
-            const setCode = c.setCode || c.set || c.definition?.set;
-            if (setCode) allSetCodes.add(setCode.toLowerCase());
+        // Set status to 'playing' directly
+        updatedRoom.status = 'playing';
+        await roomManager.saveRoom(updatedRoom);
+
+        io.to(updatedRoom.id).emit('room_update', updatedRoom);
+
+        // Initialize game engine with single player
+        console.log(`[Playtest] Creating single-player game for ${playerName}`);
+        await gameManager.createGame(updatedRoom.id, updatedRoom.players, updatedRoom.format);
+
+        // Load deck into game
+        for (const card of deck) {
+          const c = card as any;
+          await gameManager.addCardToGame(updatedRoom.id, {
+            ownerId: playerId,
+            controllerId: playerId,
+            oracleId: c.oracle_id || c.id || `temp-${Math.random()}`,
+            scryfallId: c.id || 'unknown',
+            setCode: c.set || 'unknown',
+            name: c.name || "Unknown Card",
+            imageUrl: c.image_uris?.normal || "",
+            imageArtCrop: c.image_uris?.art_crop || "",
+            zone: 'library',
+            typeLine: c.type_line || '',
+            types: (c.type_line || '').split('—')[0].trim().split(' '),
+            oracleText: c.oracle_text || '',
+            manaCost: c.mana_cost || '',
+            keywords: c.keywords || [],
+            power: parseFloat(c.power || '0') || 0,
+            toughness: parseFloat(c.toughness || '0') || 0,
+            damageMarked: 0,
+            controlledSinceTurn: 0,
+            definition: {
+              name: c.name,
+              id: c.id,
+              oracle_id: c.oracle_id,
+              type_line: c.type_line,
+              oracle_text: c.oracle_text,
+              mana_cost: c.mana_cost,
+              power: c.power,
+              toughness: c.toughness,
+              colors: c.colors,
+              card_faces: c.card_faces,
+              image_uris: c.image_uris,
+              keywords: c.keywords,
+              set: c.set
+            }
           });
         }
-      });
 
-      if (allSetCodes.size > 0) {
-        const primarySetCode = Array.from(allSetCodes)[0];
-        console.log(`[DeckTester] Primary set code: ${primarySetCode}. Caching tokens...`);
+        // Cache tokens
+        const allSetCodes = new Set<string>();
+        deck.forEach((c: any) => {
+          const setCode = c.setCode || c.set || c.definition?.set;
+          if (setCode) allSetCodes.add(setCode.toLowerCase());
+        });
 
-        try {
-          const tokens = await scryfallService.getTokensForSet(primarySetCode);
-          if (tokens.length > 0) {
-            // Download token images to local storage
-            const cachedCount = await cardService.cacheImages(tokens);
-            if (cachedCount > 0) {
-              console.log(`[DeckTester] Downloaded ${cachedCount} token images for set ${primarySetCode}`);
+        if (allSetCodes.size > 0) {
+          const primarySetCode = Array.from(allSetCodes)[0];
+          try {
+            const tokens = await scryfallService.getTokensForSet(primarySetCode);
+            if (tokens.length > 0) {
+              const cachedCount = await cardService.cacheImages(tokens);
+              if (cachedCount > 0) {
+                console.log(`[Playtest] Downloaded ${cachedCount} token images for set ${primarySetCode}`);
+              }
+              await gameManager.cacheTokensForGame(updatedRoom.id, primarySetCode, tokens);
             }
-            await gameManager.cacheTokensForGame(readyRoom.id, primarySetCode, tokens);
-            console.log(`[DeckTester] Cached ${tokens.length} tokens for set ${primarySetCode}`);
+          } catch (e) {
+            console.warn(`[Playtest] Failed to cache tokens:`, e);
           }
-        } catch (e) {
-          console.warn(`[DeckTester] Failed to cache tokens for set ${primarySetCode}:`, e);
+        }
+
+        // Start game
+        const initializedGame = await gameManager.startGame(updatedRoom.id);
+        if (initializedGame) {
+          console.log(`[Playtest] Game initialized for ${playerName}`);
+          io.to(updatedRoom.id).emit('game_update', initializedGame);
+        }
+
+        if (typeof callback === 'function') {
+          callback({ success: true, room: updatedRoom, game: initializedGame, playtest: true });
+        }
+
+      } else {
+        // JOINABLE ROOM MODE - Create online room for deck testing that others can join
+        console.log(`[DeckTester] Creating joinable room for ${playerName} (${playerId}) with ${deck.length} card deck`);
+
+        const room = await roomManager.createRoom(playerId, playerName, [], [], socket.id, 'constructed');
+        socket.join(room.id);
+
+        // Set player deck and mark ready
+        const updatedRoom = await roomManager.setPlayerReady(room.id, playerId, deck);
+        if (!updatedRoom) {
+          if (typeof callback === 'function') callback({ success: false, message: "Failed to set player deck" });
+          return;
+        }
+
+        // Keep room in 'waiting' status so other players can join
+        console.log(`[DeckTester] Created joinable room ${room.id} - waiting for opponent to join`);
+
+        io.to(room.id).emit('room_update', updatedRoom);
+
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            room: updatedRoom,
+            roomId: room.id,
+            message: `Room created! Share room code: ${room.id}`
+          });
         }
       }
 
-      // Start game (draw 7 cards, etc)
-      const initializedGame = await gameManager.startGame(readyRoom.id);
-      if (initializedGame) {
-        console.log(`[DeckTester] Game initialized. Active player: ${initializedGame.activePlayerId}, Priority: ${initializedGame.priorityPlayerId}`);
-        console.log(`[DeckTester] Game players:`, Object.values(initializedGame.players).map((p: any) => `${p.name} (${p.id}) isBot=${p.isBot}`));
-        io.to(readyRoom.id).emit('game_update', initializedGame);
-      }
-
-      // Trigger bot check
-      console.log(`[DeckTester] Triggering bot check...`);
-      await gameManager.triggerBotCheck(readyRoom.id);
-
-      const latestGame = await gameManager.getGame(readyRoom.id);
-      if (latestGame) {
-        console.log(`[DeckTester] Final game state - Active: ${latestGame.activePlayerId}, Priority: ${latestGame.priorityPlayerId}, Phase: ${latestGame.phase}, Step: ${latestGame.step}`);
-        io.to(readyRoom.id).emit('game_update', latestGame);
-      }
-
-      if (typeof callback === 'function') {
-        console.log(`[DeckTester] Deck tester game setup complete for room ${readyRoom.id}`);
-        callback({ success: true, room: readyRoom, game: latestGame });
-      }
-
-    } else {
-      // DRAFT MODE - Original behavior
-      console.log(`Starting Solo Draft for ${playerName}`);
+    } else if (packs && Array.isArray(packs) && packs.length > 0) {
+      // DRAFT MODE - Create joinable draft room (no bots, wait for players)
+      console.log(`[Draft] Creating joinable draft room for ${playerName}`);
 
       const room = await roomManager.createRoom(playerId, playerName, packs, basicLands || [], socket.id, 'draft');
       socket.join(room.id);
 
-      for (let i = 0; i < 7; i++) {
-        await roomManager.addBot(room.id);
-      }
-
-      // Refresh room after adding bots to get correct player list
-      const roomWithBots = await roomManager.getRoom(room.id);
-      if (!roomWithBots) {
-        if (typeof callback === 'function') callback({ success: false, message: "Failed to create room" });
-        return;
-      }
-
-      const draft = await draftManager.createDraft(roomWithBots.id, roomWithBots.players.map(p => ({ id: p.id, isBot: !!p.isBot })), roomWithBots.packs, roomWithBots.basicLands);
-      roomWithBots.status = 'drafting';
-      await roomManager.saveRoom(roomWithBots);
+      // Keep room in 'waiting' status for other players to join
+      console.log(`[Draft] Created joinable draft room ${room.id} - waiting for players to join`);
 
       if (typeof callback === 'function') {
-        callback({ success: true, room: roomWithBots, draftState: draft });
+        callback({
+          success: true,
+          room,
+          roomId: room.id,
+          message: `Draft room created! Share room code: ${room.id}`
+        });
       }
-      io.to(room.id).emit('room_update', roomWithBots);
-      io.to(room.id).emit('draft_update', draft);
+      io.to(room.id).emit('room_update', room);
+
+    } else {
+      if (typeof callback === 'function') {
+        callback({ success: false, message: "Must provide either a deck or packs to start a game" });
+      }
     }
   });
 

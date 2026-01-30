@@ -131,35 +131,17 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
     }
   }, [isYielding, gameState.priorityPlayerId, gameState.step, currentPlayerId]);
 
-  // Auto-Yield Logic (Smart Yield against Bot)
-  const activePlayer = gameState.activePlayerId ? gameState.players[gameState.activePlayerId] : undefined;
-  const isBotTurn = activePlayer?.isBot;
-
-  // Ref to track turn changes to force reset yield
+  // Reset yield on turn change
   const prevActivePlayerId = useRef(gameState.activePlayerId);
 
   useEffect(() => {
-    // 1. Detect Turn Change (Active Player changed)
+    // Detect Turn Change (Active Player changed)
     if (prevActivePlayerId.current !== gameState.activePlayerId) {
       // Reset yield strictly on any turn change to prevent leakage
       setIsYielding(false);
       prevActivePlayerId.current = gameState.activePlayerId;
-      // Logic continues below to re-enable if it IS a bot turn...
     }
-
-    if (isBotTurn) {
-      // Enforce Yielding during Bot turn (except combat decisions)
-      if (['declare_attackers', 'declare_blockers'].includes(gameState.step || '')) {
-        // Must pause yield for decisions
-        setIsYielding(false);
-      } else {
-        setIsYielding(prev => {
-          if (prev) return prev; // already true
-          return true;
-        });
-      }
-    }
-  }, [gameState.activePlayerId, gameState.step, isBotTurn]);
+  }, [gameState.activePlayerId]);
 
   // Server-Side Stop State
   const stopRequested = gameState.players[currentPlayerId]?.stopRequested || false;
@@ -168,83 +150,7 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
     socketService.socket.emit('game_strict_action', { action: { type: 'TOGGLE_STOP' } });
   };
 
-  useEffect(() => {
-    // Smart Auto-Pass Logic
-    // Only auto-pass when it's the BOT's turn, not the human player's turn
-
-    if (!gameState.activePlayerId) return;
-    const amActivePlayer = gameState.activePlayerId === currentPlayerId;
-    const amPriorityPlayer = gameState.priorityPlayerId === currentPlayerId;
-
-    // NEVER auto-pass on your own turn - you need time to play lands, cast spells, etc.
-    if (amActivePlayer) {
-      return;
-    }
-
-    // It's the opponent's (bot's) turn - check if manual yield is enabled
-    if (manualYield) {
-      // Manual mode: user wants full control even during bot turns
-      return;
-    }
-
-    // Skip auto-pass during critical decision points (blocking)
-    if (gameState.step === 'declare_blockers') {
-      return;
-    }
-
-    // Auto-pass during bot's turn (we are NAP - Non-Active Player)
-    if (amPriorityPlayer && !stopRequested) {
-      // Random delay between 500-1200ms to simulate human-like response time
-      const delay = 500 + Math.random() * 700;
-      console.log(`[Smart Auto-Pass] Auto-passing priority during bot's turn (Phase: ${gameState.phase}, Step: ${gameState.step}, delay: ${Math.round(delay)}ms)`);
-      const timer = setTimeout(() => {
-        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
-      }, delay);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.activePlayerId, gameState.priorityPlayerId, stopRequested, currentPlayerId, gameState.step, gameState.phase, manualYield]);
-  // If I access `isYielding` inside `setIsYielding`, I don't need it in dependency.
-  // But wait, the `if (['declare_...'].includes)` logic needs to potentially set it false.
-  // setIsYielding(false) is fine.
-  // The logic seems sound without isYielding in dependency, assuming stable behavior.
-  // BUT: `prevActivePlayerId` check needs stable run.
-
-  // Let's keep `isYielding` in deps if I read it? 
-  // I replaced reads with functional updates or just strict sets?
-  // "if (isYielding) setIsYielding(false)" -> simply "setIsYielding(false)" is safer/idempotent if efficient.
-  // React state updates bail out if same value.
-
-  // BUT wait, if I remove `isYielding` from deps, and I toggle it manually...
-  // The effect WON'T run.
-  // If I toggle manual yield on My Turn. Effect doesn't run. Correct (we don't want it to interfere).
-
-  // If I am in Bot Turn, and I somehow toggle it false? (Button click).
-  // Effect doesn't run. isYielding stays false.
-  // Bot waits forever? No, bot logic (server) continues.
-  // Client just doesn't auto-pass.
-  // But we WANT to force it.
-  // So we SHOULD depend on `isYielding` so if user turns it off, we force it back on?
-  // No, if user turns it off, maybe they want to see?
-  // User Requirement: "Auto-Yield".
-  // If I rely on `isYielding` in deps, I risk the loop again.
-  // Let's try WITHOUT `isYielding` in deps first.
-  // This means if I turn it off, it stays off until next step change or phase change.
-  // Because `gameState.step` IS in deps.
-  // So if step advances, effect runs -> sees Bot Turn -> Forces True.
-  // This is good behavior. Re-enables each step.
-
-  // So, removing isYielding from dependencies seems robust.
-
-  // One catch: `['declare_attackers']`.
-  // If step is declare_attackers. Effect runs.
-  // Forces isYielding(false).
-  // User manually clicks yield (true).
-  // Effect doesn't run.
-  // isYielding stays true.
-  // This might be BAD if we want to enforce safety?
-  // If user yields in declare_attackers... they yield their chance to attack.
-  // That's on them.
-  // But the "Flickering" issue was us fighting them.
+  // Note: Auto-pass logic removed - manual play mode means players control their own priority
   // If we don't react to isYielding change, we won't fight.
   // This solves flickering definitively too.
 

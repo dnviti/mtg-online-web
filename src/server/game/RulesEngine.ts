@@ -126,4 +126,12 @@ export class RulesEngine {
   public changeLife(playerId: string, amount: number) {
     ActionHandler.changeLife(this.state, playerId, amount);
   }
+
+  /**
+   * Manual trigger placement for manual play mode.
+   * Players add triggers to the stack themselves.
+   */
+  public addTriggerToStack(playerId: string, sourceId: string, triggerName: string, triggerText: string, targets: string[] = []) {
+    ActionHandler.addTriggerToStack(this.state, playerId, sourceId, triggerName, triggerText, targets);
+  }
 }

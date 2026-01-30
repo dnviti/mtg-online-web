@@ -1,6 +1,14 @@
 import { StrictGameState, CardObject } from '../types';
 import { GameLogger } from './GameLogger';
-import { TriggeredAbilityHandler, DamageEvent } from './TriggeredAbilityHandler';
+
+// DamageEvent interface for tracking damage (triggers are manual in manual play mode)
+interface DamageEvent {
+  sourceId: string;
+  targetId: string;
+  amount: number;
+  isCombatDamage: boolean;
+  isToPlayer: boolean;
+}
 
 /**
  * CombatManager
@@ -100,22 +108,7 @@ export class CombatManager {
     console.log(`[CombatManager] Player ${playerId} declared ${attackers.length} attackers: ${attackerNames}`);
     state.attackersDeclared = true;
 
-    // Check for attack triggers on each attacker
-    const allTriggers: ReturnType<typeof TriggeredAbilityHandler.checkAttackTriggers> = [];
-    attackers.forEach(({ attackerId, targetId }) => {
-      const card = state.cards[attackerId];
-      if (card) {
-        const triggers = TriggeredAbilityHandler.checkAttackTriggers(state, card, targetId);
-        allTriggers.push(...triggers);
-      }
-    });
-
-    // Put all attack triggers on the stack
-    if (allTriggers.length > 0) {
-      TriggeredAbilityHandler.putTriggersOnStack(state, allTriggers);
-      console.log(`[CombatManager] Added ${allTriggers.length} attack trigger(s) to stack`);
-    }
-
+    // Manual play mode: Players are responsible for adding attack triggers manually
     // Reset priority happens in ActionHandler calling this.
   }
 
@@ -193,15 +186,7 @@ export class CombatManager {
     console.log(`[CombatManager] Player ${playerId} declared ${declaredBlockers.length} blockers: ${blockerDetails}`);
     state.blockersDeclared = true;
 
-    // Check for block triggers on each blocker and blocked attacker
-    if (declaredBlockers.length > 0) {
-      const blockTriggers = TriggeredAbilityHandler.checkBlockTriggers(state, declaredBlockers);
-      if (blockTriggers.length > 0) {
-        const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, blockTriggers);
-        TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-        console.log(`[CombatManager] Added ${blockTriggers.length} block trigger(s) to stack`);
-      }
-    }
+    // Manual play mode: Players are responsible for adding block triggers manually
   }
 
   /**
@@ -257,15 +242,8 @@ export class CombatManager {
       }
     }
 
-    // Check for damage triggers after all combat damage is dealt
-    if (damageEvents.length > 0) {
-      const damageTriggers = TriggeredAbilityHandler.checkDamageTriggers(state, damageEvents);
-      if (damageTriggers.length > 0) {
-        const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, damageTriggers);
-        TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-        console.log(`[CombatManager] Added ${damageTriggers.length} damage trigger(s) to stack`);
-      }
-    }
+    // Manual play mode: Players are responsible for adding damage triggers manually
+    // damageEvents tracked for reference but not auto-triggered
   }
 
   /**

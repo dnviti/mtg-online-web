@@ -167,29 +167,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
-  socket.on('add_bot', async ({ roomId }) => {
-    const context = await getContext();
-    if (!context || !context.player.isHost) return;
-
-    const updatedRoom = await roomManager.addBot(roomId);
-    if (updatedRoom) {
-      io.to(roomId).emit('room_update', updatedRoom);
-      console.log(`Bot added to room ${roomId}`);
-    } else {
-      socket.emit('error', { message: 'Failed to add bot (Room full?)' });
-    }
-  });
-
-  socket.on('remove_bot', async ({ roomId, botId }) => {
-    const context = await getContext();
-    if (!context || !context.player.isHost) return;
-
-    const updatedRoom = await roomManager.removeBot(roomId, botId);
-    if (updatedRoom) {
-      io.to(roomId).emit('room_update', updatedRoom);
-      console.log(`Bot ${botId} removed from room ${roomId}`);
-    }
-  });
+  // Note: add_bot and remove_bot handlers removed - manual play mode does not support bots
 
   socket.on('save_deck', async ({ roomId, deck }) => {
     // Autosave deck state (without setting ready)

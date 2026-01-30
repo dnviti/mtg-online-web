@@ -1,13 +1,11 @@
 import { EventEmitter } from 'events';
 import { StateStoreManager } from './StateStoreManager';
-import { BotDeckBuilderService } from '../services/BotDeckBuilderService';
 
 import { DraftState, Pack, Card } from '../interfaces/DraftInterfaces';
 import { selectBestCard } from '../algorithms/DraftPickAlgorithm';
 import { CardOptimization } from '../game/engine/CardOptimization';
 
 export class DraftManager extends EventEmitter {
-  private botBuilder = new BotDeckBuilderService();
 
   private get store() {
     const client = StateStoreManager.getInstance().store;
@@ -37,7 +35,7 @@ export class DraftManager extends EventEmitter {
 
   // --- Public Methods ---
 
-  async createDraft(roomId: string, players: { id: string, isBot: boolean }[], allPacks: Pack[], basicLands: Card[] = []): Promise<DraftState> {
+  async createDraft(roomId: string, players: { id: string }[], allPacks: Pack[], basicLands: Card[] = []): Promise<DraftState> {
     // Distribute 3 packs to each player
     const sanitizedPacks = allPacks.map((p, idx) => ({
       ...p,
@@ -73,7 +71,6 @@ export class DraftManager extends EventEmitter {
         isWaiting: false,
         pickedInCurrentStep: 0,
         pickExpiresAt: Date.now() + 60000,
-        isBot: p.isBot
       };
     });
 
@@ -208,21 +205,10 @@ export class DraftManager extends EventEmitter {
         if (draft.status === 'drafting') {
           for (const playerId of Object.keys(draft.players)) {
             const playerState = draft.players[playerId];
-            if (playerState.activePack) {
-              let shouldAutoPick = false;
-              if (playerState.isBot) {
-                shouldAutoPick = true;
-              } else if (now > playerState.pickExpiresAt) {
-                shouldAutoPick = true;
-              }
-
-              if (shouldAutoPick) {
-                // We have the lock on 'roomId'. 
-                // autoPickInternal is needed designed to work WITH existing lock or we must be careful calling pickCard which tries to acquire lock.
-                // Refactor: split pickCard logic into internal (no lock) and public (lock).
-                const result = await this.autoPickInternal(draft, playerId);
-                if (result) draftUpdated = true;
-              }
+            // Auto-pick only on timeout
+            if (playerState.activePack && now > playerState.pickExpiresAt) {
+              const result = await this.autoPickInternal(draft, playerId);
+              if (result) draftUpdated = true;
             }
           }
 
@@ -363,14 +349,6 @@ export class DraftManager extends EventEmitter {
         draft.status = 'deck_building';
         draft.startTime = Date.now();
 
-        Object.values(draft.players).forEach(p => {
-          if (p.isBot) {
-            const lands = draft.basicLands || [];
-            const deck = this.botBuilder.buildDeck(p.pool, lands);
-            p.deck = deck;
-          }
-        });
-
         // Emit event for persistence
         this.emit('draft_complete', { roomId: draft.roomId, draft });
       }
@@ -382,7 +360,7 @@ export class DraftManager extends EventEmitter {
     if (!draft) return;
     console.log(`--- Draft State ${roomId} ---`);
     Object.values(draft.players).forEach(p => {
-      console.log(`Player ${p.id} (Bot: ${p.isBot}): Active=${p.activePack?.id || 'None'}, Queue=${p.queue.length}`);
+      console.log(`Player ${p.id}: Active=${p.activePack?.id || 'None'}, Queue=${p.queue.length}`);
     });
     console.log(`-----------------------------`);
   }

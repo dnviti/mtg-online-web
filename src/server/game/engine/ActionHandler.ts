@@ -1,36 +1,35 @@
 import { StrictGameState, StackObject } from '../types';
 import { CardUtils } from './CardUtils';
 import { ManaUtils } from './ManaUtils';
-import { StateBasedEffects } from './StateBasedEffects';
 import { GameLogger } from './GameLogger';
-import { OracleEffectResolver } from './OracleEffectResolver';
-import { AbilityParser, ParsedAbility } from './AbilityParser';
-import { WardHandler } from './WardHandler';
-import { TriggeredAbilityHandler } from './TriggeredAbilityHandler';
-import { ChoiceHandler } from './ChoiceHandler';
 
 /**
- * ActionHandler
- * 
- * Responsible for executing discrete player actions that change the game state.
- * This includes moving cards between zones, casting spells, playing lands,
- * and creating tokens. It ensures that priority is correctly reset after actions
- * and that appropriate validation (permissions, zones) is performed.
+ * ActionHandler - Manual Play Mode
+ *
+ * Handles discrete player actions in a Cockatrice/Tabletop Simulator style.
+ * All automation has been removed - players manually control all game effects.
+ *
+ * The system manages:
+ * - Turn structure, phases, and priority
+ * - The stack (spells/abilities go on stack, resolve in LIFO order)
+ * - Zone transitions
+ * - Basic state tracking (life, counters, tapped state)
+ *
+ * Players manually handle:
+ * - Triggered abilities (they add them to stack manually)
+ * - Effect resolution (they apply effects themselves)
+ * - State-based actions (they move creatures to graveyard when appropriate)
  */
 export class ActionHandler {
 
   /**
-   * Moves a card from one zone to another, handling all side-effects of zone transitions
-   * such as clearing memory, resetting counters, and detaching auras/equipment.
+   * Moves a card from one zone to another.
+   * No automatic triggers - just zone transition and state reset.
    */
   static moveCardToZone(state: StrictGameState, cardId: string, toZone: any, faceDown = false, position?: { x: number, y: number }, faceIndex?: number, skipLog = false) {
     const card = state.cards[cardId];
     if (card) {
       const fromZone = card.zone;
-
-      // Capture card snapshot BEFORE zone change for LTB triggers (look-back-in-time)
-      const wasOnBattlefield = fromZone === 'battlefield';
-      const cardSnapshot = wasOnBattlefield ? { ...card } : null;
 
       if (toZone === 'battlefield' && card.zone !== 'battlefield') {
         card.controlledSinceTurn = state.turnCount;
@@ -38,7 +37,7 @@ export class ActionHandler {
 
       card.zone = toZone;
 
-      // Log zone changes (skip library shuffling and initial setup)
+      // Log zone changes
       if (!skipLog && fromZone !== toZone && fromZone !== 'library' && toZone !== 'library') {
         if (fromZone === 'battlefield') {
           GameLogger.logLeavesBattlefield(state, card, toZone);
@@ -81,7 +80,6 @@ export class ActionHandler {
           card.oracleText = card.definition.oracle_text || card.oracleText;
           card.defense = parseFloat(card.definition.defense || card.defense || '0');
           card.baseDefense = card.defense;
-          // Reset loyalty for planeswalkers
           card.loyalty = undefined;
           card.baseLoyalty = undefined;
         }
@@ -125,95 +123,6 @@ export class ActionHandler {
           }
         }
       }
-
-      // Check for LTB (leaves-the-battlefield) triggers if card left battlefield
-      // Note: Death triggers for creatures are handled separately in StateBasedEffects
-      // LTB triggers fire for: exile, bounce, sacrifice (non-creature), etc.
-      if (wasOnBattlefield && toZone !== 'battlefield' && cardSnapshot) {
-        // For creature deaths (destroy effects, sacrifice), we need to handle:
-        // 1. Death triggers (the creature's own "when this dies" abilities)
-        // 2. Other permanents' triggers ("whenever a creature dies")
-        // 3. Attached Auras with "when enchanted creature dies" triggers
-        const isCreatureDeath = cardSnapshot.types?.includes('Creature') && toZone === 'graveyard';
-
-        if (isCreatureDeath) {
-          // Check for attached Auras with "enchanted creature dies" triggers
-          // This handles destroy effects and sacrifice which bypass SBA
-          ActionHandler.checkEnchantedCreatureDiesTriggersOnDestroy(state, cardSnapshot);
-
-          // Check for death triggers (from the dying creature and other permanents)
-          const deathTriggers = TriggeredAbilityHandler.checkDeathTriggers(state, cardSnapshot);
-          if (deathTriggers.length > 0) {
-            const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, deathTriggers);
-            TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-            console.log(`[ActionHandler] Added ${deathTriggers.length} death trigger(s) to stack`);
-          }
-        } else {
-          // Non-creature LTB triggers
-          const ltbTriggers = TriggeredAbilityHandler.checkLTBTriggers(state, cardSnapshot, toZone);
-          if (ltbTriggers.length > 0) {
-            const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, ltbTriggers);
-            TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-            console.log(`[ActionHandler] Added ${ltbTriggers.length} LTB trigger(s) to stack`);
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Checks for Auras attached to a dying creature that have "When enchanted creature dies" triggers.
-   * This is called when a creature is destroyed/sacrificed (not via SBA).
-   * The SBA version is in StateBasedEffects for lethal damage/zero toughness deaths.
-   */
-  private static checkEnchantedCreatureDiesTriggersOnDestroy(
-    state: StrictGameState,
-    dyingCreatureSnapshot: any
-  ): void {
-    // Find all Auras that were attached to this dying creature
-    // They should still be on battlefield at this point (SBA hasn't run yet)
-    const attachedAuras = Object.values(state.cards).filter(c =>
-      c.zone === 'battlefield' &&
-      c.types?.includes('Enchantment') &&
-      c.subtypes?.includes('Aura') &&
-      c.attachedTo === dyingCreatureSnapshot.instanceId
-    );
-
-    const triggers: StackObject[] = [];
-
-    for (const aura of attachedAuras) {
-      // Check for "When enchanted creature dies" pattern
-      const effectText = CardUtils.getEnchantedCreatureDiesEffect(aura);
-      if (effectText) {
-        console.log(`[ActionHandler] Aura ${aura.name} has "enchanted creature dies" trigger: "${effectText}"`);
-
-        // Create trigger for this Aura
-        const trigger: StackObject = {
-          id: `trigger-aura-enchanted-dies-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-          sourceId: aura.instanceId,
-          controllerId: aura.controllerId,
-          type: 'trigger',
-          name: `${aura.name}: Enchanted creature dies`,
-          text: effectText,
-          targets: [aura.instanceId],
-          resolutionState: {
-            choicesMade: []
-          }
-        };
-
-        // Store metadata for resolution
-        (trigger as any).ownerId = aura.ownerId;
-        (trigger as any).isEnchantedCreatureDiesTrigger = true;
-        (trigger as any).fullEffectText = effectText;
-
-        triggers.push(trigger);
-      }
-    }
-
-    if (triggers.length > 0) {
-      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, triggers);
-      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-      console.log(`[ActionHandler] Added ${triggers.length} "enchanted creature dies" Aura trigger(s) to stack`);
     }
   }
 
@@ -241,11 +150,10 @@ export class ActionHandler {
 
     const playerName = state.players[playerId]?.name || 'Unknown';
 
-    // moveCardToZone with skipLog=true to avoid duplicate "enters battlefield" log
     this.moveCardToZone(state, card.instanceId, 'battlefield', false, position, faceIndex, true);
     state.landsPlayedThisTurn++;
 
-    console.log(`[ActionHandler] Player ${playerId} played land: "${card.name}" (Type: ${typeLine})`);
+    console.log(`[ActionHandler] Player ${playerId} played land: "${card.name}"`);
     GameLogger.logPlayLand(state, card, playerName);
 
     ActionHandler.resetPriority(state, playerId);
@@ -256,9 +164,8 @@ export class ActionHandler {
     if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
     const card = state.cards[cardId];
-    if (!card || (card.zone !== 'hand' && card.zone !== 'command')) throw new Error("Invalid card source (must be Hand or Command Zone).");
+    if (!card || (card.zone !== 'hand' && card.zone !== 'command')) throw new Error("Invalid card source.");
 
-    // Determine types and Flash status
     let typeLine = card.typeLine || card.definition?.type_line || "";
     let types = card.types || card.definition?.types || [];
     let keywords = card.keywords || card.definition?.keywords || [];
@@ -268,24 +175,20 @@ export class ActionHandler {
       if (faces && faces[faceIndex]) {
         typeLine = faces[faceIndex].type_line || "";
         types = typeLine.split('—')[0].trim().split(' ');
-        // Oracle text often contains keywords like Flash
         if (faces[faceIndex].oracle_text?.toLowerCase().includes('flash')) {
           keywords = [...keywords, 'Flash'];
         }
       }
     } else {
-      // Double check keywords from text if not populated
       if (card.oracleText?.toLowerCase().includes('flash')) {
         keywords = [...(card.keywords || []), 'Flash'];
       }
     }
 
-    // Ensure types is populated if missing
     if ((!types || types.length === 0) && typeLine) {
       types = typeLine.split('—')[0].trim().split(' ');
     }
 
-    // STRICT RULE: Lands cannot be cast. They must be played using PLAY_LAND.
     if (types.includes('Land') || typeLine.includes('Land')) {
       throw new Error("Lands cannot be cast as spells. Use PLAY_LAND action.");
     }
@@ -293,9 +196,7 @@ export class ActionHandler {
     const isInstant = types.includes('Instant') || typeLine.includes('Instant');
     const hasFlash = keywords.some(k => k.toLowerCase() === 'flash');
 
-    // Timing Rules
     if (!isInstant && !hasFlash) {
-      // Sorcery Speed: Main Phase, Stack Empty, Active Player
       if (state.activePlayerId !== playerId) throw new Error("Can only cast Sorcery-speed spells on your turn.");
       if (state.phase !== 'main1' && state.phase !== 'main2') throw new Error("Can only cast Sorcery-speed spells during Main Phase.");
       if (state.stack.length > 0) throw new Error("Stack must be empty to cast Sorcery-speed spells.");
@@ -320,51 +221,6 @@ export class ActionHandler {
       }
     }
 
-    // Handle Aura targeting - if no targets provided, create a pending choice
-    if (CardUtils.isAura(card) && targets.length === 0) {
-      const validTargets = CardUtils.getValidAuraTargets(state, card);
-
-      if (validTargets.length === 0) {
-        throw new Error("No valid targets for this Aura.");
-      }
-
-      // Put the spell on the stack first (with empty targets)
-      card.zone = 'stack';
-
-      const stackItem: StackObject = {
-        id: Math.random().toString(36).substr(2, 9),
-        sourceId: cardId,
-        controllerId: playerId,
-        type: 'spell',
-        name: name,
-        text: text,
-        targets: [], // Will be filled when target is chosen
-        resolutionPosition: position,
-        faceIndex: faceIndex
-      } as any;
-
-      state.stack.push(stackItem);
-
-      // Create a pending choice for target selection
-      ChoiceHandler.createChoice(state, stackItem, {
-        type: 'target_selection',
-        sourceStackId: stackItem.id,
-        sourceCardId: cardId,
-        sourceCardName: name,
-        choosingPlayerId: playerId,
-        controllingPlayerId: playerId,
-        prompt: `Choose a target for ${name}`,
-        selectableIds: validTargets,
-        constraints: {
-          exactCount: 1,
-          filter: { zones: ['battlefield'] }
-        }
-      });
-
-      console.log(`[ActionHandler] Player ${playerId} cast ${name} - waiting for target selection (${validTargets.length} valid targets)`);
-      return true;
-    }
-
     card.zone = 'stack';
 
     const stackItem: StackObject = {
@@ -381,34 +237,21 @@ export class ActionHandler {
 
     state.stack.push(stackItem);
 
-    console.log(`[ActionHandler] Player ${playerId} cast spell: "${name}" (Type: ${typeLine})`);
+    console.log(`[ActionHandler] Player ${playerId} cast spell: "${name}"`);
 
-    // Log spell cast with targets
     const playerName = state.players[playerId]?.name || 'Unknown';
     const targetCards = targets.map(t => state.cards[t]).filter(Boolean);
     GameLogger.logCastSpell(state, card, playerName, targetCards);
-
-    // Check for Ward triggers on any targets
-    if (targets.length > 0) {
-      const wardTriggered = WardHandler.checkWardTrigger(state, stackItem, card);
-      if (wardTriggered) {
-        // Ward creates a pending choice - priority stays with the spell's controller
-        console.log(`[ActionHandler] Ward triggered - waiting for payment decision`);
-      }
-    }
-
-    // Check for spell cast triggers from other permanents
-    const spellCastTriggers = TriggeredAbilityHandler.checkSpellCastTriggers(state, card, playerId);
-    if (spellCastTriggers.length > 0) {
-      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, spellCastTriggers);
-      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-      console.log(`[ActionHandler] Added ${spellCastTriggers.length} spell cast trigger(s) to stack`);
-    }
 
     ActionHandler.resetPriority(state, playerId);
     return true;
   }
 
+  /**
+   * Resolves the top item on the stack.
+   * In manual mode, permanents go to battlefield, instants/sorceries go to graveyard.
+   * All effects must be applied manually by players.
+   */
   static resolveTopStack(state: StrictGameState) {
     const item = state.stack.pop();
     if (!item) return;
@@ -418,21 +261,18 @@ export class ActionHandler {
     if (item.type === 'spell') {
       const card = state.cards[item.sourceId];
       if (card) {
-        // Ensure types is populated (handle empty arrays too - [] is truthy in JS)
         if (!card.types || card.types.length === 0) {
           const typeLine = card.typeLine || card.definition?.type_line || '';
           if (typeLine) {
             card.types = typeLine.split('—')[0].trim().split(' ').filter(Boolean);
-            console.log(`[ActionHandler] Populated card.types from typeLine: ${card.types.join(', ')}`);
           }
         }
-        const isPermanent = CardUtils.isPermanent(card);
 
-        // Extra safety: If it's a Land, it MUST go to battlefield.
-        // (Lands shouldn't be on stack, but if they are, don't graveyard them)
+        const isPermanent = CardUtils.isPermanent(card);
         const isLand = (card.types?.includes('Land')) || (card.typeLine?.includes('Land'));
 
         if (isPermanent || isLand) {
+          // Auras need to be attached to target
           if (CardUtils.isAura(card)) {
             const targetId = item.targets[0];
             const target = state.cards[targetId];
@@ -440,15 +280,6 @@ export class ActionHandler {
               this.moveCardToZone(state, card.instanceId, 'battlefield', false, item.resolutionPosition);
               card.attachedTo = target.instanceId;
               console.log(`${card.name} enters attached to ${target.name}`);
-
-              // Check for ETB triggers on the aura
-              const etbTriggers = TriggeredAbilityHandler.checkETBTriggers(state, card);
-              if (etbTriggers.length > 0) {
-                TriggeredAbilityHandler.putTriggersOnStack(state, etbTriggers);
-              } else {
-                // No triggers - resolve static aura effects immediately
-                OracleEffectResolver.resolveSpellEffects(state, card, item);
-              }
             } else {
               console.log(`${card.name} failed to attach. Putting into GY.`);
               this.moveCardToZone(state, card.instanceId, 'graveyard');
@@ -457,52 +288,34 @@ export class ActionHandler {
             const faceIndex = (item as any).faceIndex;
             this.moveCardToZone(state, card.instanceId, 'battlefield', false, item.resolutionPosition, faceIndex);
 
-            // Battles enter with defense counters
-            if (CardUtils.isBattle(card) && card.baseDefense) {
-              this.addCounter(state, state.activePlayerId, card.instanceId, 'defense', card.baseDefense);
-            }
-
-            // Planeswalkers enter with loyalty counters (Rule 306.5b)
+            // Planeswalkers enter with loyalty counters
             if (CardUtils.isPlaneswalker(card)) {
-              // Check multiple possible locations for loyalty value
-              // For DFCs, loyalty might be on either face (e.g., transform planeswalkers have loyalty on back face)
               const faces = card.definition?.card_faces;
               const faceLoyalty = faces?.[0]?.loyalty || faces?.[1]?.loyalty;
-              // Check: definition.loyalty, card.baseLoyalty (pre-set during game load), card.loyalty, card_faces loyalty
               const loyaltyStr = card.definition?.loyalty || (card as any).loyalty || faceLoyalty;
-              // Also check if baseLoyalty was pre-set during card loading (numeric)
               const baseLoyalty = card.baseLoyalty || (loyaltyStr ? parseInt(loyaltyStr) : 0);
-              console.log(`[ActionHandler] Planeswalker ${card.name} loyalty check: definition.loyalty=${card.definition?.loyalty}, card.baseLoyalty=${card.baseLoyalty}, faceLoyalty=${faceLoyalty}, parsed=${baseLoyalty}`);
               if (baseLoyalty > 0) {
                 card.baseLoyalty = baseLoyalty;
                 card.loyalty = baseLoyalty;
                 this.addCounter(state, state.activePlayerId, card.instanceId, 'loyalty', baseLoyalty);
-                console.log(`[ActionHandler] Planeswalker ${card.name} enters with ${baseLoyalty} loyalty counters`);
-              } else {
-                console.warn(`[ActionHandler] Planeswalker ${card.name} has no loyalty value! Definition:`, JSON.stringify(card.definition, null, 2).substring(0, 500));
               }
             }
 
-            // Check for ETB triggered abilities instead of resolving immediately
-            console.log(`[ActionHandler] Checking ETB triggers for ${card.name}, oracle: "${(card.oracleText || card.definition?.oracle_text || '').substring(0, 100)}..."`);
-            const etbTriggers = TriggeredAbilityHandler.checkETBTriggers(state, card);
-            console.log(`[ActionHandler] Found ${etbTriggers.length} ETB triggers for ${card.name}`);
-            if (etbTriggers.length > 0) {
-              // Put triggers on the stack - they'll resolve when priority passes
-              TriggeredAbilityHandler.putTriggersOnStack(state, etbTriggers);
+            // Battles enter with defense counters
+            if (CardUtils.isBattle(card) && card.baseDefense) {
+              this.addCounter(state, state.activePlayerId, card.instanceId, 'defense', card.baseDefense);
             }
-            // Note: Non-triggered ETB effects (like static abilities) are handled by the continuous effect layer
           }
         } else {
-          // Non-permanent spell (instant/sorcery) - resolve effects THEN move to graveyard
-          OracleEffectResolver.resolveSpellEffects(state, card, item);
+          // Instant/sorcery - goes to graveyard after "resolving"
+          // Players apply effects manually
           this.moveCardToZone(state, card.instanceId, 'graveyard');
         }
       }
     } else if (item.type === 'ability') {
       const source = state.cards[item.sourceId];
       if (source) {
-        // Equipment special case
+        // Equipment equip ability
         if (CardUtils.isEquipment(source) && source.zone === 'battlefield') {
           const targetId = item.targets[0];
           const target = state.cards[targetId];
@@ -512,46 +325,14 @@ export class ActionHandler {
               console.log(`[ActionHandler] Equipped ${source.name} to ${target.name}`);
             }
           }
-        } else {
-          // Generic ability resolution
-          // Parse the ability from the stack item text and resolve it
-          const abilities = AbilityParser.parseAbilities(source);
-          const matchingAbility = abilities.find(a =>
-            a.effectText.toLowerCase().includes(item.text.toLowerCase().substring(0, 20)) ||
-            item.text.toLowerCase().includes(a.effectText.toLowerCase().substring(0, 20))
-          );
-
-          if (matchingAbility) {
-            this.resolveAbilityEffect(state, item.controllerId, source, matchingAbility, item.targets);
-          } else {
-            // Fallback: create a pseudo-ability from the stack item
-            const pseudoAbility: ParsedAbility = {
-              id: 'stack-ability',
-              type: 'activated',
-              text: item.text,
-              effectText: item.text
-            };
-            this.resolveAbilityEffect(state, item.controllerId, source, pseudoAbility, item.targets);
-          }
         }
+        // Other abilities - players handle effects manually
+        console.log(`[ActionHandler] Ability from ${source.name} resolved - apply effects manually`);
       }
     } else if (item.type === 'trigger') {
-      // Triggered ability resolution
+      // Triggered ability - players handle effects manually
       const source = state.cards[item.sourceId];
-      if (source) {
-        console.log(`[ActionHandler] Resolving triggered ability from ${source.name}`);
-        const resolved = TriggeredAbilityHandler.resolveTrigger(state, item);
-
-        // If the trigger is waiting for a choice (e.g., "if you do" optional costs),
-        // push it back onto the stack so it can continue resolving after the choice
-        if (!resolved && state.pendingChoice) {
-          console.log(`[ActionHandler] Trigger waiting for choice, pushing back to stack`);
-          state.stack.push(item);
-          return; // Don't reset priority - let the choice handler manage it
-        }
-      } else {
-        console.warn(`[ActionHandler] Source card not found for trigger: ${item.sourceId}`);
-      }
+      console.log(`[ActionHandler] Trigger from ${source?.name || 'unknown'} resolved - apply effects manually`);
     }
 
     ActionHandler.resetPriority(state, state.activePlayerId);
@@ -559,32 +340,21 @@ export class ActionHandler {
 
   static drawCard(state: StrictGameState, playerId: string) {
     const allCards = Object.values(state.cards);
-    // Debug logging for empty library issue
     const library = allCards.filter(c => c.ownerId === playerId && c.zone === 'library');
 
     if (library.length > 0) {
-      // Sort by Z index descending (Highest Z is top card)
       library.sort((a, b) => (b.position?.z || 0) - (a.position?.z || 0));
-
-      const card = library[0]; // Take top card
+      const card = library[0];
       this.moveCardToZone(state, card.instanceId, 'hand');
       console.log(`Player ${playerId} draws ${card.name}`);
     } else {
-      console.warn(`[RulesEngine] Player ${playerId} attempts to draw from empty library. Total cards in state: ${allCards.length}. Cards owned by player: ${allCards.filter(c => c.ownerId === playerId).length}. Cards in library: 0`);
-      // Log distribution of zones for this player
-      const zones: Record<string, number> = {};
-      allCards.filter(c => c.ownerId === playerId).forEach(c => {
-        zones[c.zone] = (zones[c.zone] || 0) + 1;
-      });
-      console.log(`[RulesEngine] Player ${playerId} card distribution:`, zones);
+      console.warn(`[ActionHandler] Player ${playerId} attempts to draw from empty library.`);
     }
   }
 
   static createToken(state: StrictGameState, playerId: string, definition: any, position?: { x: number, y: number }) {
-    // Resolve properties from root or card_faces[0] (Scryfall tokens may use either)
     const face = definition.card_faces?.[0];
 
-    // Build type_line from types array if not provided directly
     const typeLine = definition.type_line || face?.type_line ||
       [
         ...(definition.supertypes || []),
@@ -593,24 +363,19 @@ export class ActionHandler {
       ].filter(Boolean).join(' ') +
       (definition.subtypes?.length ? ' — ' + definition.subtypes.join(' ') : '');
 
-    // Resolve power/toughness from root or card_faces[0]
     const power = definition.power ?? face?.power;
     const toughness = definition.toughness ?? face?.toughness;
-
-    // Resolve other properties
     const oracleText = definition.oracle_text || face?.oracle_text || '';
     const keywords = definition.keywords || face?.keywords || [];
     const colors = definition.colors || face?.colors || [];
-
-    // For token images, use ONLY local cached paths (Scryfall URLs are only for downloading to cache)
     const imageUrl = definition.local_path_full || definition.imageUrl || '/images/token.jpg';
     const imageArtCrop = definition.local_path_crop || definition.imageArtCrop || '';
 
     const token: any = {
       instanceId: Math.random().toString(36).substring(7),
       oracleId: definition.oracle_id || 'token-' + Math.random(),
-      scryfallId: definition.id || definition.scryfallId, // Store Scryfall ID for client-side lookups
-      setCode: definition.set || definition.setCode, // Store set code for debugging
+      scryfallId: definition.id || definition.scryfallId,
+      setCode: definition.set || definition.setCode,
       name: definition.name || face?.name,
       controllerId: playerId,
       ownerId: playerId,
@@ -624,10 +389,8 @@ export class ActionHandler {
       types: definition.types || [],
       subtypes: definition.subtypes || [],
       supertypes: definition.supertypes || [],
-      // Type line for CardVisual creature/land detection
       type_line: typeLine,
       typeLine: typeLine,
-      // Oracle text for keyword detection (haste, flying, etc.)
       oracle_text: oracleText,
       oracleText: oracleText,
       basePower: power,
@@ -636,19 +399,17 @@ export class ActionHandler {
       toughness: toughness,
       imageUrl: imageUrl,
       imageArtCrop: imageArtCrop,
-      definition: definition, // Store the full definition for reference
+      definition: definition,
       damageMarked: 0,
       controlledSinceTurn: state.turnCount,
-      isToken: true, // Mark as token - tokens cease to exist when leaving the battlefield
+      isToken: true,
       position: position ? { ...position, z: ++state.maxZ } : { x: Math.random() * 80, y: Math.random() * 80, z: ++state.maxZ }
     };
     state.cards[token.instanceId] = token;
-    console.log(`[ActionHandler] Player ${playerId} created token: ${token.name} (${typeLine}) P/T: ${power}/${toughness} | Image: ${imageUrl ? 'Yes' : 'No'} | ScryfallId: ${token.scryfallId || 'none'}`);
+    console.log(`[ActionHandler] Player ${playerId} created token: ${token.name}`);
 
     const playerName = state.players[playerId]?.name || 'Unknown';
     GameLogger.logTokenCreated(state, token, playerName);
-
-    StateBasedEffects.process(state);
   }
 
   static changeLife(state: StrictGameState, playerId: string, amount: number) {
@@ -657,9 +418,6 @@ export class ActionHandler {
 
     player.life += amount;
     console.log(`[ActionHandler] Player ${playerId} life changed by ${amount}. New life: ${player.life}`);
-
-    // Check for state-based effects like losing the game
-    StateBasedEffects.process(state);
   }
 
   static addCounter(state: StrictGameState, _playerId: string, cardId: string, type: string, count: number = 1) {
@@ -669,6 +427,7 @@ export class ActionHandler {
     if (!card.counters) card.counters = [];
     let remaining = count;
 
+    // +1/+1 and -1/-1 counters cancel each other (Rule 122.3)
     if (type === '+1/+1') {
       const minusIndex = card.counters.findIndex(c => c.type === '-1/-1');
       if (minusIndex !== -1) {
@@ -698,56 +457,52 @@ export class ActionHandler {
       }
     }
 
-    console.log(`[ActionHandler] Player ${_playerId} added ${count} ${type} counter(s) to ${card.name}`);
+    console.log(`[ActionHandler] Added ${count} ${type} counter(s) to ${card.name}`);
 
     const playerName = state.players[_playerId]?.name || 'Unknown';
     GameLogger.logCounterChange(state, card, type, count, playerName);
-
-    StateBasedEffects.process(state);
   }
 
   static tapCard(state: StrictGameState, _playerId: string, cardId: string) {
     const card = state.cards[cardId];
     if (!card) throw new Error("Card not found");
 
-    // If tapping a land on the battlefield, automatically add mana
+    // If tapping a land, auto-add mana
     if (!card.tapped && card.zone === 'battlefield' && (card.types?.includes('Land') || card.typeLine?.includes('Land'))) {
       const availableColors = ManaUtils.getAvailableManaColors(card);
 
       if (availableColors.length > 0) {
         card.tapped = true;
-
-        // For lands that produce a single color, automatically add it
         if (availableColors.length === 1) {
           ManaUtils.addMana(state, _playerId, { color: availableColors[0], amount: 1 });
-          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} and added ${availableColors[0]} mana`);
+          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} for ${availableColors[0]}`);
         } else {
-          // For lands that produce multiple colors, add the first color
-          // (In the future, we could prompt the player to choose)
           const colorToProduce = availableColors[0];
           ManaUtils.addMana(state, _playerId, { color: colorToProduce, amount: 1 });
-          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} and added ${colorToProduce} mana (options: ${availableColors.join(', ')})`);
+          console.log(`[ActionHandler] Player ${_playerId} tapped ${card.name} for ${colorToProduce}`);
         }
         return;
       }
     }
 
-    // For non-lands or untapping, just toggle the tap state
     card.tapped = !card.tapped;
     console.log(`[ActionHandler] Player ${_playerId} ${card.tapped ? 'tapped' : 'untapped'} ${card.name}`);
   }
 
+  /**
+   * Activates an ability - in manual mode, just puts it on the stack.
+   * Players handle timing restrictions and costs manually.
+   */
   static activateAbility(state: StrictGameState, playerId: string, sourceId: string, abilityIndex: number, targets: string[] = []) {
     if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
 
     const source = state.cards[sourceId];
     if (!source) throw new Error("Source card not found");
 
-    // Land Mana Ability Support
+    // Land mana ability - doesn't use stack
     if (source.zone === 'battlefield' && (source.types?.includes('Land') || source.typeLine?.includes('Land'))) {
       if (source.tapped) throw new Error("Land is already tapped.");
 
-      // Determine color to produce
       const availableColors = ManaUtils.getAvailableManaColors(source);
       if (availableColors.length === 0) throw new Error("This land cannot produce mana.");
 
@@ -758,12 +513,11 @@ export class ActionHandler {
 
       source.tapped = true;
       ManaUtils.addMana(state, playerId, { color: colorToProduce, amount: 1 });
-      console.log(`[ActionHandler] Player ${playerId} activated mana ability of ${source.name} producing ${colorToProduce}`);
-      // Mana abilities do not use the stack.
+      console.log(`[ActionHandler] Player ${playerId} activated mana ability of ${source.name}`);
       return;
     }
 
-    // Equip Logic (Hardcoded for now as per previous RulesEngine)
+    // Equipment equip ability
     if (CardUtils.isEquipment(source) && source.zone === 'battlefield') {
       if (state.stack.length > 0 || (state.phase !== 'main1' && state.phase !== 'main2')) {
         throw new Error("Equip can only be used as a sorcery.");
@@ -776,49 +530,21 @@ export class ActionHandler {
         controllerId: playerId,
         type: 'ability',
         name: `Equip ${source.name}`,
-        text: `Attach to target`,
+        text: `Attach to target creature`,
         targets
       });
       ActionHandler.resetPriority(state, playerId);
       return;
     }
 
-    // Generic Activated Ability Support using AbilityParser
-    const activatableAbilities = AbilityParser.getActivatableAbilities(state, source, playerId);
-
-    if (activatableAbilities.length === 0) {
-      throw new Error("No activatable abilities on this card.");
-    }
-
-    if (abilityIndex < 0 || abilityIndex >= activatableAbilities.length) {
-      throw new Error(`Invalid ability index: ${abilityIndex}. Card has ${activatableAbilities.length} abilities.`);
-    }
-
-    const ability = activatableAbilities[abilityIndex];
-    console.log(`[ActionHandler] Player ${playerId} activating ability ${abilityIndex} of ${source.name}: "${ability.text.substring(0, 60)}..."`);
-
-    // Validate and pay costs
-    this.payAbilityCost(state, playerId, source, ability);
-
-    // Mana abilities don't use the stack
-    if (ability.isManaAbility) {
-      this.resolveAbilityEffect(state, playerId, source, ability, targets);
-      return;
-    }
-
-    // Validate targets if required
-    if (ability.requiresTarget && targets.length === 0) {
-      throw new Error("This ability requires a target.");
-    }
-
-    // Put ability on stack
+    // Generic ability - put on stack, players handle the rest
     const stackItem: StackObject = {
       id: Math.random().toString(36).substr(2, 9),
       sourceId: sourceId,
       controllerId: playerId,
       type: 'ability',
-      name: `${source.name}: ${ability.effectText.substring(0, 30)}...`,
-      text: ability.effectText,
+      name: `${source.name} ability`,
+      text: `Ability ${abilityIndex}`,
       targets
     };
 
@@ -831,292 +557,32 @@ export class ActionHandler {
   }
 
   /**
-   * Activates a loyalty ability on a planeswalker
-   * Rule 606.3: Only once per planeswalker per turn, only during main phase with empty stack
+   * Put a triggered ability on the stack manually.
+   * In manual mode, players decide when triggers go on the stack.
    */
-  static activateLoyaltyAbility(
-    state: StrictGameState,
-    playerId: string,
-    planeswalkerInstanceId: string,
-    abilityIndex: number,
-    targets: string[] = []
-  ) {
-    // Validate priority
-    if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
+  static addTriggerToStack(state: StrictGameState, playerId: string, sourceId: string, triggerName: string, triggerText: string, targets: string[] = []) {
+    const source = state.cards[sourceId];
+    if (!source) throw new Error("Source card not found");
 
-    const planeswalker = state.cards[planeswalkerInstanceId];
-    if (!planeswalker) throw new Error("Planeswalker not found");
-    if (!CardUtils.isPlaneswalker(planeswalker)) throw new Error("Card is not a planeswalker");
-    if (planeswalker.controllerId !== playerId) throw new Error("You don't control this planeswalker");
-    if (planeswalker.zone !== 'battlefield') throw new Error("Planeswalker not on battlefield");
-
-    // Rule 606.3: Sorcery speed timing
-    if (state.stack.length > 0) throw new Error("Stack must be empty to activate loyalty ability.");
-    if (state.phase !== 'main1' && state.phase !== 'main2') throw new Error("Can only activate loyalty abilities during main phase.");
-    if (state.activePlayerId !== playerId) throw new Error("Can only activate loyalty abilities on your turn.");
-
-    // Rule 606.3: Only once per planeswalker per turn
-    const activatedThisTurn = state.loyaltyActivatedThisTurn || [];
-    if (activatedThisTurn.includes(planeswalkerInstanceId)) {
-      throw new Error(`Already activated a loyalty ability on ${planeswalker.name} this turn.`);
-    }
-
-    // Get loyalty abilities using AbilityParser
-    const abilities = AbilityParser.parseAbilities(planeswalker);
-    const loyaltyAbilities = abilities.filter(a => a.isLoyaltyAbility);
-
-    if (loyaltyAbilities.length === 0) {
-      throw new Error(`${planeswalker.name} has no loyalty abilities.`);
-    }
-
-    if (abilityIndex < 0 || abilityIndex >= loyaltyAbilities.length) {
-      throw new Error(`Invalid loyalty ability index: ${abilityIndex}. ${planeswalker.name} has ${loyaltyAbilities.length} loyalty abilities.`);
-    }
-
-    const ability = loyaltyAbilities[abilityIndex];
-    const loyaltyCost = ability.cost?.loyaltyCost ?? 0;
-
-    // Get current loyalty from counters
-    const loyaltyCounter = planeswalker.counters?.find(c => c.type === 'loyalty');
-    const currentLoyalty = loyaltyCounter?.count ?? 0;
-
-    // Rule 606.6: Can't activate negative loyalty abilities if not enough loyalty
-    if (loyaltyCost < 0 && Math.abs(loyaltyCost) > currentLoyalty) {
-      throw new Error(`Not enough loyalty counters (have ${currentLoyalty}, need ${Math.abs(loyaltyCost)})`);
-    }
-
-    // Validate targets if required
-    if (ability.requiresTarget && targets.length === 0) {
-      throw new Error("This ability requires a target.");
-    }
-
-    // Pay loyalty cost (Rule 606.4)
-    if (loyaltyCost > 0) {
-      // Add loyalty counters
-      this.addCounter(state, playerId, planeswalkerInstanceId, 'loyalty', loyaltyCost);
-      console.log(`[ActionHandler] Added ${loyaltyCost} loyalty to ${planeswalker.name}`);
-    } else if (loyaltyCost < 0 && loyaltyCounter) {
-      // Remove loyalty counters
-      loyaltyCounter.count += loyaltyCost; // Adding negative number removes counters
-      console.log(`[ActionHandler] Removed ${Math.abs(loyaltyCost)} loyalty from ${planeswalker.name}`);
-    }
-    // loyaltyCost === 0 requires no change
-
-    // Track activation for this turn
-    if (!state.loyaltyActivatedThisTurn) {
-      state.loyaltyActivatedThisTurn = [];
-    }
-    state.loyaltyActivatedThisTurn.push(planeswalkerInstanceId);
-
-    // Put ability on stack
     const stackItem: StackObject = {
       id: Math.random().toString(36).substr(2, 9),
-      sourceId: planeswalkerInstanceId,
+      sourceId: sourceId,
       controllerId: playerId,
-      type: 'ability',
-      name: `${planeswalker.name}: ${ability.effectText.substring(0, 30)}...`,
-      text: ability.effectText,
+      type: 'trigger',
+      name: triggerName || `${source.name} trigger`,
+      text: triggerText || 'Triggered ability',
       targets
     };
 
     state.stack.push(stackItem);
 
     const playerName = state.players[playerId]?.name || 'Unknown';
-    const costDisplay = loyaltyCost >= 0 ? `+${loyaltyCost}` : `${loyaltyCost}`;
-    GameLogger.log(
-      state,
-      `${playerName} activates {${planeswalker.name}}'s ${costDisplay} ability`,
-      'action',
-      planeswalker.name,
-      [planeswalker]
-    );
+    GameLogger.log(state, `${playerName} puts {${source.name}} trigger on stack`, 'action', source.name, [source]);
 
-    console.log(`[ActionHandler] Player ${playerId} activated ${planeswalker.name}'s ${costDisplay} loyalty ability`);
-    ActionHandler.resetPriority(state, playerId);
-  }
-
-  /**
-   * Pays the cost for an activated ability
-   */
-  static payAbilityCost(state: StrictGameState, playerId: string, source: any, ability: ParsedAbility) {
-    const cost = ability.cost;
-    if (!cost) return;
-
-    // Pay tap cost
-    if (cost.tap) {
-      if (source.tapped) throw new Error(`${source.name} is already tapped.`);
-
-      // Check summoning sickness for creatures
-      if (source.types?.includes('Creature')) {
-        const hasHaste = source.keywords?.includes('Haste');
-        if (source.controlledSinceTurn === state.turnCount && !hasHaste) {
-          throw new Error(`${source.name} has summoning sickness.`);
-        }
-      }
-
-      source.tapped = true;
-    }
-
-    // Pay mana cost
-    if (cost.mana) {
-      ManaUtils.payManaCost(state, playerId, cost.mana);
-    }
-
-    // Pay life cost
-    if (cost.life) {
-      const player = state.players[playerId];
-      if (!player || player.life < cost.life) {
-        throw new Error(`Not enough life to pay ${cost.life} life.`);
-      }
-      player.life -= cost.life;
-      console.log(`[ActionHandler] Player ${playerId} paid ${cost.life} life`);
-    }
-
-    // Sacrifice cost
-    if (cost.sacrifice) {
-      // For "sacrifice this permanent" or "sacrifice ~"
-      const sacrificeThis = cost.sacrifice.toLowerCase().includes('this') ||
-                           cost.sacrifice.toLowerCase().includes(source.name.toLowerCase());
-
-      if (sacrificeThis) {
-        this.moveCardToZone(state, source.instanceId, 'graveyard');
-        console.log(`[ActionHandler] ${source.name} sacrificed as cost`);
-      } else {
-        // For "sacrifice a creature" etc. - would need additional targeting
-        // This is a simplification - full implementation would require choice system
-        console.warn(`[ActionHandler] Sacrifice cost "${cost.sacrifice}" requires manual selection`);
-      }
-    }
-
-    // Remove counters cost
-    if (cost.removeCounters) {
-      const counterType = cost.removeCounters.type;
-      const count = cost.removeCounters.count;
-      const counter = source.counters?.find((c: any) => c.type.toLowerCase().includes(counterType.toLowerCase()));
-
-      if (!counter || counter.count < count) {
-        throw new Error(`Not enough ${counterType} counters to remove.`);
-      }
-
-      counter.count -= count;
-      if (counter.count <= 0) {
-        source.counters = source.counters.filter((c: any) => c !== counter);
-      }
-      console.log(`[ActionHandler] Removed ${count} ${counterType} counter(s) from ${source.name}`);
-    }
-  }
-
-  /**
-   * Resolves the effect of an activated ability (for mana abilities or after stack resolution)
-   */
-  static resolveAbilityEffect(state: StrictGameState, playerId: string, source: any, ability: ParsedAbility, targets: string[] = []) {
-    const effectText = ability.effectText.toLowerCase();
-
-    // Mana ability: Add mana
-    const manaMatch = effectText.match(/add\s+(\{[wubrgc]\})/i);
-    if (manaMatch) {
-      const colorSymbol = manaMatch[1].toUpperCase();
-      const colorMap: Record<string, string> = {
-        '{W}': 'W', '{U}': 'U', '{B}': 'B', '{R}': 'R', '{G}': 'G', '{C}': 'C'
-      };
-      const color = colorMap[colorSymbol] || 'C';
-      ManaUtils.addMana(state, playerId, { color, amount: 1 });
-      console.log(`[ActionHandler] ${source.name} added {${color}} mana`);
-      return;
-    }
-
-    // Add multiple mana (e.g., "Add {G}{G}")
-    const multiManaMatch = effectText.match(/add\s+((?:\{[wubrgc]\})+)/gi);
-    if (multiManaMatch) {
-      const manaString = multiManaMatch[0];
-      const symbols = manaString.match(/\{[wubrgc]\}/gi) || [];
-      for (const sym of symbols) {
-        const color = sym.replace(/[{}]/g, '').toUpperCase();
-        ManaUtils.addMana(state, playerId, { color, amount: 1 });
-      }
-      console.log(`[ActionHandler] ${source.name} added mana: ${symbols.join('')}`);
-      return;
-    }
-
-    // Firebreathing-style pump ability: +X/+Y until end of turn
-    const pumpEffect = AbilityParser.parseFirebreathingAbility(ability);
-    if (pumpEffect && source.zone === 'battlefield') {
-      if (!source.modifiers) source.modifiers = [];
-      source.modifiers.push({
-        sourceId: source.instanceId,
-        type: 'pt_boost',
-        value: { power: pumpEffect.power, toughness: pumpEffect.toughness },
-        untilEndOfTurn: true
-      });
-
-      // Immediately apply the boost
-      source.power += pumpEffect.power;
-      source.toughness += pumpEffect.toughness;
-
-      console.log(`[ActionHandler] ${source.name} gets ${pumpEffect.power >= 0 ? '+' : ''}${pumpEffect.power}/${pumpEffect.toughness >= 0 ? '+' : ''}${pumpEffect.toughness} until end of turn`);
-      GameLogger.log(state, `{${source.name}} gets ${pumpEffect.power >= 0 ? '+' : ''}${pumpEffect.power}/${pumpEffect.toughness >= 0 ? '+' : ''}${pumpEffect.toughness}`, 'action', source.name, [source]);
-      return;
-    }
-
-    // Draw cards
-    const drawMatch = effectText.match(/draw\s+(a card|(\d+)\s+cards?)/i);
-    if (drawMatch) {
-      const count = drawMatch[2] ? parseInt(drawMatch[2]) : 1;
-      for (let i = 0; i < count; i++) {
-        this.drawCard(state, playerId);
-      }
-      return;
-    }
-
-    // Gain life
-    const lifeMatch = effectText.match(/gain\s+(\d+)\s+life/i);
-    if (lifeMatch) {
-      const amount = parseInt(lifeMatch[1]);
-      this.changeLife(state, playerId, amount);
-      return;
-    }
-
-    // Damage to target
-    if (targets.length > 0) {
-      const damageMatch = effectText.match(/deals?\s+(\d+)\s+damage/i);
-      if (damageMatch) {
-        const damage = parseInt(damageMatch[1]);
-        for (const targetId of targets) {
-          const targetCard = state.cards[targetId];
-          const targetPlayer = state.players[targetId];
-
-          if (targetCard && targetCard.zone === 'battlefield') {
-            targetCard.damageMarked = (targetCard.damageMarked || 0) + damage;
-            console.log(`[ActionHandler] ${source.name} deals ${damage} damage to ${targetCard.name}`);
-            GameLogger.log(state, `{${source.name}} deals ${damage} damage to {${targetCard.name}}`, 'action', source.name, [source, targetCard]);
-          } else if (targetPlayer) {
-            targetPlayer.life -= damage;
-            console.log(`[ActionHandler] ${source.name} deals ${damage} damage to ${targetPlayer.name}`);
-            GameLogger.log(state, `{${source.name}} deals ${damage} damage to ${targetPlayer.name}`, 'action', source.name, [source]);
-          }
-        }
-        StateBasedEffects.process(state);
-        return;
-      }
-    }
-
-    // Fallback: Use OracleEffectResolver for complex effects
-    console.log(`[ActionHandler] Using OracleEffectResolver for ability: ${ability.effectText.substring(0, 50)}...`);
-    // Create a pseudo-stack item for the resolver
-    const pseudoStackItem: StackObject = {
-      id: 'ability-resolve',
-      sourceId: source.instanceId,
-      controllerId: playerId,
-      type: 'ability',
-      name: source.name,
-      text: ability.effectText,
-      targets
-    };
-    OracleEffectResolver.resolveSpellEffects(state, source, pseudoStackItem);
+    console.log(`[ActionHandler] Trigger added to stack: ${stackItem.name}`);
   }
 
   static resetPriority(state: StrictGameState, playerId: string) {
-    StateBasedEffects.process(state);
     state.priorityPlayerId = playerId;
     state.passedPriorityCount = 0;
     Object.values(state.players).forEach(p => p.hasPassed = false);

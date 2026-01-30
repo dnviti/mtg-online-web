@@ -105,49 +105,22 @@ export const initializeSocket = (io: Server) => {
             // The 'draft_complete' event is emitted by draftManager when a draft transitions to 'deck_building' or 'complete'.
             // This ensures persistence happens once and reliably.
 
-            Object.values(draft.players).forEach(dp => {
-              if (dp.isBot && dp.deck && dp.deck.length > 0) {
-                const roomPlayer = room.players.find(rp => rp.id === dp.id);
-                if (roomPlayer && (!roomPlayer.ready || !roomPlayer.deck || roomPlayer.deck.length === 0)) {
-                  // This calls setPlayerReady which SAVES to Redis. Good.
-                  // But we call it in a loop.
-                  // Ideally we batch or just let it race/overwrite.
-                  // `setPlayerReady` locks. So it is safe but slow.
-                  roomManager.setPlayerReady(roomId, dp.id, dp.deck).then(updated => {
-                    if (updated) io.to(roomId).emit('room_update', updated);
-                  });
-                  console.log(`[Sync] Bot ${dp.id} synced deck (${dp.deck.length} cards).`);
-                }
-              }
-            });
-
-            // Check if all ready after updates?
-            // The `setPlayerReady` logic inside checks nothing?
-            // In old code, we checked `if (activePlayers.every(p => p.ready))`.
-            // We should do that check here or in RoomManager.
-
-            // Let's refetch room to see latest state after bot updates (or use the variable if we updated it)
-            // Ideally we re-fetch briefly to ensure we have latest bot-readiness if setPlayerReady finished?
-            // setPlayerReady is async.
-            // For now, let's keep the existing logic but knowing room might be slightly stale regarding ready-state if we don't await.
-
-            // Re-fetch room to get strictly up to date state before checking tournament
+            // Check if all players ready to start tournament
             const freshRoom = await roomManager.getRoom(roomId);
             if (freshRoom) {
               const activePlayers = freshRoom.players.filter(p => p.role === 'player');
               if (activePlayers.length > 0 && activePlayers.every(p => p.ready) && freshRoom.status !== 'tournament') {
-                console.log(`All players ready (including bots) in room ${roomId}. Starting TOURNAMENT.`);
+                console.log(`All players ready in room ${roomId}. Starting TOURNAMENT.`);
                 freshRoom.status = 'tournament';
 
                 const tournament = tournamentManager.createTournament(roomId, freshRoom.players.map(p => ({
                   id: p.id,
                   name: p.name,
-                  isBot: !!p.isBot,
                   deck: p.deck
                 })));
 
                 freshRoom.tournament = tournament;
-                await roomManager.saveRoom(freshRoom); // Need public save!
+                await roomManager.saveRoom(freshRoom);
 
                 io.to(roomId).emit('room_update', freshRoom);
                 io.to(roomId).emit('tournament_update', tournament);

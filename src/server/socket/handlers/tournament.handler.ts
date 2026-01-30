@@ -100,8 +100,8 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
             const deck2 = readyState.decks[p2.id];
 
             await gameManager.createGame(matchId, [
-              { id: p1.id, name: p1.name, isBot: p1.isBot },
-              { id: p2.id, name: p2.name, isBot: p2.isBot }
+              { id: p1.id, name: p1.name },
+              { id: p2.id, name: p2.name }
             ]);
 
             const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
@@ -291,8 +291,6 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
 
             // Start Game (Draw Hands)
             await gameManager.startGame(matchId);
-
-            await gameManager.triggerBotCheck(matchId);
 
             const latestGame = await gameManager.getGame(matchId);
             io.to(matchId).emit('game_update', latestGame);

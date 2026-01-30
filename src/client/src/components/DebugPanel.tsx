@@ -7,7 +7,6 @@ import {
   Undo2,
   Redo2,
   User,
-  Bot,
   Clock,
   CheckCircle,
   XCircle,
@@ -200,11 +199,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ className, maxHeight = '
                 <div className="flex flex-col min-w-0 flex-1">
                   {/* Actor and Action Type */}
                   <div className="flex items-center gap-2 mb-0.5">
-                    {item.isBot ? (
-                      <Bot className="w-3 h-3 text-purple-400" />
-                    ) : (
-                      <User className="w-3 h-3 text-blue-400" />
-                    )}
+                    <User className="w-3 h-3 text-blue-400" />
                     <span className="text-[10px] font-bold text-slate-400">
                       {item.actorName}
                     </span>
@@ -272,11 +267,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({ className, maxHeight = '
               <div className="flex flex-col min-w-0 flex-1">
                 {/* Actor and Action Type */}
                 <div className="flex items-center gap-2 mb-0.5">
-                  {pauseEvent.isBot ? (
-                    <Bot className="w-3 h-3 text-purple-400" />
-                  ) : (
-                    <User className="w-3 h-3 text-blue-400" />
-                  )}
+                  <User className="w-3 h-3 text-blue-400" />
                   <span className="text-[10px] font-bold text-slate-400">
                     {pauseEvent.actorName}
                   </span>

@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 export interface TournamentPlayer {
   id: string;
   name: string;
-  isBot: boolean;
   deck?: any[]; // Snapshot of deck
 }
 
@@ -184,11 +183,6 @@ export class TournamentManager extends EventEmitter {
           continue;
         }
 
-        if (m.player1?.isBot && m.player2?.isBot) {
-          const winner = Math.random() > 0.5 ? m.player1 : m.player2;
-          console.log(`[Tournament] Auto-resolving Bot Match ${m.id}: ${m.player1.name} vs ${m.player2.name} -> Winner: ${winner.name}`);
-          this.recordMatchResult(t, m.id, winner.id);
-        }
       }
     }
   }
@@ -212,8 +206,8 @@ export class TournamentManager extends EventEmitter {
     const p2 = match.player2;
 
     if (p1 && p2) {
-      const p1Ready = p1.isBot || match.readyPlayers.includes(p1.id);
-      const p2Ready = p2.isBot || match.readyPlayers.includes(p2.id);
+      const p1Ready = match.readyPlayers.includes(p1.id);
+      const p2Ready = match.readyPlayers.includes(p2.id);
 
       if (p1Ready && p2Ready) {
         match.status = 'in_progress';

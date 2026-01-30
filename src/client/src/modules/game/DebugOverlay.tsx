@@ -6,7 +6,6 @@ import {
   Redo2,
   Bug,
   User,
-  Bot,
   Zap,
   Target,
   Info,
@@ -75,20 +74,12 @@ export const DebugOverlay: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Actor Info */}
           <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-              pauseEvent.isBot ? 'bg-purple-500/20 border border-purple-500/50' : 'bg-emerald-500/20 border border-emerald-500/50'
-            }`}>
-              {pauseEvent.isBot ? (
-                <Bot className="w-5 h-5 text-purple-400" />
-              ) : (
-                <User className="w-5 h-5 text-emerald-400" />
-              )}
+            <div className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500/20 border border-emerald-500/50">
+              <User className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <p className="text-white font-medium">{pauseEvent.actorName}</p>
-              <p className="text-sm text-slate-400">
-                {pauseEvent.isBot ? 'Bot Player' : 'Human Player'}
-              </p>
+              <p className="text-sm text-slate-400">Player</p>
             </div>
           </div>
 

@@ -1,7 +1,6 @@
 import { StrictGameState, Phase, Step } from '../types';
 import { ActionHandler } from './ActionHandler';
 import { CombatManager } from './CombatManager';
-import { TriggeredAbilityHandler } from './TriggeredAbilityHandler';
 
 /**
  * PhaseManager
@@ -133,29 +132,23 @@ export class PhaseManager {
         }
       });
       state.step = 'upkeep'; // Skip priority in untap
-      // Check for upkeep triggers now that we're in upkeep
-      this.checkAndFireBeginningTriggers(state);
+      // Manual play mode - players add triggers manually
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
 
-    // Check for upkeep triggers if we entered upkeep directly
     if (step === 'upkeep') {
-      this.checkAndFireBeginningTriggers(state);
+      // Manual play mode - players add triggers manually
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
 
     if (step === 'draw') {
-      const player = state.players[activePlayerId];
+      // Manual play mode - player must draw manually
+      // Skip draw on turn 1 for first player in 2+ player games
       if (state.turnCount > 1 || state.turnOrder.length > 2) {
-        if (player && player.isBot) {
-          ActionHandler.drawCard(state, activePlayerId);
-          ActionHandler.resetPriority(state, activePlayerId);
-        } else {
-          // Manual draw wait
-          if (state.priorityPlayerId !== activePlayerId) state.priorityPlayerId = activePlayerId;
-        }
+        // Wait for player to draw manually
+        if (state.priorityPlayerId !== activePlayerId) state.priorityPlayerId = activePlayerId;
       } else {
         ActionHandler.resetPriority(state, activePlayerId); // Skip draw turn 1
       }
@@ -163,8 +156,7 @@ export class PhaseManager {
     }
 
     if (step === 'end') {
-      // Check for end step triggers ("at the beginning of the end step")
-      this.checkAndFireBeginningTriggers(state);
+      // Manual play mode - players add triggers manually
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
@@ -185,8 +177,7 @@ export class PhaseManager {
     }
 
     if (step === 'beginning_combat') {
-      // Check for beginning of combat triggers
-      this.checkAndFireBeginningTriggers(state);
+      // Manual play mode - players add triggers manually
       ActionHandler.resetPriority(state, activePlayerId);
       return;
     }
@@ -280,24 +271,7 @@ export class PhaseManager {
     return true;
   }
 
-  /**
-   * Helper to check and fire beginning-of-phase/step triggers.
-   * Checks for both regular triggers and delayed triggers that match the current phase/step.
-   */
-  private static checkAndFireBeginningTriggers(state: StrictGameState): void {
-    // Check for regular beginning-of-phase/step triggers
-    const beginningTriggers = TriggeredAbilityHandler.checkBeginningTriggers(state, state.phase, state.step);
-
-    // Check for delayed triggers that should fire now
-    const delayedTriggers = TriggeredAbilityHandler.checkDelayedTriggers(state, state.phase, state.step);
-
-    // Combine all triggers
-    const allTriggers = [...beginningTriggers, ...delayedTriggers];
-
-    if (allTriggers.length > 0) {
-      console.log(`[PhaseManager] Found ${beginningTriggers.length} beginning trigger(s) and ${delayedTriggers.length} delayed trigger(s) at ${state.step}`);
-      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, allTriggers);
-      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
-    }
-  }
+  // Note: In manual play mode, triggers are not automatically detected or fired.
+  // Players are responsible for recognizing triggered abilities and manually
+  // adding them to the stack using the add_trigger action.
 }

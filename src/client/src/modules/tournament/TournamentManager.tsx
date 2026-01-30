@@ -5,7 +5,6 @@ import { socketService } from '../../services/SocketService';
 interface TournamentPlayer {
   id: string;
   name: string;
-  isBot: boolean;
 }
 
 interface Match {

@@ -67,7 +67,6 @@ export class DebugManager {
       detailedExplanation: pending.detailedExplanation,
       actorId: pending.actorId,
       actorName: pending.actorName,
-      isBot: pending.isBot,
       sourceCard: pending.sourceCardId ? {
         instanceId: pending.sourceCardId,
         name: pending.sourceCardName || 'Unknown',
@@ -178,7 +177,6 @@ export class DebugManager {
       actionParams: { ...action },
       actorId,
       actorName: player?.name || 'Unknown',
-      isBot: player?.isBot ?? false,
       description,
       explanation,
       detailedExplanation,
@@ -205,7 +203,6 @@ export class DebugManager {
       detailedExplanation,
       actorId,
       actorName: player?.name || 'Unknown',
-      isBot: player?.isBot ?? false,
       sourceCard: sourceCard ? {
         instanceId: sourceCard.instanceId,
         name: sourceCard.name,
@@ -401,7 +398,6 @@ export class DebugManager {
       timestamp: snapshot.timestamp,
       actionType: snapshot.actionType,
       actorName: snapshot.actorName,
-      isBot: snapshot.isBot,
       description: snapshot.description,
       status: snapshot.executed ? 'executed' : snapshot.cancelled ? 'cancelled' : 'pending',
       sourceCard: snapshot.sourceCardId ? {
@@ -496,7 +492,6 @@ export class DebugManager {
       actionType: snapshot.actionType,
       actorId: snapshot.actorId,
       actorName: snapshot.actorName,
-      isBot: snapshot.isBot,
       description: snapshot.description,
       status,
       sourceCardName: snapshot.sourceCardName,
@@ -817,7 +812,7 @@ export class DebugManager {
     action: any,
     sourceCard: CardObject | null,
     game: StrictGameState,
-    player: { name: string; isBot?: boolean } | undefined
+    player: { name: string } | undefined
   ): DebugDetailedExplanation {
     const actionType = action.type.toUpperCase();
     const steps: DebugExplanationStep[] = [];

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useGameLog, GameLogEntry, CardReference } from '../contexts/GameLogContext';
-import { ScrollText, User, Bot, Info, AlertTriangle, ShieldAlert, ArrowRightLeft } from 'lucide-react';
+import { ScrollText, User, Info, AlertTriangle, ShieldAlert, ArrowRightLeft } from 'lucide-react';
 
 interface GameLogPanelProps {
   className?: string;
@@ -65,7 +65,6 @@ export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight
     if (type === 'error') return <AlertTriangle className="w-3 h-3 text-red-500" />;
     if (type === 'combat') return <ShieldAlert className="w-3 h-3 text-red-400" />;
     if (type === 'zone') return <ArrowRightLeft className="w-3 h-3 text-purple-400" />;
-    if (source.includes('Bot')) return <Bot className="w-3 h-3 text-indigo-400" />;
     return <User className="w-3 h-3 text-blue-400" />;
   };
 

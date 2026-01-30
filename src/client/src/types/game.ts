@@ -79,7 +79,6 @@ export interface PlayerState {
   manaPool?: Record<string, number>;
   handKept?: boolean;
   mulliganCount?: number;
-  isBot?: boolean;
   stopRequested?: boolean; // Server-side stop/suspend state
 }
 
@@ -278,7 +277,6 @@ export interface DebugPauseEvent {
   // Actor info
   actorId: string;
   actorName: string;
-  isBot: boolean;
 
   // Source card (if applicable)
   sourceCard?: {
@@ -319,7 +317,6 @@ export interface DebugHistoryItem {
   timestamp: number;
   actionType: string;
   actorName: string;
-  isBot: boolean;
   description: string;
   status: 'executed' | 'cancelled' | 'pending';
   sourceCard?: {

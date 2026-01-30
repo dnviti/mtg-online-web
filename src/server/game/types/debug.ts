@@ -13,7 +13,6 @@ export interface DebugSnapshot {
   actionParams: any;
   actorId: string;
   actorName: string;
-  isBot: boolean;
 
   // Human-readable descriptions
   description: string;  // e.g., "Alice casts Lightning Bolt"
@@ -69,7 +68,6 @@ export interface DebugPauseEvent {
   // Actor info
   actorId: string;
   actorName: string;
-  isBot: boolean;
 
   // Source card (if applicable)
   sourceCard?: {
@@ -110,7 +108,6 @@ export interface DebugHistoryItem {
   timestamp: number;
   actionType: string;
   actorName: string;
-  isBot: boolean;
   description: string;
   status: 'executed' | 'cancelled' | 'pending';
   sourceCard?: {

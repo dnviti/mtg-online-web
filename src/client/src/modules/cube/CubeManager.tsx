@@ -872,7 +872,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
                     <div className="h-px bg-slate-700/50 mx-1" />
 
-                    {/* Test Solo */}
+                    {/* Start Draft */}
                     <button
                       onClick={handleStartSoloTest}
                       disabled={loading}
@@ -880,8 +880,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                     >
                       <PlayCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                       <div>
-                        <span className="block text-sm font-bold">Test Solo</span>
-                        <span className="block text-[10px] text-slate-400 leading-none mt-0.5">Draft against bots</span>
+                        <span className="block text-sm font-bold">Start Draft</span>
+                        <span className="block text-[10px] text-slate-400 leading-none mt-0.5">Create online draft room</span>
                       </div>
                     </button>
 

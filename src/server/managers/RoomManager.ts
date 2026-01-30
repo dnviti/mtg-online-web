@@ -12,7 +12,6 @@ interface Player {
   deck?: Card[];
   socketId?: string; // Current or last known socket
   isOffline?: boolean;
-  isBot?: boolean;
   matchId?: string; // Current match in tournament
   pool?: Card[]; // Drafted cards
 }
@@ -449,53 +448,6 @@ export class RoomManager {
     }
   }
 
-  async addBot(roomId: string): Promise<Room | null> {
-    if (!await this.acquireLock(roomId)) return null;
-    try {
-      const room = await this.getRoomState(roomId);
-      if (!room) return null;
-      room.lastActive = Date.now();
-
-      if (room.players.length >= room.maxPlayers) return null;
-
-      const botNumber = room.players.filter(p => p.isBot).length + 1;
-      const botId = `bot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-      const botPlayer: Player = {
-        id: botId,
-        name: `Bot ${botNumber}`,
-        isHost: false,
-        role: 'player',
-        ready: true,
-        isOffline: false,
-        isBot: true
-      };
-
-      room.players.push(botPlayer);
-      await this.saveRoomState(room);
-      return room;
-    } finally {
-      await this.releaseLock(roomId);
-    }
-  }
-
-  async removeBot(roomId: string, botId: string): Promise<Room | null> {
-    if (!await this.acquireLock(roomId)) return null;
-    try {
-      const room = await this.getRoomState(roomId);
-      if (!room) return null;
-      room.lastActive = Date.now();
-
-      const botIndex = room.players.findIndex(p => p.id === botId && p.isBot);
-      if (botIndex !== -1) {
-        room.players.splice(botIndex, 1);
-        await this.saveRoomState(room);
-        return room;
-      }
-      return null;
-    } finally {
-      await this.releaseLock(roomId);
-    }
-  }
 
   async getPlayerBySocket(socketId: string): Promise<{ player: Player, room: Room } | null> {
     const mappingStr = await this.store.get(`socket_map:${socketId}`);

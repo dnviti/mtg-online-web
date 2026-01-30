@@ -24,7 +24,6 @@ export interface PlayerDraftState {
   isWaiting: boolean; // True if finished current pack round
   pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
   pickExpiresAt: number; // Timestamp when auto-pick occurs
-  isBot: boolean;
   deck?: Card[]; // Store constructed deck here
 }
 
