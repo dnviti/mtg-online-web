@@ -167,6 +167,29 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
     }
   });
 
+  // Update room format (host only, waiting status only)
+  socket.on('update_room_format', async ({ roomId, format }, callback) => {
+    const context = await getContext();
+    if (!context) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Not authenticated' });
+      return;
+    }
+
+    if (!context.player.isHost) {
+      if (typeof callback === 'function') callback({ success: false, message: 'Only the host can change the format' });
+      return;
+    }
+
+    const room = await roomManager.updateRoomFormat(roomId, context.player.id, format);
+    if (room) {
+      io.to(roomId).emit('room_update', room);
+      console.log(`Room ${roomId} format updated to ${format} by host ${context.player.id}`);
+      if (typeof callback === 'function') callback({ success: true, room });
+    } else {
+      if (typeof callback === 'function') callback({ success: false, message: 'Failed to update format. Room must be in waiting status.' });
+    }
+  });
+
   // Note: add_bot and remove_bot handlers removed - manual play mode does not support bots
 
   socket.on('save_deck', async ({ roomId, deck }) => {

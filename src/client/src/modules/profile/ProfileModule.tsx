@@ -1,9 +1,10 @@
 import React from 'react';
 import { useUser } from '../../contexts/UserContext';
-import { LogOut, Trash2, Calendar, Layers, Clock } from 'lucide-react';
+import { LogOut, Trash2, Calendar, Layers, Clock, Download } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 import { VisualDeckEditor } from './VisualDeckEditor';
 import { CreateDeckModal } from './CreateDeckModal';
+import { ImportDeckModal } from './ImportDeckModal';
 
 export const ProfileModule: React.FC = () => {
     const { user, logout, deleteDeck } = useUser();
@@ -12,6 +13,7 @@ export const ProfileModule: React.FC = () => {
     const [editingDeck, setEditingDeck] = React.useState<any>(null);
     const [isCreating, setIsCreating] = React.useState(false);
     const [isNaming, setIsNaming] = React.useState(false);
+    const [isImporting, setIsImporting] = React.useState(false);
     const [newDeckDetails, setNewDeckDetails] = React.useState<{ name: string, format: string } | null>(null);
 
     if (!user) return null;
@@ -84,6 +86,12 @@ export const ProfileModule: React.FC = () => {
                         <Layers className="w-4 h-4" /> New Deck
                     </button>
                     <button
+                        onClick={() => setIsImporting(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors shadow-lg"
+                    >
+                        <Download className="w-4 h-4" /> Import
+                    </button>
+                    <button
                         onClick={logout}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-600"
                     >
@@ -151,6 +159,37 @@ export const ProfileModule: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Import Deck Modal */}
+            <ImportDeckModal
+                isOpen={isImporting}
+                onClose={() => setIsImporting(false)}
+                onImport={(importedDeck) => {
+                    // Convert imported deck to our format and open editor
+                    const cards = [
+                        ...(importedDeck.commanders || []).map(c => ({ ...c, isCommander: true })),
+                        ...importedDeck.cards,
+                        ...(importedDeck.sideboard || []).map(c => ({ ...c, isSideboard: true }))
+                    ];
+                    setNewDeckDetails({
+                        name: importedDeck.name,
+                        format: importedDeck.format
+                    });
+                    setEditingDeck({
+                        name: importedDeck.name,
+                        format: importedDeck.format,
+                        cards: cards.map(c => ({
+                            name: c.name,
+                            quantity: c.quantity,
+                            isCommander: (c as any).isCommander,
+                            isSideboard: (c as any).isSideboard
+                        }))
+                    });
+                    setIsImporting(false);
+                    setIsCreating(true);
+                    showToast(`Mazzo "${importedDeck.name}" importato! Modifica e salva.`, 'success');
+                }}
+            />
         </div>
     );
 };

@@ -23,23 +23,46 @@ export const DeckSelectionModal: React.FC<DeckSelectionModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Helper to check format compatibility
+  const isFormatCompatible = (deckFormat: string | undefined, roomFormat: string | undefined): boolean => {
+    if (!roomFormat) return true; // No room format specified, all decks allowed
+    if (!deckFormat) return false; // Deck has no format, don't allow
+
+    const normalizedDeckFormat = deckFormat.toLowerCase();
+    const normalizedRoomFormat = roomFormat.toLowerCase();
+
+    // Exact match
+    if (normalizedDeckFormat === normalizedRoomFormat) return true;
+
+    // Limited formats are interchangeable
+    if (['draft', 'sealed', 'limited'].includes(normalizedRoomFormat)) {
+      return ['draft', 'sealed', 'limited'].includes(normalizedDeckFormat);
+    }
+
+    return false;
+  };
+
   const filteredDecks = (user?.decks || []).filter(deck => {
     // Filter by name
     if (search && !deck.name.toLowerCase().includes(search.toLowerCase())) return false;
 
-    // Filter by format if strictly required? 
-    // Usually we just warn, or maybe just show badge.
-    // For now, let's show all but maybe sort by format match?
+    // Strict format filtering when format is specified
+    if (format && !isFormatCompatible(deck.format, format)) return false;
+
     return true;
   }).sort((a, b) => {
-    // Sort by format match
-    const aMatch = a.format?.toLowerCase() === format?.toLowerCase();
-    const bMatch = b.format?.toLowerCase() === format?.toLowerCase();
-    if (aMatch && !bMatch) return -1;
-    if (!aMatch && bMatch) return 1;
+    // Sort by format match (exact match first)
+    const aExact = a.format?.toLowerCase() === format?.toLowerCase();
+    const bExact = b.format?.toLowerCase() === format?.toLowerCase();
+    if (aExact && !bExact) return -1;
+    if (!aExact && bExact) return 1;
     // Then by date
     return b.createdAt - a.createdAt;
   });
+
+  // Check if user has any decks at all
+  const hasAnyDecks = (user?.decks || []).length > 0;
+  const hasMatchingDecks = filteredDecks.length > 0;
 
   const selectedDeck = user?.decks.find(d => d.id === selectedDeckId);
 
@@ -108,10 +131,28 @@ export const DeckSelectionModal: React.FC<DeckSelectionModalProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-slate-900/50 custom-scrollbar">
-          {filteredDecks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-500 opacity-50">
-              <Layers className="w-16 h-16 mb-4" />
-              <p>No decks found. Try building a new one!</p>
+          {!hasMatchingDecks ? (
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+              <Layers className="w-16 h-16 mb-4 opacity-50" />
+              {!hasAnyDecks ? (
+                <>
+                  <p className="text-lg font-medium text-slate-400">No decks found</p>
+                  <p className="text-sm mt-2">Create a new deck to get started!</p>
+                </>
+              ) : format ? (
+                <>
+                  <p className="text-lg font-medium text-slate-400">No decks match <span className="text-emerald-400">{format}</span> format</p>
+                  <p className="text-sm mt-2">Create or import a deck for this format.</p>
+                  <p className="text-xs mt-4 text-slate-600">
+                    You have {user?.decks.length} deck{(user?.decks.length || 0) > 1 ? 's' : ''} in other formats.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-medium text-slate-400">No decks match your search</p>
+                  <p className="text-sm mt-2">Try a different search term.</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

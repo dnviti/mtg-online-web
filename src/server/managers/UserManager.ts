@@ -13,6 +13,9 @@ export interface User {
     id: string;
     username: string;
     passwordHash: string;
+    email?: string;
+    googleId?: string;
+    authProvider: 'local' | 'google';
     createdAt: Date;
 }
 
@@ -69,6 +72,7 @@ export class UserManager {
             id: userId,
             username,
             passwordHash,
+            authProvider: 'local',
             createdAt: new Date(now)
         };
 
@@ -78,6 +82,7 @@ export class UserManager {
             id: userId,
             username,
             passwordHash,
+            authProvider: 'local',
             createdAt: now
         });
         pipeline.hset('users:lookup:username', username.toLowerCase(), userId);
@@ -115,6 +120,9 @@ export class UserManager {
             id: userData.id,
             username: userData.username,
             passwordHash: userData.passwordHash,
+            email: userData.email,
+            googleId: userData.googleId,
+            authProvider: (userData.authProvider as 'local' | 'google') || 'local',
             createdAt: new Date(userData.createdAt)
         };
 
@@ -172,6 +180,9 @@ export class UserManager {
         return {
             id: user.id,
             username: user.username,
+            email: user.email,
+            googleId: user.googleId,
+            authProvider: user.authProvider,
             createdAt: user.createdAt,
             decks: parsedDecks,
             matchHistory: history
@@ -197,6 +208,9 @@ export class UserManager {
             id: userData.id,
             username: userData.username,
             passwordHash: userData.passwordHash,
+            email: userData.email,
+            googleId: userData.googleId,
+            authProvider: (userData.authProvider as 'local' | 'google') || 'local',
             createdAt: new Date(userData.createdAt)
         };
     }
@@ -265,6 +279,96 @@ export class UserManager {
         pipeline.del(`decks:${deckId}`);
         pipeline.srem(`users:${userId}:decks`, deckId);
         await pipeline.exec();
+    }
+
+    /**
+     * Find or create a user from Google OAuth profile
+     */
+    async findOrCreateOAuthUser(profile: {
+        googleId: string;
+        email: string;
+        displayName: string;
+    }): Promise<{ user: SafeUser; token: string }> {
+        // 1. Check if user exists by Google ID
+        const existingUserId = await this.redis.hget('users:lookup:google', profile.googleId);
+
+        if (existingUserId) {
+            // User exists, fetch and return
+            const user = await this.getUser(existingUserId);
+            if (!user) {
+                throw new Error('User data corrupted');
+            }
+            const safeUser = await this.assembleSafeUser(user);
+            const token = this.generateToken(user.id, user.username);
+            return { user: safeUser, token };
+        }
+
+        // 2. Check if email is already registered (to link accounts or prevent duplicates)
+        // For simplicity, we'll create a new user. In production, you might want to link accounts.
+
+        // 3. Generate unique username from display name
+        let baseUsername = profile.displayName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (baseUsername.length < 3) {
+            baseUsername = 'user';
+        }
+        let username = baseUsername;
+        let counter = 1;
+
+        // Check for username conflicts
+        while (await this.redis.hget('users:lookup:username', username.toLowerCase())) {
+            username = `${baseUsername}${counter}`;
+            counter++;
+            if (counter > 1000) {
+                // Fallback to random suffix
+                username = `${baseUsername}${Date.now().toString(36)}`;
+                break;
+            }
+        }
+
+        // 4. Create new OAuth user
+        const userId = randomUUID();
+        const now = new Date().toISOString();
+
+        const user: User = {
+            id: userId,
+            username,
+            passwordHash: '', // Empty for OAuth users
+            email: profile.email,
+            googleId: profile.googleId,
+            authProvider: 'google',
+            createdAt: new Date(now)
+        };
+
+        // Transaction to save user and update lookups
+        const pipeline = this.redis.multi();
+        pipeline.hset(`users:${userId}`, {
+            id: userId,
+            username,
+            passwordHash: '',
+            email: profile.email || '',
+            googleId: profile.googleId,
+            authProvider: 'google',
+            createdAt: now
+        });
+        pipeline.hset('users:lookup:username', username.toLowerCase(), userId);
+        pipeline.hset('users:lookup:google', profile.googleId, userId);
+        await pipeline.exec();
+
+        const token = this.generateToken(userId, username);
+
+        return {
+            user: { ...user, decks: [], matchHistory: [] },
+            token
+        };
+    }
+
+    /**
+     * Get user by Google ID
+     */
+    async getUserByGoogleId(googleId: string): Promise<User | null> {
+        const userId = await this.redis.hget('users:lookup:google', googleId);
+        if (!userId) return null;
+        return this.getUser(userId);
     }
 }
 

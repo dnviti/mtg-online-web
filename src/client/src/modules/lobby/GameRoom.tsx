@@ -481,7 +481,30 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
       <div className="flex-1 bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl flex flex-col items-center justify-center">
         <div className="mb-6 flex flex-col items-center gap-2">
           <h2 className="text-3xl font-bold text-white">Waiting for Players...</h2>
-          {room.format && (
+          {isMeHost && room.format !== 'draft' ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Format:</span>
+              <select
+                value={room.format || 'commander'}
+                onChange={(e) => {
+                  socketService.socket.emit('update_room_format', { roomId: room.id, format: e.target.value }, (response: any) => {
+                    if (!response.success) {
+                      showToast(response.message || 'Failed to update format', 'error');
+                    }
+                  });
+                }}
+                className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1 text-sm font-bold text-emerald-400 focus:ring-2 focus:ring-purple-500 outline-none"
+              >
+                <option value="commander">Commander (EDH)</option>
+                <option value="standard">Standard</option>
+                <option value="modern">Modern</option>
+                <option value="pioneer">Pioneer</option>
+                <option value="legacy">Legacy</option>
+                <option value="vintage">Vintage</option>
+                <option value="pauper">Pauper</option>
+              </select>
+            </div>
+          ) : room.format && (
             <div className="px-3 py-1 bg-slate-700 border border-slate-600 rounded-full text-xs font-bold text-slate-300 uppercase tracking-widest">
               Format: <span className="text-emerald-400">{room.format}</span>
             </div>

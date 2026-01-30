@@ -4,6 +4,9 @@ import { ApiService } from '../services/ApiService';
 interface User {
   id: string;
   username: string;
+  email?: string;
+  googleId?: string;
+  authProvider: 'local' | 'google';
   decks: SavedDeck[];
   matchHistory: any[];
   createdAt: number;
@@ -34,6 +37,30 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('authToken'));
+
+  // Handle OAuth callback - check URL for token parameter
+  useEffect(() => {
+    const handleOAuthCallback = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const oauthToken = urlParams.get('token');
+      const path = window.location.pathname;
+
+      // Check if we're on the OAuth callback path with a token
+      if (path === '/auth/callback' && oauthToken) {
+        // Store the token
+        setToken(oauthToken);
+        localStorage.setItem('authToken', oauthToken);
+
+        // Clean up the URL (remove token from URL for security)
+        window.history.replaceState({}, document.title, '/');
+
+        // Set active tab to profile
+        localStorage.setItem('activeTab', 'profile');
+      }
+    };
+
+    handleOAuthCallback();
+  }, []);
 
   useEffect(() => {
     if (token) {

@@ -5,6 +5,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import session from 'express-session';
+import passport from 'passport';
 import apiRoutes from './routes'; // Imports index.ts from routes
 import { initializeSocket } from './socket/socketManager';
 import { fileStorageManager } from './managers/FileStorageManager';
@@ -15,6 +17,7 @@ import Redis from 'ioredis';
 import { QueueManager } from './managers/QueueManager';
 import { packGeneratorService } from './singletons';
 import { imageCacheService } from './services/ImageCacheService';
+import { configurePassport } from './config/passport';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +76,22 @@ if (cluster.isPrimary) {
   const PORT = process.env.PORT || 3000;
 
   app.use(express.json({ limit: '1000mb' }));
+
+  // Session middleware (required for Passport)
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    }
+  }));
+
+  // Initialize Passport
+  app.use(passport.initialize());
+  app.use(passport.session());
+  configurePassport();
 
   // Initialize Socket
   initializeSocket(io);

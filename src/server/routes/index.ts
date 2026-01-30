@@ -3,6 +3,7 @@ import authRoutes from './auth.routes';
 import deckRoutes from './deck.routes';
 import cardRoutes from './card.routes';
 import packRoutes from './pack.routes';
+import importRoutes from './import.routes';
 
 const router = Router();
 
@@ -55,5 +56,6 @@ router.get('/sets/:code/cards', CardController.getSetCards);
 router.get('/lands/fallback', CardController.getFallbackLands); // Original: /api/lands/fallback
 
 router.use('/packs', packRoutes);
+router.use('/import', importRoutes);
 
 export default router;

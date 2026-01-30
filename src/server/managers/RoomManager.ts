@@ -426,6 +426,38 @@ export class RoomManager {
     }
   }
 
+  /**
+   * Update room format (host only, waiting status only)
+   */
+  async updateRoomFormat(roomId: string, playerId: string, newFormat: string): Promise<Room | null> {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const room = await this.getRoomState(roomId);
+      if (!room) return null;
+
+      // Only host can change format
+      if (room.hostId !== playerId) {
+        console.log(`[RoomManager] Player ${playerId} attempted to change format but is not host`);
+        return null;
+      }
+
+      // Only allow format change in waiting status
+      if (room.status !== 'waiting') {
+        console.log(`[RoomManager] Cannot change format in status ${room.status}`);
+        return null;
+      }
+
+      room.format = newFormat;
+      room.lastActive = Date.now();
+
+      await this.saveRoomState(room);
+      console.log(`[RoomManager] Room ${roomId} format changed to ${newFormat}`);
+      return room;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
   async addMessage(roomId: string, sender: string, text: string): Promise<{ message: ChatMessage, room: Room } | null> {
     if (!await this.acquireLock(roomId)) return null;
     try {

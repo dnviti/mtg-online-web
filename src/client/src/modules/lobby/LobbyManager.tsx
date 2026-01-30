@@ -325,9 +325,16 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 outline-none text-lg mb-4"
             >
               <option value="commander">Commander (EDH)</option>
-              <option value="draft">Draft Mode</option>
-              <option value="standard">Standard / Limited (No Commander)</option>
+              <option value="standard">Standard</option>
+              <option value="modern">Modern</option>
+              <option value="pioneer">Pioneer</option>
+              <option value="legacy">Legacy</option>
+              <option value="vintage">Vintage</option>
+              <option value="pauper">Pauper</option>
             </select>
+            <p className="text-xs text-slate-500 mb-4">
+              <span className="text-purple-400">Suggerimento:</span> Per avviare un draft, vai su <span className="font-bold">Draft Management</span> e genera i pack.
+            </p>
 
             <label className="block text-sm font-bold text-slate-300 mb-2">Your Name</label>
             {user ? (
@@ -348,33 +355,16 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-700">
             {/* Create Room */}
-            <div className={`space-y-4 ${generatedPacks.length === 0 ? 'opacity-50' : ''}`}>
-              <div className="flex justify-between items-start">
-                <h3 className="text-xl font-bold text-white">Create Room</h3>
-                {selectedFormat === 'draft' && (
-                  <div className="group relative">
-                    <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
-                    <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
-                      <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules</strong>
-                      <ul className="space-y-1">
-                        <li>Check pack counts for player support.</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-white">Create Room</h3>
 
               <div className="text-sm text-slate-400">
-                {selectedFormat === 'draft' ? (
-                  <>Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.</>
-                ) : (
-                  <>Create a lobby for Constructed play. No packs required.</>
-                )}
+                Create a lobby for Constructed play. Players will select their decks matching the format.
               </div>
 
               <button
                 onClick={handleCreateRoom}
-                disabled={loading || (selectedFormat === 'draft' && generatedPacks.length === 0)}
+                disabled={loading}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-lg transform transition hover:scale-[1.02] flex justify-center items-center gap-2 disabled:cursor-not-allowed disabled:grayscale"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
