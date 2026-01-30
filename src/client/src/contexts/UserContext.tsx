@@ -83,7 +83,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshUser = async () => {
     if (!token) return;
     try {
-      const userData = await ApiService.get<User>('/api/user/me');
+      const userData = await ApiService.get<User>('/api/auth/me');
       setUser(userData);
     } catch (e) {
       console.error(e);
