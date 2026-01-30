@@ -66,6 +66,88 @@ export class CardUtils {
     return card.types && card.types.includes('Planeswalker');
   }
 
+  /**
+   * Checks if a card has the Bestow keyword ability.
+   * Bestow allows an Enchantment Creature to be cast as an Aura.
+   * When the enchanted creature leaves the battlefield, the Bestow aura
+   * becomes a creature instead of going to the graveyard.
+   */
+  static hasBestow(card: any): boolean {
+    // Check keywords array
+    if (card.keywords?.some((k: string) => k.toLowerCase() === 'bestow')) {
+      return true;
+    }
+    // Check oracle text for bestow cost
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+    return /bestow\s+\{/.test(oracleText);
+  }
+
+  /**
+   * Checks if an aura has a "return to hand" trigger when put into graveyard.
+   * Examples: Rancor, Dragon Mantle, Rune of Might, etc.
+   * Pattern: "When this Aura is put into a graveyard from the battlefield, return it to its owner's hand."
+   */
+  static hasReturnToHandOnGraveyard(card: any): boolean {
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+    // Match patterns like:
+    // "When this Aura is put into a graveyard from the battlefield, return it to its owner's hand"
+    // "When ~ is put into a graveyard from the battlefield, return ~ to its owner's hand"
+    return /when (?:this aura|~|it) is put into a graveyard from the battlefield,?\s*return (?:it|~|this card) to its owner's hand/i.test(oracleText);
+  }
+
+  /**
+   * Checks if an aura has a "return to hand when enchanted creature dies" trigger.
+   * Examples: Angelic Destiny, Nurgle's Rot
+   * Pattern: "When enchanted creature dies, return this card to its owner's hand."
+   */
+  static hasReturnToHandOnEnchantedCreatureDies(card: any): boolean {
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+    // Match patterns like:
+    // "When enchanted creature dies, return this card to its owner's hand"
+    // "When enchanted creature dies, return ~ to its owner's hand"
+    return /when enchanted creature dies,?\s*return (?:this card|~|it) to its owner's hand/i.test(oracleText);
+  }
+
+  /**
+   * Parses the effect that should happen when the enchanted creature dies.
+   * Returns the effect text if the aura has such a trigger, null otherwise.
+   * This handles more complex patterns like Nurgle's Rot which creates tokens.
+   */
+  static getEnchantedCreatureDiesEffect(card: any): string | null {
+    const oracleText = (card.oracleText || card.definition?.oracle_text || '').toLowerCase();
+
+    // Match "When enchanted creature dies, [effect]"
+    const match = oracleText.match(/when enchanted creature dies,?\s*(.+?)(?:\.|$)/i);
+    if (match) {
+      return match[1].trim();
+    }
+    return null;
+  }
+
+  /**
+   * Gets the creature types/stats that a Bestow aura should become when detaching.
+   * Returns the base creature characteristics from the card definition.
+   */
+  static getBestowCreatureStats(card: any): { power: number; toughness: number; types: string[]; subtypes: string[] } | null {
+    if (!this.hasBestow(card)) return null;
+
+    // When bestow ends, the card reverts to its creature form
+    // The card should have Enchantment and Creature types
+    const types = card.types || [];
+    const subtypes = card.subtypes || [];
+
+    // Parse power/toughness from card
+    const power = card.basePower ?? card.power ?? 0;
+    const toughness = card.baseToughness ?? card.toughness ?? 0;
+
+    return {
+      power,
+      toughness,
+      types: types.includes('Creature') ? types : [...types, 'Creature'],
+      subtypes
+    };
+  }
+
   static isPermanent(card: any): boolean {
     if (card.types && card.types.length > 0) {
       return card.types.some((t: string) =>

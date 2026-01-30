@@ -130,9 +130,26 @@ export class ActionHandler {
       // Note: Death triggers for creatures are handled separately in StateBasedEffects
       // LTB triggers fire for: exile, bounce, sacrifice (non-creature), etc.
       if (wasOnBattlefield && toZone !== 'battlefield' && cardSnapshot) {
-        // Skip creature deaths - those are handled by death triggers in StateBasedEffects
+        // For creature deaths (destroy effects, sacrifice), we need to handle:
+        // 1. Death triggers (the creature's own "when this dies" abilities)
+        // 2. Other permanents' triggers ("whenever a creature dies")
+        // 3. Attached Auras with "when enchanted creature dies" triggers
         const isCreatureDeath = cardSnapshot.types?.includes('Creature') && toZone === 'graveyard';
-        if (!isCreatureDeath) {
+
+        if (isCreatureDeath) {
+          // Check for attached Auras with "enchanted creature dies" triggers
+          // This handles destroy effects and sacrifice which bypass SBA
+          ActionHandler.checkEnchantedCreatureDiesTriggersOnDestroy(state, cardSnapshot);
+
+          // Check for death triggers (from the dying creature and other permanents)
+          const deathTriggers = TriggeredAbilityHandler.checkDeathTriggers(state, cardSnapshot);
+          if (deathTriggers.length > 0) {
+            const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, deathTriggers);
+            TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+            console.log(`[ActionHandler] Added ${deathTriggers.length} death trigger(s) to stack`);
+          }
+        } else {
+          // Non-creature LTB triggers
           const ltbTriggers = TriggeredAbilityHandler.checkLTBTriggers(state, cardSnapshot, toZone);
           if (ltbTriggers.length > 0) {
             const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, ltbTriggers);
@@ -141,6 +158,62 @@ export class ActionHandler {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Checks for Auras attached to a dying creature that have "When enchanted creature dies" triggers.
+   * This is called when a creature is destroyed/sacrificed (not via SBA).
+   * The SBA version is in StateBasedEffects for lethal damage/zero toughness deaths.
+   */
+  private static checkEnchantedCreatureDiesTriggersOnDestroy(
+    state: StrictGameState,
+    dyingCreatureSnapshot: any
+  ): void {
+    // Find all Auras that were attached to this dying creature
+    // They should still be on battlefield at this point (SBA hasn't run yet)
+    const attachedAuras = Object.values(state.cards).filter(c =>
+      c.zone === 'battlefield' &&
+      c.types?.includes('Enchantment') &&
+      c.subtypes?.includes('Aura') &&
+      c.attachedTo === dyingCreatureSnapshot.instanceId
+    );
+
+    const triggers: StackObject[] = [];
+
+    for (const aura of attachedAuras) {
+      // Check for "When enchanted creature dies" pattern
+      const effectText = CardUtils.getEnchantedCreatureDiesEffect(aura);
+      if (effectText) {
+        console.log(`[ActionHandler] Aura ${aura.name} has "enchanted creature dies" trigger: "${effectText}"`);
+
+        // Create trigger for this Aura
+        const trigger: StackObject = {
+          id: `trigger-aura-enchanted-dies-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+          sourceId: aura.instanceId,
+          controllerId: aura.controllerId,
+          type: 'trigger',
+          name: `${aura.name}: Enchanted creature dies`,
+          text: effectText,
+          targets: [aura.instanceId],
+          resolutionState: {
+            choicesMade: []
+          }
+        };
+
+        // Store metadata for resolution
+        (trigger as any).ownerId = aura.ownerId;
+        (trigger as any).isEnchantedCreatureDiesTrigger = true;
+        (trigger as any).fullEffectText = effectText;
+
+        triggers.push(trigger);
+      }
+    }
+
+    if (triggers.length > 0) {
+      const orderedTriggers = TriggeredAbilityHandler.orderTriggersAPNAP(state, triggers);
+      TriggeredAbilityHandler.putTriggersOnStack(state, orderedTriggers);
+      console.log(`[ActionHandler] Added ${triggers.length} "enchanted creature dies" Aura trigger(s) to stack`);
     }
   }
 

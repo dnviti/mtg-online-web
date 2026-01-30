@@ -436,6 +436,18 @@ export class TriggeredAbilityHandler {
    * Returns false if waiting for a choice, true if resolution is complete
    */
   static resolveTrigger(state: StrictGameState, stackItem: StackObject): boolean {
+    // === HANDLE AURA "RETURN TO HAND" TRIGGERS (Rancor-type) ===
+    // These triggers work even if the source card moved zones (graveyard -> hand)
+    if ((stackItem as any).isAuraReturnTrigger) {
+      return StateBasedEffects.resolveAuraReturnTrigger(state, stackItem);
+    }
+
+    // === HANDLE AURA "ENCHANTED CREATURE DIES" TRIGGERS (Angelic Destiny-type) ===
+    // These triggers fire when the enchanted creature dies
+    if ((stackItem as any).isEnchantedCreatureDiesTrigger) {
+      return StateBasedEffects.resolveEnchantedCreatureDiesTrigger(state, stackItem);
+    }
+
     const sourceCard = state.cards[stackItem.sourceId];
     if (!sourceCard) {
       console.warn(`[TriggeredAbilityHandler] Source card not found for trigger resolution`);
