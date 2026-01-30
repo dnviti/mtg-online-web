@@ -23,6 +23,8 @@ interface ImportDeckModalProps {
     isOpen: boolean;
     onClose: () => void;
     onImport: (deck: ImportedDeck) => void;
+    /** When true, hides name/format fields (for adding cards to existing deck) */
+    mergeMode?: boolean;
 }
 
 type TabType = 'url' | 'text';
@@ -38,7 +40,7 @@ const FORMATS = [
     'Limited'
 ];
 
-export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClose, onImport }) => {
+export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClose, onImport, mergeMode = false }) => {
     const [activeTab, setActiveTab] = useState<TabType>('url');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -204,7 +206,9 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
             <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                 {/* Header */}
                 <div className="flex justify-between items-center p-4 border-b border-slate-700">
-                    <h2 className="text-xl font-bold text-white">Importa Mazzo</h2>
+                    <h2 className="text-xl font-bold text-white">
+                        {mergeMode ? 'Aggiungi Carte' : 'Importa Mazzo'}
+                    </h2>
                     <button onClick={handleClose} className="text-slate-400 hover:text-white transition-colors">
                         <X className="w-6 h-6" />
                     </button>
@@ -264,23 +268,25 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                                 )}
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">
-                                    Formato
-                                </label>
-                                <select
-                                    value={urlFormat}
-                                    onChange={(e) => setUrlFormat(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                                >
-                                    {FORMATS.map(f => (
-                                        <option key={f} value={f}>{f}</option>
-                                    ))}
-                                </select>
-                                <p className="mt-1 text-xs text-slate-500">
-                                    Specifica il formato manualmente (quello rilevato automaticamente potrebbe non essere corretto)
-                                </p>
-                            </div>
+                            {!mergeMode && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                                        Formato
+                                    </label>
+                                    <select
+                                        value={urlFormat}
+                                        onChange={(e) => setUrlFormat(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                                    >
+                                        {FORMATS.map(f => (
+                                            <option key={f} value={f}>{f}</option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        Specifica il formato manualmente (quello rilevato automaticamente potrebbe non essere corretto)
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="text-xs text-slate-500 space-y-1">
                                 <p className="font-medium text-slate-400">Piattaforme supportate:</p>
@@ -309,34 +315,36 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
 
                     {activeTab === 'text' && !preview && (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                                        Nome del mazzo
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={deckName}
-                                        onChange={(e) => setDeckName(e.target.value)}
-                                        placeholder="Il mio mazzo"
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 outline-none"
-                                    />
+                            {!mergeMode && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                                            Nome del mazzo
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={deckName}
+                                            onChange={(e) => setDeckName(e.target.value)}
+                                            placeholder="Il mio mazzo"
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                                            Formato
+                                        </label>
+                                        <select
+                                            value={selectedFormat}
+                                            onChange={(e) => setSelectedFormat(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                                        >
+                                            {FORMATS.map(f => (
+                                                <option key={f} value={f}>{f}</option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                                        Formato
-                                    </label>
-                                    <select
-                                        value={selectedFormat}
-                                        onChange={(e) => setSelectedFormat(e.target.value)}
-                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none"
-                                    >
-                                        {FORMATS.map(f => (
-                                            <option key={f} value={f}>{f}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
+                            )}
 
                             <div>
                                 <div className="flex items-center justify-between mb-2">
@@ -398,21 +406,23 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                         <div className="space-y-4">
                             <div className="flex items-center gap-2 p-3 bg-emerald-900/30 border border-emerald-500/50 rounded-lg text-emerald-300">
                                 <CheckCircle className="w-5 h-5" />
-                                <span>Mazzo importato con successo!</span>
+                                <span>{mergeMode ? `${totalCards} carte pronte per essere aggiunte` : 'Mazzo importato con successo!'}</span>
                             </div>
 
                             <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
-                                <h3 className="text-lg font-bold text-white mb-2">{preview.name}</h3>
+                                {!mergeMode && <h3 className="text-lg font-bold text-white mb-2">{preview.name}</h3>}
                                 <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
-                                    <select
-                                        value={previewFormat || preview.format}
-                                        onChange={(e) => setPreviewFormat(e.target.value)}
-                                        className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 focus:ring-2 focus:ring-purple-500 outline-none text-sm"
-                                    >
-                                        {FORMATS.map(f => (
-                                            <option key={f} value={f} className="bg-slate-800 text-white">{f}</option>
-                                        ))}
-                                    </select>
+                                    {!mergeMode && (
+                                        <select
+                                            value={previewFormat || preview.format}
+                                            onChange={(e) => setPreviewFormat(e.target.value)}
+                                            className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded border border-purple-500/30 focus:ring-2 focus:ring-purple-500 outline-none text-sm"
+                                        >
+                                            {FORMATS.map(f => (
+                                                <option key={f} value={f} className="bg-slate-800 text-white">{f}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <span>{totalCards} carte totali</span>
                                     {preview.source && (
                                         <span className="capitalize">da {preview.source}</span>
@@ -474,7 +484,7 @@ export const ImportDeckModal: React.FC<ImportDeckModalProps> = ({ isOpen, onClos
                                     onClick={handleConfirmImport}
                                     className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors"
                                 >
-                                    Salva Mazzo
+                                    {mergeMode ? 'Aggiungi Carte' : 'Salva Mazzo'}
                                 </button>
                             </div>
                         </div>

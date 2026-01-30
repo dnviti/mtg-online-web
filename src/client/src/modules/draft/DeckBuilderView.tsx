@@ -151,6 +151,7 @@ const DroppableZone = ({ id, children, className }: any) => {
 // Reusable List Item Component
 const ListItem = React.memo(({ card, onClick, onHover }: { card: DraftCard; onClick?: () => void; onHover?: (c: any) => void }) => {
   const isFoil = (card: DraftCard) => card.finish === 'foil';
+  const isDirty = (card as any)._isDirty;
 
   const getRarityColorClass = (rarity: string) => {
     switch (rarity) {
@@ -178,9 +179,10 @@ const ListItem = React.memo(({ card, onClick, onHover }: { card: DraftCard; onCl
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onTouchMove={onTouchMove}
-      className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors w-full group"
+      className={`flex items-center justify-between py-1 px-2 rounded hover:bg-slate-700/50 cursor-pointer transition-colors w-full group ${isDirty ? 'bg-emerald-900/20 border-l-2 border-emerald-500' : ''}`}
     >
       <span className={`font-medium flex items-center gap-2 truncate ${card.rarity === 'mythic' ? 'text-orange-400' : card.rarity === 'rare' ? 'text-yellow-400' : card.rarity === 'uncommon' ? 'text-slate-200' : 'text-slate-400'}`}>
+        {isDirty && <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shrink-0" title="Non salvato" />}
         {card.name}
         {isFoil(card) && (
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-400 animate-pulse text-xs font-bold border border-purple-500/50 rounded px-1">
@@ -199,6 +201,7 @@ const ListItem = React.memo(({ card, onClick, onHover }: { card: DraftCard; onCl
 const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHover }: any) => {
   const displayImage = useArtCrop ? card.imageArtCrop : card.image;
   const fallbackImage = useArtCrop ? card.remoteArtCrop : card.remoteImage;
+  const isDirty = card._isDirty;
 
   // Use state ONLY for error handling. Primary source is derived directly from props for 0-latency switching.
   const [hasError, setHasError] = useState(false);
@@ -228,9 +231,10 @@ const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHove
       onTouchMove={onTouchMove}
       className="relative group bg-slate-900 rounded-lg shrink-0 cursor-pointer hover:scale-105 transition-transform"
     >
-      <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
+      <div className={`relative ${useArtCrop ? 'aspect-square' : 'aspect-[2.5/3.5]'} overflow-hidden rounded-lg shadow-xl border transition-all duration-200 group-hover:ring-2 group-hover:ring-purple-400 group-hover:shadow-purple-500/30 ${isDirty ? 'border-emerald-500 ring-1 ring-emerald-500/50' : isFoil ? 'border-purple-400 shadow-purple-500/20' : 'border-slate-800'}`}>
         {isFoil && <FoilOverlay />}
         {isFoil && <div className="absolute top-1 right-1 z-30 text-[10px] font-bold text-white bg-purple-600/80 px-1.5 rounded backdrop-blur-sm">FOIL</div>}
+        {isDirty && <div className="absolute top-1 left-1 z-30 w-2.5 h-2.5 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50 animate-pulse" title="Non salvato" />}
         {activeSrc ? (
           <img
             key={useArtCrop ? 'crop' : 'full'} // Force remount of img tag on mode switch to prevent ghosting/stretching
@@ -254,7 +258,7 @@ const DeckCardItem = React.memo(({ card, useArtCrop, isFoil, onCardClick, onHove
     </div>
   );
 }, (prev, next) => {
-  return prev.card.id === next.card.id && prev.card.image === next.card.image && prev.isFoil === next.isFoil && prev.useArtCrop === next.useArtCrop;
+  return prev.card.id === next.card.id && prev.card.image === next.card.image && prev.isFoil === next.isFoil && prev.useArtCrop === next.useArtCrop && prev.card._isDirty === next.card._isDirty;
 });
 
 // Extracted Component to avoid re-mounting issues
@@ -996,6 +1000,9 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
     } else {
       socketService.socket.emit('player_ready', { deck: preparedDeck });
     }
+
+    // Clear dirty state after save (commit changes)
+    setDeck(prev => prev.map(card => ({ ...card, _isDirty: false })));
   };
 
   const handleAutoBuild = async () => {
@@ -1175,7 +1182,31 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
       }
 
       if (cardsToAdd.length > 0) {
-        setDeck(prev => [...prev, ...cardsToAdd]);
+        // Merge logic: avoid duplicates by checking scryfallId or name
+        setDeck(prev => {
+          const existingKeys = new Set<string>();
+
+          // Build set of existing card keys (scryfallId or lowercase name)
+          for (const card of prev) {
+            const key = card.scryfallId || card.name?.toLowerCase();
+            if (key) existingKeys.add(key);
+          }
+
+          // Filter out duplicates and mark new cards as dirty
+          const newCards: any[] = [];
+
+          for (const card of cardsToAdd) {
+            const key = card.scryfallId || card.name?.toLowerCase();
+            if (!key || !existingKeys.has(key)) {
+              // Mark as dirty (new card)
+              const cardWithDirty = { ...card, _isDirty: true };
+              newCards.push(cardWithDirty);
+              if (key) existingKeys.add(key); // Prevent duplicates within import
+            }
+          }
+
+          return [...prev, ...newCards];
+        });
       }
     } catch (e) {
       console.error("Import error", e);
@@ -1743,6 +1774,7 @@ export const DeckBuilderView: React.FC<DeckBuilderViewProps> = ({
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         onImport={handleImportDeck}
+        mergeMode={true}
       />
     </div >
   );
