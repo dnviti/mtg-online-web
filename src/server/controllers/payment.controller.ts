@@ -223,11 +223,11 @@ export class PaymentController {
      */
     private static async handleInvoicePaid(invoice: Stripe.Invoice) {
         const customerId = invoice.customer as string;
-        // In newer Stripe API, subscription is accessed via parent.subscription_details
-        const subscriptionData = invoice.parent?.subscription_details?.subscription;
-        const subscriptionId = typeof subscriptionData === 'string'
-            ? subscriptionData
-            : subscriptionData?.id;
+        // Get subscription ID from invoice (cast to any for Stripe API compatibility)
+        const invoiceAny = invoice as any;
+        const subscriptionId = typeof invoiceAny.subscription === 'string'
+            ? invoiceAny.subscription
+            : invoiceAny.subscription?.id;
 
         if (!subscriptionId) {
             // One-time payment, not a subscription renewal
@@ -262,8 +262,9 @@ export class PaymentController {
     private static async handleSubscriptionUpdated(subscription: Stripe.Subscription) {
         const customerId = subscription.customer as string;
         const status = subscription.status;
-        // In newer Stripe API, current_period_end is on subscription items
-        const periodEndTimestamp = subscription.items?.data[0]?.current_period_end;
+        // Get current_period_end from subscription (cast to any for Stripe API compatibility)
+        const subscriptionAny = subscription as any;
+        const periodEndTimestamp = subscriptionAny.current_period_end;
         const periodEnd = periodEndTimestamp ? new Date(periodEndTimestamp * 1000) : new Date();
 
         let mappedStatus: 'active' | 'canceled' | 'past_due';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Shield, FileText, Mail } from 'lucide-react';
+import { X, Shield, Mail } from 'lucide-react';
 
 interface LegalModalProps {
   isOpen: boolean;

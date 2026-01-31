@@ -15,11 +15,7 @@ COPY src/package.json src/package-lock.json ./
 RUN npm install
 
 # Copy the rest of the source code
-# Copy the rest of the source code
 COPY src/ ./
-
-# Generate Prisma Client
-RUN npx prisma generate
 
 # Build the frontend (Production build)
 RUN npm run build

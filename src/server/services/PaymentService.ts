@@ -15,9 +15,7 @@ export class PaymentService {
 
     constructor() {
         if (STRIPE_SECRET_KEY) {
-            this.stripe = new Stripe(STRIPE_SECRET_KEY, {
-                apiVersion: '2026-01-28.clover'
-            });
+            this.stripe = new Stripe(STRIPE_SECRET_KEY);
             console.log('[PaymentService] Stripe initialized');
         } else {
             console.warn('[PaymentService] STRIPE_SECRET_KEY not set - payment features disabled');
@@ -201,11 +199,9 @@ export class PaymentService {
         }
 
         try {
-            const subscription = await this.stripe.subscriptions.retrieve(subscriptionId, {
-                expand: ['items']
-            });
-            // In newer Stripe API, current_period_end is on subscription items
-            const periodEnd = subscription.items.data[0]?.current_period_end;
+            const subscription = await this.stripe.subscriptions.retrieve(subscriptionId) as any;
+            // current_period_end is on the subscription object
+            const periodEnd = subscription.current_period_end;
             return periodEnd ? new Date(periodEnd * 1000) : null;
         } catch (e) {
             console.error('[PaymentService] Error getting subscription period:', e);

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ManaIcon } from './ManaIcon';
-import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye, Wind, Footprints, Heart, Crosshair, ShieldOff, EyeOff, Swords, SwordIcon, AlertTriangle } from 'lucide-react';
+import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye, Wind, Footprints, Heart, Crosshair, EyeOff, Swords, SwordIcon, AlertTriangle } from 'lucide-react';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
