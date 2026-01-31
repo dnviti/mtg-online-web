@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import adsense from 'vite-plugin-adsense';
 import * as path from 'path';
 
 export default defineConfig(({ mode }) => {
@@ -14,6 +15,9 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
+      // Google AdSense - reads VITE_ADSENSE_CLIENT from .env
+      // Automatically injects script and generates ads.txt
+      adsense(),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg'],

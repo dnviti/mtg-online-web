@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useUser } from '../contexts/UserContext';
 
 declare global {
@@ -8,32 +8,6 @@ declare global {
 }
 
 const CONSENT_KEY = 'mtgate_cookie_consent';
-
-let adsenseScriptLoaded = false;
-
-function loadAdSenseScript(clientId: string): Promise<void> {
-  if (adsenseScriptLoaded) return Promise.resolve();
-
-  return new Promise((resolve, reject) => {
-    const existingScript = document.querySelector(`script[src*="adsbygoogle"]`);
-    if (existingScript) {
-      adsenseScriptLoaded = true;
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientId}`;
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.onload = () => {
-      adsenseScriptLoaded = true;
-      resolve();
-    };
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
 
 interface AdBannerProps {
   slot: string;
@@ -73,33 +47,29 @@ export const AdBanner: React.FC<AdBannerProps> = ({
   const { isPremium } = useUser();
   const adRef = useRef<HTMLModElement>(null);
   const isAdLoaded = useRef(false);
-  const [scriptReady, setScriptReady] = useState(adsenseScriptLoaded);
 
-  const clientId = import.meta.env.VITE_ADSENSE_CLIENT_ID as string | undefined;
+  // vite-plugin-adsense reads from VITE_ADSENSE_CLIENT
+  const clientId = import.meta.env.VITE_ADSENSE_CLIENT as string | undefined;
   const hasConsent = localStorage.getItem(CONSENT_KEY) === 'accepted';
 
-  // Load AdSense script when consent is given
+  // Push ad when component mounts (script is injected by vite-plugin-adsense)
   useEffect(() => {
-    if (!clientId || isPremium || !hasConsent) return;
+    if (!clientId || isPremium || isAdLoaded.current || !hasConsent) return;
 
-    loadAdSenseScript(clientId)
-      .then(() => setScriptReady(true))
-      .catch((e) => console.error('Failed to load AdSense script:', e));
-  }, [clientId, isPremium, hasConsent]);
-
-  // Push ad when script is ready
-  useEffect(() => {
-    if (!scriptReady || !clientId || isPremium || isAdLoaded.current || !hasConsent) return;
-
-    try {
-      if (adRef.current && adRef.current.innerHTML === '') {
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-        isAdLoaded.current = true;
+    // Small delay to ensure the AdSense script is loaded
+    const timer = setTimeout(() => {
+      try {
+        if (adRef.current && adRef.current.innerHTML === '') {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+          isAdLoaded.current = true;
+        }
+      } catch (e) {
+        console.error('AdSense error:', e);
       }
-    } catch (e) {
-      console.error('AdSense error:', e);
-    }
-  }, [scriptReady, clientId, isPremium, hasConsent]);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [clientId, isPremium, hasConsent]);
 
   // Hide ads for premium users
   if (isPremium) {
