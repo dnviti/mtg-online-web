@@ -152,6 +152,16 @@ if (cluster.isPrimary) {
 
   app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
+  // ads.txt for Google AdSense verification (served before SPA catch-all)
+  app.get('/ads.txt', (_req: Request, res: Response) => {
+    const clientId = process.env.VITE_ADSENSE_CLIENT;
+    if (!clientId || !clientId.startsWith('ca-pub-')) {
+      return res.status(404).send('# ads.txt not configured - set VITE_ADSENSE_CLIENT in .env');
+    }
+    const pubId = clientId.replace('ca-pub-', '');
+    res.type('text/plain').send(`google.com, pub-${pubId}, DIRECT, f08c47fec0942fa0`);
+  });
+
   // API Routes
   app.use('/api', apiRoutes);
 
