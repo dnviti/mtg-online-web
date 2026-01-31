@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, FileText, Info, Mail, Heart } from 'lucide-react';
+import { Shield, FileText, Info, Mail, Heart, Github } from 'lucide-react';
 import { useLegalModals } from './LegalPages';
 
 export const Footer: React.FC = () => {
@@ -16,6 +16,15 @@ export const Footer: React.FC = () => {
           <span className="flex items-center gap-1">
             Made with <Heart className="w-3 h-3 text-red-500 fill-red-500" /> in Italy
           </span>
+          <span className="hidden sm:inline">•</span>
+          <a
+            href="https://github.com/dnviti/mtg-online-web"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-purple-400 transition-colors"
+          >
+            <Github className="w-3 h-3" /> Open Source
+          </a>
         </div>
 
         <nav className="flex items-center gap-4 text-xs">
@@ -44,7 +53,7 @@ export const Footer: React.FC = () => {
           </button>
 
           <a
-            href="mailto:support@mtgate.app"
+            href="mailto:mtgate.supp@gmail.com"
             className="flex items-center gap-1.5 text-slate-400 hover:text-purple-400 transition-colors"
           >
             <Mail className="w-3.5 h-3.5" />

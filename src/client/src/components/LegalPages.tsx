@@ -140,7 +140,7 @@ export const PrivacyPolicy: React.FC<{ isOpen: boolean; onClose: () => void }> =
         <h3 className="text-lg font-semibold text-white mb-2">10. Contact Us</h3>
         <p>
           If you have questions about this privacy policy or your personal data, please contact us at:{' '}
-          <a href="mailto:privacy@mtgate.app" className="text-purple-400 hover:text-purple-300 underline">privacy@mtgate.app</a>
+          <a href="mailto:mtgate.supp@gmail.com" className="text-purple-400 hover:text-purple-300 underline">mtgate.supp@gmail.com</a>
         </p>
       </section>
     </div>
@@ -259,7 +259,7 @@ export const TermsOfService: React.FC<{ isOpen: boolean; onClose: () => void }> 
         <h3 className="text-lg font-semibold text-white mb-2">12. Contact</h3>
         <p>
           For questions about these Terms of Service, contact us at:{' '}
-          <a href="mailto:support@mtgate.app" className="text-purple-400 hover:text-purple-300 underline">support@mtgate.app</a>
+          <a href="mailto:mtgate.supp@gmail.com" className="text-purple-400 hover:text-purple-300 underline">mtgate.supp@gmail.com</a>
         </p>
       </section>
     </div>
@@ -319,8 +319,8 @@ export const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
       <section>
         <h3 className="text-lg font-semibold text-white mb-2">Contact Us</h3>
         <div className="flex flex-col gap-2">
-          <a href="mailto:support@mtgate.app" className="flex items-center gap-2 text-purple-400 hover:text-purple-300">
-            <Mail className="w-4 h-4" /> support@mtgate.app
+          <a href="mailto:mtgate.supp@gmail.com" className="flex items-center gap-2 text-purple-400 hover:text-purple-300">
+            <Mail className="w-4 h-4" /> mtgate.supp@gmail.com
           </a>
         </div>
       </section>
