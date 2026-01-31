@@ -276,6 +276,11 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
 
     const card = (type === 'card' && targetId) ? gameState.cards[targetId] : undefined;
 
+    // Don't show context menu for opponent's cards
+    if (type === 'card' && card && card.controllerId !== currentPlayerId) {
+      return;
+    }
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,

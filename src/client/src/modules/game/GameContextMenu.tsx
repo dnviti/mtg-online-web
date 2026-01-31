@@ -79,6 +79,7 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
         {zone === 'hand' && (
           <>
             <MenuItem label="Play (Battlefield)" onClick={() => handleAction('REQUEST_PLAY', { cardId: card.instanceId })} />
+            <MenuItem label="Play Face Down" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'battlefield', faceDown: true })} />
             <MenuItem label="Discard" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'graveyard' })} />
             <MenuItem label="Exile" onClick={() => handleAction('MOVE_CARD', { cardId: card.instanceId, toZone: 'exile' })} />
             <div className="h-px bg-slate-800 my-1 mx-2"></div>
@@ -94,13 +95,48 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
             <MenuItem label={card.faceDown ? "Flip Face Up" : "Flip Face Down"} onClick={() => handleAction('FLIP_CARD', { cardId: card.instanceId })} />
 
             <div className="relative group">
-              <MenuItem label="Add Counter" hasSubmenu />
-              <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-40">
-                <div className="bg-slate-900 border border-slate-700 rounded shadow-lg">
+              <MenuItem label="Counters" hasSubmenu />
+              <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-48">
+                <div className="bg-slate-900 border border-slate-700 rounded shadow-lg max-h-96 overflow-y-auto">
+                  <div className="px-3 py-1 font-bold text-xs text-slate-500 uppercase tracking-widest border-b border-slate-800 mb-1">
+                    Counters
+                  </div>
                   <MenuItem label="+1/+1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: 1 })} />
                   <MenuItem label="-1/-1 Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '-1/-1', amount: 1 })} />
                   <MenuItem label="Loyalty Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: 'loyalty', amount: 1 })} />
-                  <MenuItem label="Remove Counter" onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: '+1/+1', amount: -1 })} />
+
+                  {/* Remove Counter - only show if card has counters */}
+                  {card.counters && card.counters.length > 0 && card.counters.some(c => c.count > 0) && (
+                    <>
+                      <div className="px-3 py-1 font-bold text-xs text-red-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
+                        Remove Counter
+                      </div>
+                      {card.counters.filter(c => c.count > 0).map((counter) => (
+                        <MenuItem
+                          key={counter.type}
+                          label={`${counter.type} (${counter.count})`}
+                          className="text-red-400 hover:bg-red-900/30 hover:text-red-300"
+                          onClick={() => handleAction('ADD_COUNTER', { cardId: card.instanceId, counterType: counter.type, amount: -1 })}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  <div className="px-3 py-1 font-bold text-xs text-emerald-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
+                    Abilities (Permanent)
+                  </div>
+                  <MenuItem label="Flying" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Flying' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Haste" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Haste' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Trample" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Trample' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Lifelink" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Lifelink' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Deathtouch" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Deathtouch' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Indestructible" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Indestructible' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Hexproof" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Hexproof' }, untilEndOfTurn: false })} />
+                  <MenuItem label="First Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'First strike' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Double Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Double strike' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Vigilance" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Vigilance' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Menace" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Menace' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Reach" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Reach' }, untilEndOfTurn: false })} />
                 </div>
               </div>
             </div>
@@ -156,22 +192,6 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
                   <MenuItem label="Menace" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Menace' }, untilEndOfTurn: true })} />
                   <MenuItem label="Reach" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Reach' }, untilEndOfTurn: true })} />
 
-                  <div className="px-3 py-1 font-bold text-xs text-emerald-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
-                    Grant Abilities (Permanent)
-                  </div>
-                  <MenuItem label="Flying" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Flying' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Haste" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Haste' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Trample" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Trample' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Lifelink" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Lifelink' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Deathtouch" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Deathtouch' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Indestructible" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Indestructible' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Hexproof" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Hexproof' }, untilEndOfTurn: false })} />
-                  <MenuItem label="First Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'First strike' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Double Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Double strike' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Vigilance" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Vigilance' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Menace" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Menace' }, untilEndOfTurn: false })} />
-                  <MenuItem label="Reach" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Reach' }, untilEndOfTurn: false })} />
-
                   <div className="h-px bg-slate-800 my-1 mx-2"></div>
                   <MenuItem
                     label="Clear All Modifications"
@@ -181,6 +201,15 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
                 </div>
               </div>
             </div>
+
+            {/* Remove Creature Type - only show if card became creature via modifier */}
+            {card.modifiers?.some((m: any) => m.type === 'type_change' && m.value?.addTypes?.includes('Creature')) && (
+              <MenuItem
+                label="Remove Creature Type"
+                className="text-amber-400 hover:bg-amber-900/30 hover:text-amber-300"
+                onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'remove_type_change' } })}
+              />
+            )}
 
             <MenuItem label="Clone (Copy)" onClick={() => handleAction('CREATE_TOKEN', {
               tokenData: {
@@ -326,13 +355,6 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
               </div>
             </div>
           </div>
-
-          <MenuItem
-            label="Add Mana..."
-            onClick={() => handleAction('MANA', { x: request.x, y: request.y })}
-          />
-          <div className="h-px bg-slate-800 my-1 mx-2"></div>
-          <MenuItem label="Untap All My Permanents" onClick={() => handleAction('UNTAP_ALL')} />
         </>
       )}
     </div>

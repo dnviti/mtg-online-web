@@ -261,7 +261,14 @@ export class GameManager extends EventEmitter {
             engine.changeLife(actorId, action.amount);
             break;
           case 'move_card':
-            engine.moveCardToZone(action.cardId, action.toZone, false, action.position, action.faceIndex);
+            engine.moveCardToZone(action.cardId, action.toZone, action.faceDown ?? false, action.position, action.faceIndex);
+            break;
+          case 'flip_card':
+            const cardToFlip = game.cards[action.cardId];
+            if (cardToFlip && cardToFlip.zone === 'battlefield') {
+              cardToFlip.faceDown = !cardToFlip.faceDown;
+              console.log(`[GameManager] ${cardToFlip.name} flipped ${cardToFlip.faceDown ? 'face down' : 'face up'}`);
+            }
             break;
           case 'add_counter':
             engine.addCounter(actorId, action.cardId, action.counterType, action.amount || 1);
@@ -372,6 +379,23 @@ export class GameManager extends EventEmitter {
                 cardToModify.toughness = mod.value.basePT.toughness;
               }
               console.log(`[GameManager] ${cardToModify.name} type changed to: ${cardToModify.types?.join(', ')}`);
+            } else if (mod.type === 'remove_type_change') {
+              // Remove type_change modifiers and restore original types
+              cardToModify.modifiers = cardToModify.modifiers.filter((m: any) => m.type !== 'type_change');
+
+              // Restore original types from definition
+              const originalTypes = cardToModify.definition?.type_line?.split('—')[0].trim().split(' ').filter(Boolean) || [];
+              cardToModify.types = originalTypes;
+
+              // Remove P/T if card wasn't originally a creature
+              const wasCreature = originalTypes.some((t: string) => t.toLowerCase() === 'creature');
+              if (!wasCreature) {
+                delete (cardToModify as any).power;
+                delete (cardToModify as any).toughness;
+                delete (cardToModify as any).basePower;
+                delete (cardToModify as any).baseToughness;
+              }
+              console.log(`[GameManager] ${cardToModify.name} type restored to: ${cardToModify.types?.join(', ')}`);
             }
             break;
           default:

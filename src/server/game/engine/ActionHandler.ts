@@ -130,7 +130,7 @@ export class ActionHandler {
     if (state.priorityPlayerId !== playerId) throw new Error("Not your priority.");
     if (state.stack.length > 0) throw new Error("Stack must be empty to play a land.");
     if (state.phase !== 'main1' && state.phase !== 'main2') throw new Error("Can only play lands in Main Phase.");
-    if (state.landsPlayedThisTurn >= 1) throw new Error("Already played a land this turn.");
+    // Land per turn limit removed - manual play mode
 
     const card = state.cards[cardId];
     if (!card || card.controllerId !== playerId || card.zone !== 'hand') throw new Error("Invalid card.");
@@ -455,9 +455,19 @@ export class ActionHandler {
       } else {
         card.counters.push({ type, count: remaining });
       }
+    } else if (remaining < 0) {
+      // Handle counter removal (negative amount)
+      const existingIndex = card.counters.findIndex(c => c.type === type);
+      if (existingIndex !== -1) {
+        const existing = card.counters[existingIndex];
+        existing.count += remaining; // remaining is negative, so this decrements
+        if (existing.count <= 0) {
+          card.counters.splice(existingIndex, 1);
+        }
+      }
     }
 
-    console.log(`[ActionHandler] Added ${count} ${type} counter(s) to ${card.name}`);
+    console.log(`[ActionHandler] ${count > 0 ? 'Added' : 'Removed'} ${Math.abs(count)} ${type} counter(s) ${count > 0 ? 'to' : 'from'} ${card.name}`);
 
     const playerName = state.players[_playerId]?.name || 'Unknown';
     GameLogger.logCounterChange(state, card, type, count, playerName);

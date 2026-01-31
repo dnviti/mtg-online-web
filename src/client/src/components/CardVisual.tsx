@@ -168,7 +168,11 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     return Array.from(symbols);
   };
 
-  const isCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
+  const isNaturalCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
+  const becameCreature = card.modifiers?.some((m: any) =>
+    m.type === 'type_change' && m.value?.addTypes?.includes('Creature')
+  );
+  const isCreature = isNaturalCreature || becameCreature;
   const isLand = (card.type_line || card.typeLine || '').toLowerCase().includes('land');
   const landSymbols = isLand ? getLandManaSymbols(card) : [];
 
@@ -209,23 +213,35 @@ export const CardVisual: React.FC<CardVisualProps> = ({
           </div>
 
           {/* Bottom Overlays based on Type */}
-          {isCreature && (card.power != null && card.toughness != null) && (
-            <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
-              <span className={
-                (Number(card.power) > (card.basePower ?? Number(card.power))) ? "text-blue-400" :
-                  (Number(card.power) < (card.basePower ?? Number(card.power))) ? "text-red-400" : "text-white"
-              }>
-                {card.power}
-              </span>
-              <span className="text-slate-400">/</span>
-              <span className={
-                (Number(card.toughness) > (card.baseToughness ?? Number(card.toughness))) ? "text-blue-400" :
-                  (Number(card.toughness) < (card.baseToughness ?? Number(card.toughness))) ? "text-red-400" : "text-white"
-              }>
-                {card.toughness}
-              </span>
-            </div>
-          )}
+          {(() => {
+            // Get P/T - either from card or from type_change modifier
+            const typeChangeMod = card.modifiers?.find((m: any) =>
+              m.type === 'type_change' && m.value?.addTypes?.includes('Creature')
+            );
+            const modBasePT = typeChangeMod?.value?.basePT;
+            const displayPower = card.power ?? modBasePT?.power;
+            const displayToughness = card.toughness ?? modBasePT?.toughness;
+
+            if (!isCreature || (displayPower == null && displayToughness == null)) return null;
+
+            return (
+              <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
+                <span className={
+                  (Number(displayPower) > (card.basePower ?? Number(displayPower))) ? "text-blue-400" :
+                    (Number(displayPower) < (card.basePower ?? Number(displayPower))) ? "text-red-400" : "text-white"
+                }>
+                  {displayPower ?? 0}
+                </span>
+                <span className="text-slate-400">/</span>
+                <span className={
+                  (Number(displayToughness) > (card.baseToughness ?? Number(displayToughness))) ? "text-blue-400" :
+                    (Number(displayToughness) < (card.baseToughness ?? Number(displayToughness))) ? "text-red-400" : "text-white"
+                }>
+                  {displayToughness ?? 0}
+                </span>
+              </div>
+            );
+          })()}
 
           {!isCreature && isLand && landSymbols.length > 0 && (
             <div className="absolute bottom-1 inset-x-0 flex justify-center items-end z-10 pointer-events-none gap-0.5">
