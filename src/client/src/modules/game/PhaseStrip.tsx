@@ -268,25 +268,27 @@ export const PhaseStrip: React.FC<PhaseStripProps> = ({
 
         {/* SECTION 3: Manual Yield Toggle + Action Button (Right) */}
         <div className="flex items-center gap-3">
-          {/* Manual Yield Toggle - Controls behavior during opponent's turn */}
-          <button
-            onClick={onManualYieldToggle}
-            className={`
-              flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium uppercase tracking-wide
-              transition-all duration-200 border
-              ${manualYield
-                ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
-                : 'bg-slate-800/50 text-slate-500 border-slate-700 hover:border-slate-600 hover:text-slate-400'
-              }
-            `}
-            title={manualYield ? "Manual mode: Control responses during opponent's turn" : "Auto mode: Auto-pass during opponent's turn (click to enable manual responses)"}
-          >
-            <Hand size={12} />
-            <span>{manualYield ? 'Manual' : 'Auto'}</span>
-            <div className={`w-6 h-3 rounded-full relative transition-colors ${manualYield ? 'bg-amber-500' : 'bg-slate-600'}`}>
-              <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${manualYield ? 'left-3.5' : 'left-0.5'}`} />
-            </div>
-          </button>
+          {/* Manual Yield Toggle - Only visible to non-active player (opponent's turn) */}
+          {!isMyTurn && (
+            <button
+              onClick={onManualYieldToggle}
+              className={`
+                flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium uppercase tracking-wide
+                transition-all duration-200 border
+                ${manualYield
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                  : 'bg-slate-800/50 text-slate-500 border-slate-700 hover:border-slate-600 hover:text-slate-400'
+                }
+              `}
+              title={manualYield ? "Manual mode: Control responses during opponent's turn" : "Auto mode: Auto-pass during opponent's turn (click to enable manual responses)"}
+            >
+              <Hand size={12} />
+              <span>{manualYield ? 'Manual' : 'Auto'}</span>
+              <div className={`w-6 h-3 rounded-full relative transition-colors ${manualYield ? 'bg-amber-500' : 'bg-slate-600'}`}>
+                <div className={`absolute top-0.5 w-2 h-2 rounded-full bg-white transition-all ${manualYield ? 'left-3.5' : 'left-0.5'}`} />
+              </div>
+            </button>
+          )}
 
           {/* Action Button */}
           <button

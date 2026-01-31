@@ -132,6 +132,28 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
     }
   }, [isYielding, gameState.priorityPlayerId, gameState.step, currentPlayerId]);
 
+  // Auto-Pass Priority when in Auto mode and it's NOT my turn
+  const isMyTurn = gameState.activePlayerId === currentPlayerId;
+  useEffect(() => {
+    // Only auto-pass if:
+    // 1. I have priority
+    // 2. It's NOT my turn (opponent's turn)
+    // 3. manualYield is false (Auto mode)
+    // 4. Not in special combat declaration steps
+    if (
+      hasPriority &&
+      !isMyTurn &&
+      !manualYield &&
+      !['declare_attackers', 'declare_blockers'].includes(gameState.step || '')
+    ) {
+      console.log("[Auto Mode] Auto-passing priority (not my turn)...");
+      const timer = setTimeout(() => {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
+      }, 300); // Small delay for visual feedback
+      return () => clearTimeout(timer);
+    }
+  }, [hasPriority, isMyTurn, manualYield, gameState.step]);
+
   // Reset yield on turn change
   const prevActivePlayerId = useRef(gameState.activePlayerId);
 
