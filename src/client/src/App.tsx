@@ -14,6 +14,9 @@ import { GameSocketProvider } from './contexts/GameSocketContext';
 import { AuthModule } from './modules/auth/AuthModule';
 import { ProfileModule } from './modules/profile/ProfileModule';
 import { AdSidebar } from './components/AdSidebar';
+import { CookieConsent } from './components/CookieConsent';
+import { LegalModalsProvider } from './components/LegalPages';
+import { Footer } from './components/Footer';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'draft' | 'bracket' | 'lobby' | 'profile'>(() => {
@@ -148,6 +151,8 @@ const MainLayout: React.FC = () => {
 
         <AdSidebar position="right" />
       </div>
+
+      <Footer />
     </div>
   );
 };
@@ -158,9 +163,12 @@ export const App: React.FC = () => {
       <ConfirmDialogProvider>
         <UserProvider>
           <GameSocketProvider>
-            <GlobalContextMenu />
-            <PWAInstallPrompt />
-            <MainLayout />
+            <LegalModalsProvider>
+              <GlobalContextMenu />
+              <PWAInstallPrompt />
+              <CookieConsent />
+              <MainLayout />
+            </LegalModalsProvider>
           </GameSocketProvider>
         </UserProvider>
       </ConfirmDialogProvider>

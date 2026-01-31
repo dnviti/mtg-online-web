@@ -1,9 +1,17 @@
 import React from 'react';
 import { useUser } from '../contexts/UserContext';
+import { AdBanner } from './AdBanner';
 
 interface AdSidebarProps {
   position: 'left' | 'right';
 }
+
+// Configure your AdSense slot IDs here after creating ad units in Google AdSense
+// You'll need separate slot IDs for each ad unit size
+const AD_SLOTS = {
+  skyscraper: 'XXXXXXXX', // 160x600 Wide Skyscraper - replace with your slot ID
+  halfPage: 'YYYYYYYY',   // 160x300 Half Page - replace with your slot ID
+};
 
 export const AdSidebar: React.FC<AdSidebarProps> = ({ position }) => {
   const { isPremium } = useUser();
@@ -19,28 +27,22 @@ export const AdSidebar: React.FC<AdSidebarProps> = ({ position }) => {
         position === 'left' ? 'border-r' : 'border-l'
       }`}
     >
-      {/* Ad slot - 160x600 (Wide Skyscraper) */}
       <div className="sticky top-4 p-2 flex flex-col gap-4">
-        <div className="w-[160px] h-[600px] bg-slate-800/50 border border-slate-700 rounded-lg flex items-center justify-center">
-          <div className="text-center text-slate-500 text-xs p-4">
-            <div className="w-8 h-8 mx-auto mb-2 rounded bg-slate-700/50 flex items-center justify-center">
-              <span className="text-lg">AD</span>
-            </div>
-            <p>160x600</p>
-            <p className="text-[10px] mt-1 text-slate-600">Ad Space</p>
-          </div>
-        </div>
+        {/* Ad slot - 160x600 (Wide Skyscraper) */}
+        <AdBanner
+          slot={AD_SLOTS.skyscraper}
+          format="vertical"
+          width={160}
+          height={600}
+        />
 
-        {/* Secondary smaller ad slot - 160x300 */}
-        <div className="w-[160px] h-[300px] bg-slate-800/50 border border-slate-700 rounded-lg flex items-center justify-center">
-          <div className="text-center text-slate-500 text-xs p-4">
-            <div className="w-8 h-8 mx-auto mb-2 rounded bg-slate-700/50 flex items-center justify-center">
-              <span className="text-lg">AD</span>
-            </div>
-            <p>160x300</p>
-            <p className="text-[10px] mt-1 text-slate-600">Ad Space</p>
-          </div>
-        </div>
+        {/* Secondary smaller ad slot - 160x300 (Half Page) */}
+        <AdBanner
+          slot={AD_SLOTS.halfPage}
+          format="rectangle"
+          width={160}
+          height={300}
+        />
       </div>
     </aside>
   );
