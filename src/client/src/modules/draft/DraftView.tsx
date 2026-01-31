@@ -14,12 +14,9 @@ import { Wand2 } from 'lucide-react';
 // Helper to normalize card data for visuals
 // Helper to normalize card data for visuals
 const normalizeCard = (c: any) => {
-  const targetId = c.scryfallId || c.id;
-  const setCode = c.setCode || c.set;
 
-  const localImage = (targetId && setCode)
-    ? `/cards/images/${setCode}/full/${targetId}.jpg`
-    : null;
+
+  const localImage = c.local_path_full || c.definition?.local_path_full || null;
 
   return {
     ...c,
@@ -382,6 +379,7 @@ export const DraftView: React.FC<DraftViewProps> = ({ draftState, currentPlayerI
             onToggleCollapse={setIsSidebarCollapsed}
             onResizeStart={(e) => handleResizeStart('sidebar', e)}
             className="hidden lg:flex"
+            showLog={false}
           />
 
           {/* Main Content Area: Handles both Pack and Pool based on layout */}

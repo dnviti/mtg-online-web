@@ -18,6 +18,8 @@ export class CardService {
 
   async cacheImages(cards: any[]): Promise<number> {
     let downloadedCount = 0;
+    let skippedCount = 0;
+    let noImageCount = 0;
 
     // Use a concurrency limit to avoid creating too many connections
     const CONCURRENCY_LIMIT = 5;
@@ -32,7 +34,10 @@ export class CardService {
         const uuid = card.id || card.oracle_id;
         const setCode = card.set;
 
-        if (!uuid || !setCode) continue;
+        if (!uuid || !setCode) {
+          noImageCount++;
+          continue;
+        }
 
         // Check for normal image
         let imageUrl = card.image_uris?.normal;
@@ -52,7 +57,10 @@ export class CardService {
         if (imageUrl) {
           const filePath = path.join(CARDS_DIR, 'images', setCode, 'full', `${uuid}.jpg`);
           tasks.push((async () => {
-            if (await fileStorageManager.exists(filePath)) return;
+            if (await fileStorageManager.exists(filePath)) {
+              skippedCount++;
+              return;
+            }
             try {
               const response = await fetch(imageUrl);
               if (response.ok) {
@@ -67,13 +75,17 @@ export class CardService {
               console.error(`Error downloading full for ${uuid}:`, err);
             }
           })());
+        } else {
+          noImageCount++;
         }
 
         // Task 2: Art Crop (crop)
         if (cropUrl) {
           const cropPath = path.join(CARDS_DIR, 'images', setCode, 'crop', `${uuid}.jpg`);
           tasks.push((async () => {
-            if (await fileStorageManager.exists(cropPath)) return;
+            if (await fileStorageManager.exists(cropPath)) {
+              return; // Don't count crop separately
+            }
             try {
               const response = await fetch(cropUrl);
               if (response.ok) {
@@ -95,6 +107,8 @@ export class CardService {
 
     const workers = Array(CONCURRENCY_LIMIT).fill(null).map(() => downloadWorker());
     await Promise.all(workers);
+
+    console.log(`[CardService] cacheImages complete: ${downloadedCount} downloaded, ${skippedCount} already cached, ${noImageCount} missing image_uris`);
 
     return downloadedCount;
   }

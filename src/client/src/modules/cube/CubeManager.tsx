@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, PlayCircle, Plus, Minus, ChevronDown, MoreHorizontal } from 'lucide-react';
+import { Layers, RotateCcw, Box, Check, Loader2, Upload, LayoutGrid, List, Sliders, Settings, Users, Download, Copy, FileDown, Trash2, Search, X, Plus, Minus, ChevronDown, MoreHorizontal } from 'lucide-react';
 import { ScryfallCard, ScryfallSet } from '../../services/ScryfallService';
 import { PackGeneratorService, ProcessedPools, SetsMap, Pack, PackGenerationSettings } from '../../services/PackGeneratorService';
 import { PackCard } from '../../components/PackCard';
 import { socketService } from '../../services/SocketService';
 import { useToast } from '../../components/Toast';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { ApiService } from '../../services/ApiService';
 
 interface CubeManagerProps {
   packs: Pack[];
@@ -155,41 +156,14 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
   }, [filters, rawScryfallData]);
 
   useEffect(() => {
-    fetch('/api/sets')
-      .then(res => res.json())
-      .then((sets: ScryfallSet[]) => {
+    ApiService.get<ScryfallSet[]>('/api/sets')
+      .then((sets) => {
         setAvailableSets(sets.sort((a, b) => new Date(b.released_at).getTime() - new Date(a.released_at).getTime()));
       })
       .catch(console.error);
   }, []);
 
   // --- Handlers ---
-  const handlePlayOnline = () => {
-    const totalPacks = packs.length;
-
-    // Rules:
-    // < 12: No draft
-    // 12 <= p < 18: 4 players
-    // 18 <= p < 24: 4 or 6 players
-    // >= 24: 4, 6 or 8 players
-
-    if (totalPacks < 12) {
-      showToast('Need at least 12 packs for a 4-player draft (3 packs/player).', 'error');
-      return;
-    }
-
-    if (totalPacks >= 12 && totalPacks < 18) {
-      showToast('Enough packs for 4 players only.', 'info');
-    } else if (totalPacks >= 18 && totalPacks < 24) {
-      showToast('Enough packs for 4 or 6 players.', 'info');
-    } else {
-      showToast('Enough packs for 8 players!', 'success');
-    }
-
-    // Proceed to lobby
-    onGoToLobby();
-  };
-
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -280,10 +254,8 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
           setProgress(`Fetching set ${currentMain.toUpperCase()} ${currentRelated.length > 0 ? `(+ ${currentRelated.join(', ').toUpperCase()})` : ''}...`);
 
           const queryParams = currentRelated.length > 0 ? `?related=${currentRelated.join(',')}` : '';
-          const response = await fetch(`/api/sets/${currentMain}/cards${queryParams}`);
+          const cards = await ApiService.get<ScryfallCard[]>(`/api/sets/${currentMain}/cards${queryParams}`);
 
-          if (!response.ok) throw new Error(`Failed to fetch set ${currentMain}`);
-          const cards: ScryfallCard[] = await response.json();
           setRawScryfallData(prev => [...(prev || []), ...cards]);
           totalCards += cards.length;
         }
@@ -291,18 +263,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
       } else {
         // Parse Text
         setProgress('Parsing and fetching from server...');
-        const response = await fetch('/api/cards/parse', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: inputText })
-        });
-
-        if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || "Failed to parse cards");
-        }
-
-        currentCards = await response.json();
+        currentCards = await ApiService.post<ScryfallCard[]>('/api/cards/parse', { text: inputText });
 
       }
 
@@ -339,18 +300,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
         payload.cards = [];
       }
 
-      const response = await fetch('/api/packs/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Generation failed");
-      }
-
-      const data = await response.json();
+      const data = await ApiService.post<any>('/api/packs/generate', payload);
 
       let newPacks: Pack[] = [];
       let newLands: any[] = [];
@@ -879,8 +829,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
 
                     {/* Play Online */}
                     <button
-                      onClick={handlePlayOnline}
-                      className={`w-full text-left px-3 py-3 rounded-lg flex items-center gap-3 transition-all shadow-md ${packs.length < 12
+                      onClick={handleStartSoloTest}
+                      disabled={loading || packs.length < 12}
+                      className={`w-full text-left px-3 py-3 rounded-lg flex items-center gap-3 transition-all shadow-md ${packs.length < 12 || loading
                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                         : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-purple-900/20'
                         }`}
@@ -888,24 +839,9 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                       <Users className="w-5 h-5 shrink-0" />
                       <div>
                         <span className="block text-sm font-bold leading-tight">Play Online</span>
-                        <span className={`block text-[10px] leading-tight mt-0.5 ${packs.length < 12 ? 'text-slate-500' : 'text-purple-100'}`}>
-                          Start a multiplayer draft
+                        <span className={`block text-[10px] leading-tight mt-0.5 ${packs.length < 12 || loading ? 'text-slate-500' : 'text-purple-100'}`}>
+                          Create online draft room
                         </span>
-                      </div>
-                    </button>
-
-                    <div className="h-px bg-slate-700/50 mx-1" />
-
-                    {/* Test Solo */}
-                    <button
-                      onClick={handleStartSoloTest}
-                      disabled={loading}
-                      className="w-full text-left px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg flex items-center gap-3 transition-colors shadow-sm"
-                    >
-                      <PlayCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <div>
-                        <span className="block text-sm font-bold">Test Solo</span>
-                        <span className="block text-[10px] text-slate-400 leading-none mt-0.5">Draft against bots</span>
                       </div>
                     </button>
 
@@ -937,7 +873,7 @@ export const CubeManager: React.FC<CubeManagerProps> = ({ packs, setPacks, avail
                   <input
                     type="range"
                     min="60"
-                    max="200"
+                    max="300"
                     step="1"
                     value={localCardWidth}
                     onChange={(e) => {

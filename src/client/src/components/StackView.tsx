@@ -19,7 +19,7 @@ interface StackViewProps {
 
 const GROUPS: Record<GroupMode, string[]> = {
   type: ['Creature', 'Planeswalker', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Battle', 'Land', 'Other'],
-  color: ['White', 'Blue', 'Black', 'Red', 'Green', 'Multicolor', 'Colorless'],
+  color: ['White', 'Blue', 'Black', 'Red', 'Green', 'Multicolor', 'Colorless', 'Land'],
   cmc: ['0', '1', '2', '3', '4', '5', '6', '7+'],
   rarity: ['Mythic', 'Rare', 'Uncommon', 'Common']
 };
@@ -39,12 +39,14 @@ const getCardGroup = (card: DraftCard, mode: GroupMode): string => {
   }
 
   if (mode === 'color') {
+    const typeLine = card.typeLine || '';
+    // Check if land first - lands get their own category
+    if (typeLine.includes('Land')) return 'Land';
+
     const colors = card.colors || [];
     if (colors.length > 1) return 'Multicolor';
     if (colors.length === 0) {
-      // Check if land
-      if ((card.typeLine || '').includes('Land')) return 'Colorless';
-      // Artifacts etc
+      // Artifacts and other colorless spells
       return 'Colorless';
     }
     if (colors[0] === 'W') return 'White';

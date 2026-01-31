@@ -1,13 +1,57 @@
 import React, { useEffect, useRef } from 'react';
-import { useGameLog, GameLogEntry } from '../contexts/GameLogContext';
-import { ScrollText, User, Bot, Info, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useGameLog, GameLogEntry, CardReference } from '../contexts/GameLogContext';
+import { ScrollText, User, Info, AlertTriangle, ShieldAlert, ArrowRightLeft } from 'lucide-react';
 
 interface GameLogPanelProps {
   className?: string;
   maxHeight?: string;
+  onCardHover?: (card: CardReference | null) => void;
 }
 
-export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight = '200px' }) => {
+// Component for rendering a card name with hover preview
+const CardNameWithPreview: React.FC<{ card: CardReference; onHover?: (card: CardReference | null) => void }> = ({ card, onHover }) => {
+  return (
+    <span
+      className="text-amber-300 font-semibold cursor-pointer hover:text-amber-200 hover:underline transition-colors"
+      onMouseEnter={() => onHover?.(card)}
+      onMouseLeave={() => onHover?.(null)}
+    >
+      {card.name}
+    </span>
+  );
+};
+
+// Parse message and replace card references with hoverable components
+const renderMessageWithCards = (message: string, cards?: CardReference[], onCardHover?: (card: CardReference | null) => void) => {
+  if (!cards || cards.length === 0) {
+    return <span>{message}</span>;
+  }
+
+  // Create a map of card names for quick lookup
+  const cardMap = new Map(cards.map(c => [c.name.toLowerCase(), c]));
+
+  // Split message by card name patterns (wrapped in curly braces like {Card Name})
+  const parts = message.split(/\{([^}]+)\}/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        // Odd indices are the captured card names
+        if (index % 2 === 1) {
+          const card = cardMap.get(part.toLowerCase());
+          if (card) {
+            return <CardNameWithPreview key={index} card={card} onHover={onCardHover} />;
+          }
+          // Fallback: just render the name in amber if card data missing
+          return <span key={index} className="text-amber-300 font-semibold">{part}</span>;
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </>
+  );
+};
+
+export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight = '200px', onCardHover }) => {
   const { logs } = useGameLog();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -20,7 +64,7 @@ export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight
     if (source === 'System') return <Info className="w-3 h-3 text-slate-500" />;
     if (type === 'error') return <AlertTriangle className="w-3 h-3 text-red-500" />;
     if (type === 'combat') return <ShieldAlert className="w-3 h-3 text-red-400" />;
-    if (source.includes('Bot')) return <Bot className="w-3 h-3 text-indigo-400" />;
+    if (type === 'zone') return <ArrowRightLeft className="w-3 h-3 text-purple-400" />;
     return <User className="w-3 h-3 text-blue-400" />;
   };
 
@@ -31,6 +75,7 @@ export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight
       case 'success': return 'text-emerald-400 bg-emerald-900/10 border-emerald-900/30';
       case 'combat': return 'text-red-300 bg-red-900/20 border-red-900/40 font-bold';
       case 'action': return 'text-blue-300 bg-blue-900/10 border-blue-900/30';
+      case 'zone': return 'text-purple-300 bg-purple-900/10 border-purple-900/30';
       default: return 'text-slate-300 border-transparent';
     }
   };
@@ -71,7 +116,7 @@ export const GameLogPanel: React.FC<GameLogPanelProps> = ({ className, maxHeight
                 )}
                 {/* Message Body */}
                 <span className="leading-tight break-words">
-                  {log.message}
+                  {renderMessageWithCards(log.message, log.cards, onCardHover)}
                 </span>
               </div>
               <span className="ml-auto text-[9px] text-slate-600 whitespace-nowrap mt-0.5">

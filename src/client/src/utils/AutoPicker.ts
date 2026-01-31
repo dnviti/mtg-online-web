@@ -63,32 +63,9 @@ export class AutoPicker {
     const heuristicPick = bestCard || pack[0];
     console.log(`[AutoPicker] 🤖 Heuristic Suggestion: ${heuristicPick.name} (Score: ${maxScore})`);
 
-    // 2. Call Server AI (Async)
-    try {
-      console.log('[AutoPicker] 📡 Sending context to Server AI...');
-      const response = await fetch('/api/ai/pick', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pack,
-          pool,
-          suggestion: heuristicPick.id
-        })
-      });
+    // 2. Return Heuristic
+    return heuristicPick;
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`[AutoPicker] ✅ Server AI Response: Pick ID ${data.pick}`);
-        const pickedCard = pack.find(c => c.id === data.pick);
-        return pickedCard || heuristicPick;
-      } else {
-        console.warn('[AutoPicker] ⚠️ Server AI Request failed, using heuristic.');
-        return heuristicPick;
-      }
-    } catch (err) {
-      console.error('[AutoPicker] ❌ Error contacting AI Server:', err);
-      return heuristicPick;
-    }
   }
 
   private static getRarityWeight(rarity?: string): number {

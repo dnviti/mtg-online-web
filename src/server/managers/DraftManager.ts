@@ -1,65 +1,46 @@
-
 import { EventEmitter } from 'events';
+import { StateStoreManager } from './StateStoreManager';
 
-interface Card {
-  id: string; // instanceid or scryfall id
-  name: string;
-  image_uris?: { normal: string };
-  card_faces?: { image_uris: { normal: string } }[];
-  colors?: string[];
-  rarity?: string;
-  edhrecRank?: number;
-  // ... other props
-}
-
-import { BotDeckBuilderService } from '../services/BotDeckBuilderService'; // Import service
-
-interface Pack {
-  id: string;
-  cards: Card[];
-}
-
-interface DraftState {
-  roomId: string;
-  seats: string[]; // PlayerIDs in seating order
-  packNumber: number; // 1, 2, 3
-
-  // State per player
-  players: Record<string, {
-    id: string;
-    queue: Pack[]; // Packs passed to this player waiting to be viewed
-    activePack: Pack | null; // The pack currently being looked at
-    pool: Card[]; // Picked cards
-    unopenedPacks: Pack[]; // Pack 2 and 3 kept aside
-    isWaiting: boolean; // True if finished current pack round
-    pickedInCurrentStep: number; // HOW MANY CARDS PICKED FROM CURRENT ACTIVE PACK
-    pickExpiresAt: number; // Timestamp when auto-pick occurs
-    isBot: boolean;
-    deck?: Card[]; // Store constructed deck here
-  }>;
-
-  basicLands?: Card[]; // Store reference to available basic lands
-
-  status: 'drafting' | 'deck_building' | 'complete';
-  isPaused: boolean;
-  startTime?: number; // For timer
-}
+import { DraftState, Pack, Card } from '../interfaces/DraftInterfaces';
+import { selectBestCard } from '../algorithms/DraftPickAlgorithm';
+import { CardOptimization } from '../game/engine/CardOptimization';
 
 export class DraftManager extends EventEmitter {
-  private drafts: Map<string, DraftState> = new Map();
 
-  private botBuilder = new BotDeckBuilderService();
+  private get store() {
+    const client = StateStoreManager.getInstance().store;
+    if (!client) throw new Error("State Store not initialized");
+    return client;
+  }
 
-  createDraft(roomId: string, players: { id: string, isBot: boolean }[], allPacks: Pack[], basicLands: Card[] = []): DraftState {
+  // --- Redis Helpers ---
+
+  private async getDraftState(roomId: string): Promise<DraftState | null> {
+    const data = await this.store.get(`draft:${roomId}`);
+    return data ? JSON.parse(data) : null;
+  }
+
+  private async saveDraftState(draft: DraftState) {
+    await this.store.set(`draft:${draft.roomId}`, JSON.stringify(draft));
+    await this.store.sadd('active_drafts', draft.roomId);
+  }
+
+  private async acquireLock(roomId: string): Promise<boolean> {
+    return this.store.acquireLock(`lock:draft:${roomId}`, 5);
+  }
+
+  private async releaseLock(roomId: string) {
+    await this.store.releaseLock(`lock:draft:${roomId}`);
+  }
+
+  // --- Public Methods ---
+
+  async createDraft(roomId: string, players: { id: string }[], allPacks: Pack[], basicLands: Card[] = []): Promise<DraftState> {
     // Distribute 3 packs to each player
-    // Assume allPacks contains (3 * numPlayers) packs
-
-    // DEEP CLONE PACKS to ensure no shared references
-    // And assign unique internal IDs to avoid collisions
     const sanitizedPacks = allPacks.map((p, idx) => ({
       ...p,
       id: `draft-pack-${idx}-${Math.random().toString(36).substr(2, 5)}`,
-      cards: p.cards.map(c => ({ ...c })) // Shallow clone cards to protect against mutation if needed
+      cards: p.cards.map(c => CardOptimization.optimize(c) as any) // Cast as any because Pack interface might expect full card?
     }));
 
     // Shuffle packs
@@ -67,7 +48,7 @@ export class DraftManager extends EventEmitter {
 
     const draftState: DraftState = {
       roomId,
-      seats: players.map(p => p.id), // Assume order is randomized or fixed
+      seats: players.map(p => p.id),
       packNumber: 1,
       players: {},
       status: 'drafting',
@@ -79,7 +60,7 @@ export class DraftManager extends EventEmitter {
     players.forEach((p, index) => {
       const pid = p.id;
       const playerPacks = shuffledPacks.slice(index * 3, (index + 1) * 3);
-      const firstPack = playerPacks.shift(); // Open Pack 1 immediately
+      const firstPack = playerPacks.shift();
 
       draftState.players[pid] = {
         id: pid,
@@ -89,88 +70,98 @@ export class DraftManager extends EventEmitter {
         unopenedPacks: playerPacks,
         isWaiting: false,
         pickedInCurrentStep: 0,
-        pickExpiresAt: Date.now() + 60000, // 60 seconds for first pack
-        isBot: p.isBot
+        pickExpiresAt: Date.now() + 60000,
       };
     });
 
-    this.drafts.set(roomId, draftState);
+    await this.saveDraftState(draftState);
     return draftState;
   }
 
-  getDraft(roomId: string): DraftState | undefined {
-    return this.drafts.get(roomId);
+  async getDraft(roomId: string): Promise<DraftState | null> {
+    return this.getDraftState(roomId);
   }
 
-  pickCard(roomId: string, playerId: string, cardId: string): DraftState | null {
-    const draft = this.drafts.get(roomId);
-    if (!draft) return null;
-
-    const playerState = draft.players[playerId];
-    if (!playerState || !playerState.activePack) return null;
-
-    // Find card
-    const card = playerState.activePack.cards.find(c => c.id === cardId);
-    if (!card) return null;
-
-    // 1. Add to pool
-    playerState.pool.push(card);
-    console.log(`[DraftManager] ✅ Pick processed for Player ${playerId}: ${card.name} (${card.id})`);
-
-    // 2. Remove from pack
-    playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);
-
-    // Increment pick count for this step
-    playerState.pickedInCurrentStep = (playerState.pickedInCurrentStep || 0) + 1;
-
-    // Determine Picks Required
-    // Rule: 4 players -> Pick 2. Others -> Pick 1.
-    const picksRequired = draft.seats.length === 4 ? 2 : 1;
-
-    // Check if we should pass the pack
-    // Pass if: Picked enough cards OR Pack is empty
-    const shouldPass = playerState.pickedInCurrentStep >= picksRequired || playerState.activePack.cards.length === 0;
-
-    if (!shouldPass) {
-      // Do not pass yet. Returns state so UI updates pool and removes card from view.
-      return draft;
+  async pickCard(roomId: string, playerId: string, cardId: string): Promise<DraftState | null> {
+    // Acquire lock
+    if (!(await this.acquireLock(roomId))) {
+      return null; // Retry or fail
     }
 
-    // PASSED
-    const passedPack = playerState.activePack;
-    playerState.activePack = null;
-    playerState.pickedInCurrentStep = 0; // Reset for next pack
+    try {
+      const draft = await this.getDraftState(roomId);
+      if (!draft) return null;
 
-    // 3. Logic for Passing or Discarding (End of Pack)
-    if (passedPack.cards.length > 0) {
-      // Pass to neighbor
-      const seatIndex = draft.seats.indexOf(playerId);
-      let nextSeatIndex;
+      const playerState = draft.players[playerId];
+      if (!playerState || !playerState.activePack) return null;
 
-      // Pack 1: Left (Increase Index), Pack 2: Right (Decrease), Pack 3: Left
-      if (draft.packNumber === 2) {
-        nextSeatIndex = (seatIndex - 1 + draft.seats.length) % draft.seats.length;
-      } else {
-        nextSeatIndex = (seatIndex + 1) % draft.seats.length;
+      // Find card
+      const card = playerState.activePack.cards.find(c => c.id === cardId);
+      if (!card) return null;
+
+      // 1. Add to pool
+      playerState.pool.push(card);
+      console.log(`[DraftManager] ✅ Pick processed for Player ${playerId}: ${card.name} (${card.id})`);
+
+      // 2. Remove from pack
+      playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);
+
+      // Increment pick count for this step
+      playerState.pickedInCurrentStep = (playerState.pickedInCurrentStep || 0) + 1;
+
+      // Determine Picks Required
+      const picksRequired = draft.seats.length === 4 ? 2 : 1;
+      const shouldPass = playerState.pickedInCurrentStep >= picksRequired || playerState.activePack.cards.length === 0;
+
+      if (!shouldPass) {
+        await this.saveDraftState(draft);
+        return draft;
       }
 
-      const neighborId = draft.seats[nextSeatIndex];
-      draft.players[neighborId].queue.push(passedPack);
-      console.log(`[DraftManager] 📦 Passed pack (len: ${passedPack.cards.length}) from ${playerId} to ${neighborId}`);
+      // PASSED
+      const passedPack = playerState.activePack;
+      playerState.activePack = null;
+      playerState.pickedInCurrentStep = 0;
 
-      // Try to assign active pack for neighbor if they are empty
-      this.processQueue(draft, neighborId);
-    } else {
-      // Pack is empty/exhausted
-      playerState.isWaiting = true;
-      console.log(`[DraftManager] 🏁 Pack exhausted for ${playerId}. Waiting for next round.`);
-      this.checkRoundCompletion(draft);
+      // 3. Logic for Passing or Discarding
+      if (passedPack.cards.length > 0) {
+        const seatIndex = draft.seats.indexOf(playerId);
+        let nextSeatIndex;
+
+        if (draft.packNumber === 2) {
+          nextSeatIndex = (seatIndex - 1 + draft.seats.length) % draft.seats.length;
+        } else {
+          nextSeatIndex = (seatIndex + 1) % draft.seats.length;
+        }
+
+        const neighborId = draft.seats[nextSeatIndex];
+        draft.players[neighborId].queue.push(passedPack);
+        console.log(`[DraftManager] 📦 Passed pack (len: ${passedPack.cards.length}) from ${playerId} to ${neighborId}`);
+
+        this.processQueue(draft, neighborId);
+      } else {
+        console.log(`[DraftManager] 🏁 Pack exhausted for ${playerId}.`);
+      }
+
+      // 4. Try to assign new active pack for self from queue
+      this.processQueue(draft, playerId);
+
+      // 5. Update Waiting State & Check Round Completion
+      // Player is waiting ONLY if they have no active pack (meaning queue was also empty)
+      playerState.isWaiting = !playerState.activePack;
+
+      if (playerState.isWaiting) {
+        console.log(`[DraftManager] ⏳ Player ${playerId} is waiting for packs.`);
+        this.checkRoundCompletion(draft);
+      } else {
+        playerState.isWaiting = false; // Explicitly ensure false if active
+      }
+
+      await this.saveDraftState(draft);
+      return draft;
+    } finally {
+      await this.releaseLock(roomId);
     }
-
-    // 4. Try to assign new active pack for self from queue
-    this.processQueue(draft, playerId);
-
-    return draft;
   }
 
   private processQueue(draft: DraftState, playerId: string) {
@@ -180,170 +171,197 @@ export class DraftManager extends EventEmitter {
       console.log(`[DraftManager] 📥 Player ${playerId} opened new pack from queue. Cards: ${p.activePack.cards.length}`);
       p.pickedInCurrentStep = 0; // Reset for new pack
       p.pickExpiresAt = Date.now() + 60000; // Reset timer for new pack
+      // Note: isWaiting will be updated by the caller (pickCard or autoPickInternal)
     }
   }
 
-  checkTimers(): { roomId: string, draft: DraftState }[] {
+  async checkTimers(): Promise<{ roomId: string, draft: DraftState }[]> {
     const updates: { roomId: string, draft: DraftState }[] = [];
     const now = Date.now();
 
-    for (const [roomId, draft] of this.drafts.entries()) {
-      if (draft.isPaused) continue;
+    // Get active drafts from Set
+    const activeDraftIds = await this.store.smembers('active_drafts');
 
-      if (draft.status === 'drafting') {
+    for (const roomId of activeDraftIds) {
+      // Optimistic check: read without lock first
+      // Actually, if we read without lock, we might act on stale data. 
+      // But locking EVERY active draft every second is heavy.
+      // Strategy: Try lock. If fail, skip.
+
+      if (!(await this.acquireLock(roomId))) continue;
+
+      try {
+        const draft = await this.getDraftState(roomId);
+        if (!draft) {
+          // Cleanup stale ID?
+          await this.store.srem('active_drafts', roomId);
+          continue;
+        }
+
+        if (draft.isPaused) continue;
+
         let draftUpdated = false;
-        // Iterate over players
-        for (const playerId of Object.keys(draft.players)) {
-          const playerState = draft.players[playerId];
-          // Check if player is thinking (has active pack) and time expired
-          // OR if player is a BOT (Auto-Pick immediately)
-          // OR if player is a BOT (Auto-Pick immediately)
-          if (playerState.activePack) {
-            if (playerState.isBot) {
-              // Force auto-pick
-              const result = this.autoPick(roomId, playerId);
-              if (result) {
-                draftUpdated = true;
-              } else {
-                console.warn(`[DraftManager] ⚠️ Bot ${playerId} has active pack but autoPick returned null! Pack len: ${playerState.activePack.cards.length}`);
-              }
-            } else if (now > playerState.pickExpiresAt) {
-              const result = this.autoPick(roomId, playerId);
+
+        if (draft.status === 'drafting') {
+          for (const playerId of Object.keys(draft.players)) {
+            const playerState = draft.players[playerId];
+            // Auto-pick only on timeout
+            if (playerState.activePack && now > playerState.pickExpiresAt) {
+              const result = await this.autoPickInternal(draft, playerId);
               if (result) draftUpdated = true;
             }
           }
+
+          if (draftUpdated) {
+            await this.saveDraftState(draft);
+            updates.push({ roomId, draft });
+          }
+
+        } else if (draft.status === 'deck_building') {
+          const DECK_BUILDING_Duration = 999999999;
+          if (draft.startTime && (now > draft.startTime + DECK_BUILDING_Duration)) {
+            draft.status = 'complete';
+            await this.saveDraftState(draft);
+            updates.push({ roomId, draft });
+          }
         }
-        if (draftUpdated) {
-          updates.push({ roomId, draft });
-        }
-      } else if (draft.status === 'deck_building') {
-        // Check global deck building timer (e.g., 120 seconds)
-        // Disabling timeout as per request. Set to ~11.5 days.
-        const DECK_BUILDING_Duration = 999999999;
-        if (draft.startTime && (now > draft.startTime + DECK_BUILDING_Duration)) {
-          draft.status = 'complete'; // Signal that time is up
-          updates.push({ roomId, draft });
-        }
+      } finally {
+        await this.releaseLock(roomId);
       }
     }
     return updates;
   }
 
-  setPaused(roomId: string, paused: boolean) {
-    const draft = this.drafts.get(roomId);
-    if (draft) {
-      draft.isPaused = paused;
-      if (!paused) {
-        // Reset timers to 60s
-        Object.values(draft.players).forEach(p => {
-          if (p.activePack) {
-            p.pickExpiresAt = Date.now() + 60000;
-          }
-        });
-      }
-    }
-  }
-
-  autoPick(roomId: string, playerId: string): DraftState | null {
-    const draft = this.drafts.get(roomId);
-    if (!draft) return null;
-
-    const playerState = draft.players[playerId];
-    if (!playerState || !playerState.activePack || playerState.activePack.cards.length === 0) return null;
-
-    // Score cards
-    const scoredCards = playerState.activePack.cards.map(c => {
-      let score = 0;
-
-      // 1. Rarity Base Score
-      if (c.rarity === 'mythic') score += 5;
-      else if (c.rarity === 'rare') score += 4;
-      else if (c.rarity === 'uncommon') score += 2;
-      else score += 1;
-
-      // 2. Color Synergy (Simple)
-      const poolColors = playerState.pool.flatMap(p => p.colors || []);
-      if (poolColors.length > 0 && c.colors) {
-        c.colors.forEach(col => {
-          const count = poolColors.filter(pc => pc === col).length;
-          score += (count * 0.1);
-        });
-      }
-
-      // 3. EDHREC Score (Lower rank = better)
-      if (c.edhrecRank !== undefined && c.edhrecRank !== null) {
-        const rank = c.edhrecRank;
-        if (rank < 10000) {
-          score += (5 * (1 - (rank / 10000)));
+  async setPaused(roomId: string, paused: boolean) {
+    if (!(await this.acquireLock(roomId))) return;
+    try {
+      const draft = await this.getDraftState(roomId);
+      if (draft) {
+        draft.isPaused = paused;
+        if (!paused) {
+          Object.values(draft.players).forEach(p => {
+            if (p.activePack) {
+              p.pickExpiresAt = Date.now() + 60000;
+            }
+          });
         }
+        await this.saveDraftState(draft);
       }
-
-      return { card: c, score };
-    });
-
-    // Sort by score desc
-    scoredCards.sort((a, b) => b.score - a.score);
-
-    // Pick top card
-
-    // Pick top card
-    const card = scoredCards[0].card;
-
-    // Log intent
-    // console.log(`[DraftManager] 🤖 Bot ${playerId} picking ${card.name} (${card.id})`);
-
-    // Reuse existing logic
-    const result = this.pickCard(roomId, playerId, card.id);
-    if (!result) {
-      console.error(`[DraftManager] ❌ Bot ${playerId} failed to pick ${card.name} (pickCard returned null)`);
+    } finally {
+      await this.releaseLock(roomId);
     }
-    return result;
   }
 
-  // Debug helper
-  public logDraftState(roomId: string) {
-    const draft = this.drafts.get(roomId);
-    if (!draft) return;
-    console.log(`--- Draft State ${roomId} ---`);
-    Object.values(draft.players).forEach(p => {
-      console.log(`Player ${p.id} (Bot: ${p.isBot}): Active=${p.activePack?.id || 'None'} (${p.activePack?.cards.length || 0}), Queue=${p.queue.length}, Waiting=${p.isWaiting}`);
-    });
-    console.log(`-----------------------------`);
+  // Wrapper for external calls, handles locking
+  async autoPick(roomId: string, playerId: string): Promise<DraftState | null> {
+    if (!(await this.acquireLock(roomId))) return null;
+    try {
+      const draft = await this.getDraftState(roomId);
+      if (!draft) return null;
+
+      if (await this.autoPickInternal(draft, playerId)) {
+        await this.saveDraftState(draft);
+        return draft;
+      }
+      return null;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  // Internal: expects draft object, does NOT save, does NOT lock. Returns true if modified.
+  private async autoPickInternal(draft: DraftState, playerId: string): Promise<boolean> {
+    const playerState = draft.players[playerId];
+    if (!playerState || !playerState.activePack || playerState.activePack.cards.length === 0) return false;
+
+    // 1. Select Best Card (using extracted algorithm)
+    const selection = selectBestCard(playerState.activePack.cards, playerState.pool);
+    if (!selection) return false;
+
+    const { card, score, topColors } = selection;
+
+    console.log(`[DraftManager] 🤖 Auto-pick for ${playerId}: ${card.name} (Score: ${score.toFixed(1)}, Colors: ${topColors.join('/')})`);
+
+    // 4. Update State (Sync)
+
+    // Add to pool
+    playerState.pool.push(card);
+
+    // Remove from pack (By Reference Identity!)
+    playerState.activePack.cards = playerState.activePack.cards.filter(c => c !== card);
+
+    playerState.pickedInCurrentStep = (playerState.pickedInCurrentStep || 0) + 1;
+
+    const picksRequired = draft.seats.length === 4 ? 2 : 1;
+    const shouldPass = playerState.pickedInCurrentStep >= picksRequired || playerState.activePack.cards.length === 0;
+
+    if (!shouldPass) return true;
+
+    // PASS PACK
+    const passedPack = playerState.activePack;
+    playerState.activePack = null;
+    playerState.pickedInCurrentStep = 0;
+
+    if (passedPack.cards.length > 0) {
+      const seatIndex = draft.seats.indexOf(playerId);
+      let nextSeatIndex;
+      if (draft.packNumber === 2) {
+        nextSeatIndex = (seatIndex - 1 + draft.seats.length) % draft.seats.length;
+      } else {
+        nextSeatIndex = (seatIndex + 1) % draft.seats.length;
+      }
+      const neighborId = draft.seats[nextSeatIndex];
+      draft.players[neighborId].queue.push(passedPack);
+      this.processQueue(draft, neighborId);
+    }
+
+    // Checking own queue
+    this.processQueue(draft, playerId);
+
+    // Update Waiting Logic
+    playerState.isWaiting = !playerState.activePack;
+
+    if (playerState.isWaiting) {
+      this.checkRoundCompletion(draft);
+    } else {
+      playerState.isWaiting = false;
+    }
+
+    this.processQueue(draft, playerId); // Double check queue? Redundant but harmless.
+    return true;
   }
 
   private checkRoundCompletion(draft: DraftState) {
     const allWaiting = Object.values(draft.players).every(p => p.isWaiting);
     if (allWaiting) {
-      // Start Next Round
       if (draft.packNumber < 3) {
         draft.packNumber++;
-        // Open next pack for everyone
         Object.values(draft.players).forEach(p => {
           p.isWaiting = false;
           const nextPack = p.unopenedPacks.shift();
           if (nextPack) {
             p.activePack = nextPack;
-            p.pickedInCurrentStep = 0; // Reset
-            p.pickExpiresAt = Date.now() + 60000; // Reset timer
+            p.pickedInCurrentStep = 0;
+            p.pickExpiresAt = Date.now() + 60000;
           }
         });
       } else {
-        // Draft Complete
         draft.status = 'deck_building';
-        draft.startTime = Date.now(); // Start deck building timer
+        draft.startTime = Date.now();
 
-        // AUTO-BUILD BOT DECKS
-        Object.values(draft.players).forEach(p => {
-          if (p.isBot) {
-            // Build deck
-
-            const lands = draft.basicLands || [];
-            const deck = this.botBuilder.buildDeck(p.pool, lands);
-            p.deck = deck;
-            console.log(`[DraftManager] 🤖 Bot ${p.id} deck built with ${deck.length} cards.`);
-          }
-        });
+        // Emit event for persistence
+        this.emit('draft_complete', { roomId: draft.roomId, draft });
       }
     }
+  }
+
+  public async logDraftState(roomId: string) {
+    const draft = await this.getDraftState(roomId);
+    if (!draft) return;
+    console.log(`--- Draft State ${roomId} ---`);
+    Object.values(draft.players).forEach(p => {
+      console.log(`Player ${p.id}: Active=${p.activePack?.id || 'None'}, Queue=${p.queue.length}`);
+    });
+    console.log(`-----------------------------`);
   }
 }

@@ -1,17 +1,38 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useUser } from '../../contexts/UserContext';
-import { LogOut, Trash2, Calendar, Layers, Clock } from 'lucide-react';
+import { LogOut, Trash2, Calendar, Layers, Clock, Download } from 'lucide-react';
 import { useToast } from '../../components/Toast';
 import { VisualDeckEditor } from './VisualDeckEditor';
 import { CreateDeckModal } from './CreateDeckModal';
+import { ImportDeckModal } from './ImportDeckModal';
+import { PremiumUpgrade } from './PremiumUpgrade';
 
 export const ProfileModule: React.FC = () => {
-    const { user, logout, deleteDeck } = useUser();
+    const { user, logout, deleteDeck, refreshUser } = useUser();
     const { showToast } = useToast();
+
+    // Handle payment callback URL parameters
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const paymentStatus = params.get('payment');
+
+        if (paymentStatus === 'success') {
+            showToast('Pagamento completato! Sei ora un membro Premium.', 'success');
+            // Clean URL
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+            // Refresh user data to get updated premium status
+            refreshUser();
+        } else if (paymentStatus === 'cancelled') {
+            showToast('Pagamento annullato.', 'info');
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
 
     const [editingDeck, setEditingDeck] = React.useState<any>(null);
     const [isCreating, setIsCreating] = React.useState(false);
     const [isNaming, setIsNaming] = React.useState(false);
+    const [isImporting, setIsImporting] = React.useState(false);
     const [newDeckDetails, setNewDeckDetails] = React.useState<{ name: string, format: string } | null>(null);
 
     if (!user) return null;
@@ -84,12 +105,23 @@ export const ProfileModule: React.FC = () => {
                         <Layers className="w-4 h-4" /> New Deck
                     </button>
                     <button
+                        onClick={() => setIsImporting(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors shadow-lg"
+                    >
+                        <Download className="w-4 h-4" /> Import
+                    </button>
+                    <button
                         onClick={logout}
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-600"
                     >
                         <LogOut className="w-4 h-4" /> Sign Out
                     </button>
                 </div>
+            </div>
+
+            {/* Premium Subscription Section */}
+            <div className="mb-8">
+                <PremiumUpgrade />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -151,6 +183,57 @@ export const ProfileModule: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Import Deck Modal */}
+            <ImportDeckModal
+                isOpen={isImporting}
+                onClose={() => setIsImporting(false)}
+                onImport={(importedDeck) => {
+                    let cards: any[] = [];
+
+                    // If we have pre-resolved cards with full Scryfall data, use them
+                    if (importedDeck.resolvedCards && importedDeck.resolvedCards.length > 0) {
+                        cards = importedDeck.resolvedCards.map((c: any) => ({
+                            ...c,
+                            id: `${c.id}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            scryfallId: c.id,
+                            setCode: c.set,
+                            // IMPORTANT: Prioritize local cached paths over Scryfall URLs (per CLAUDE.md guidelines)
+                            image: c.local_path_full || c.image_uris?.normal || c.card_faces?.[0]?.image_uris?.normal,
+                            imageArtCrop: c.local_path_crop || c.image_uris?.art_crop || c.card_faces?.[0]?.image_uris?.art_crop,
+                            isCommander: c._importSection === 'commander',
+                            isSideboard: c._importSection === 'sideboard'
+                        }));
+                    } else {
+                        // Fallback: use basic card info (name + quantity only)
+                        const basicCards = [
+                            ...(importedDeck.commanders || []).map(c => ({ ...c, isCommander: true })),
+                            ...importedDeck.cards,
+                            ...(importedDeck.sideboard || []).map(c => ({ ...c, isSideboard: true }))
+                        ];
+                        cards = basicCards.map(c => ({
+                            id: `card-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            name: c.name,
+                            quantity: c.quantity,
+                            isCommander: (c as any).isCommander,
+                            isSideboard: (c as any).isSideboard
+                        }));
+                    }
+
+                    setNewDeckDetails({
+                        name: importedDeck.name,
+                        format: importedDeck.format
+                    });
+                    setEditingDeck({
+                        name: importedDeck.name,
+                        format: importedDeck.format,
+                        cards
+                    });
+                    setIsImporting(false);
+                    setIsCreating(true);
+                    showToast(`Mazzo "${importedDeck.name}" importato! Modifica e salva.`, 'success');
+                }}
+            />
         </div>
     );
 };

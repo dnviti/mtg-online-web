@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Mana';
+  src: url('/fonts/mana.woff2') format('woff2'),
+       url('/fonts/mana.woff2'); /* Fallback attempt just in case */
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer utilities {
   .animate-bg-roll {
     animation: bg-roll 3s linear infinite;

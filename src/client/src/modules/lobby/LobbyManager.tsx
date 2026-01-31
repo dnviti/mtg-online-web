@@ -1,11 +1,12 @@
 
-import React, { useState } from 'react';
-import { socketService } from '../../services/SocketService';
+import React, { useState, useEffect } from 'react';
+import { useGameContext } from '../../contexts/GameSocketContext';
 import { GameRoom } from './GameRoom';
 import { Pack } from '../../services/PackGeneratorService';
 import { Users, PlusCircle, LogIn, AlertCircle, Loader2, Package, Check } from 'lucide-react';
-import { Modal } from '../../components/Modal';
 import { useUser } from '../../contexts/UserContext';
+import { Modal } from '../../components/Modal';
+import { ApiService } from '../../services/ApiService';
 
 interface LobbyManagerProps {
   generatedPacks: Pack[];
@@ -13,18 +14,30 @@ interface LobbyManagerProps {
 }
 
 export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, availableLands = [] }) => {
-  const { user } = useUser(); // Get user from context
-  const [activeRoom, setActiveRoom] = useState<any>(null);
+  const { user } = useUser();
+  const {
+    activeRoom,
+    gameState,
+    isConnected,
+    error: socketError,
+    connect,
+    createRoom,
+    joinRoom,
+    rejoinRoom,
+    leaveRoom,
+    setActiveRoom, // We might need to clear it manually on loading
+    setGameState,
+    draftState
+  } = useGameContext();
+
   const [playerName, setPlayerName] = useState(() => {
     if (user && user.username) return user.username;
     return localStorage.getItem('player_name') || '';
   });
-  const [selectedFormat, setSelectedFormat] = useState('commander'); // Default to Commander
+  const [selectedFormat, setSelectedFormat] = useState('commander');
   const [joinRoomId, setJoinRoomId] = useState('');
-  const [error, setError] = useState('');
+  const [localError, setLocalError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [initialDraftState, setInitialDraftState] = useState<any>(null);
-  const [initialGameState, setInitialGameState] = useState<any>(null);
 
   const [playerId] = useState(() => {
     const saved = localStorage.getItem('player_id');
@@ -34,8 +47,8 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     return newId;
   });
 
-  // Persist player name (only if guest)
-  React.useEffect(() => {
+  // Persist player name
+  useEffect(() => {
     if (user?.username) {
       setPlayerName(user.username);
     } else {
@@ -45,99 +58,87 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
   const [showBoxSelection, setShowBoxSelection] = useState(false);
   const [availableBoxes, setAvailableBoxes] = useState<{ id: string, title: string, packs: Pack[], setCode: string, packCount: number }[]>([]);
+  const [showExistingRoomsDialog, setShowExistingRoomsDialog] = useState(false);
+  const [existingRooms, setExistingRooms] = useState<any[]>([]);
+  const [pendingRoomCreation, setPendingRoomCreation] = useState<Pack[] | null>(null);
 
-  const connect = () => {
-    if (!socketService.socket.connected) {
-      socketService.connect();
-    }
-  };
+  // Sync socket error to local error
+  useEffect(() => {
+    if (socketError) setLocalError(socketError);
+  }, [socketError]);
 
-  const executeCreateRoom = async (packsToUse: Pack[]) => {
+  const executeCreateRoom = async (packsToUse: Pack[], forceNew: boolean = false) => {
     setLoading(true);
-    setError('');
+    setLocalError('');
+
+    // CRITICAL: Signal that we're intentionally creating a new room
+    // This prevents auto-reconnect logic from interfering
+    setIsCreatingNewRoom(true);
+
+    // Clear old room reference BEFORE creating a new room
+    localStorage.removeItem('active_room_id');
+
     connect();
 
     try {
       // Collect all cards for caching (packs + basic lands)
       const allCards = packsToUse.flatMap(p => p.cards);
       const allCardsAndLands = [...allCards, ...availableLands];
-
-      // Deduplicate by Scryfall ID
       const uniqueCards = Array.from(new Map(allCardsAndLands.map(c => [c.scryfallId, c])).values());
 
-      // Prepare payload for server (generic structure expected by CardService)
       const cardsToCache = uniqueCards.map(c => ({
         id: c.scryfallId,
-        set: c.setCode, // Required for folder organization
+        set: c.setCode,
         image_uris: { normal: c.image }
       }));
 
-      // Cache images on server
-      const cacheResponse = await fetch('/api/cards/cache', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: cardsToCache })
-      });
+      // Cache images on server (API call)
+      await ApiService.post('/api/cards/cache', { cards: cardsToCache });
 
-      if (!cacheResponse.ok) {
-        throw new Error('Failed to cache images');
-      }
-
-      const cacheResult = await cacheResponse.json();
-      console.log('Cached result:', cacheResult);
-
-      // Transform packs and lands to use local URLs
-      // Note: For multiplayer, clients need to access this URL.
-      const baseUrl = `${window.location.protocol}//${window.location.host}/cards/images`;
-
-      const updatedPacks = packsToUse.map(pack => ({
-        ...pack,
-        cards: pack.cards.map(c => ({
-          ...c,
-          // Update the single image property used by DraftCard
-          image: `${baseUrl}/${c.setCode}/${c.scryfallId}.jpg`
-        }))
-      }));
-
-      const updatedBasicLands = availableLands.map(l => ({
-        ...l,
-        image: `${baseUrl}/${l.setCode}/${l.scryfallId}.jpg`
-      }));
-
-      const response = await socketService.emitPromise('create_room', {
+      const response = await createRoom({
         hostId: playerId,
         hostName: playerName,
-        packs: updatedPacks,
-        basicLands: updatedBasicLands,
-        format: selectedFormat
+        packs: packsToUse,
+        basicLands: availableLands,
+        format: selectedFormat,
+        forceNew
       });
 
-      if (response.success) {
-        setActiveRoom(response.room);
-      } else {
-        setError(response.message || 'Failed to create room');
+      if (!response.success) {
+        // Check if the response indicates existing rooms
+        if (response.hasExistingRooms && response.existingRooms) {
+          setExistingRooms(response.existingRooms);
+          setPendingRoomCreation(packsToUse);
+          setShowExistingRoomsDialog(true);
+          setLoading(false);
+          setShowBoxSelection(false);
+          return;
+        }
+        setLocalError(response.message || 'Failed to create room');
       }
+      // Hook updates activeRoom automatically on success via state update or listener
+      if (response.room) setActiveRoom(response.room);
+
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Connection error');
+      setLocalError(err.message || 'Connection error');
     } finally {
       setLoading(false);
       setShowBoxSelection(false);
+      setIsCreatingNewRoom(false);
     }
   };
 
   const handleCreateRoom = async () => {
     if (!playerName) {
-      setError('Please enter your name');
+      setLocalError('Please enter your name');
       return;
     }
     if (selectedFormat === 'draft' && generatedPacks.length === 0) {
-      setError('No packs generated! Please go to Draft Management and generate packs first.');
+      setLocalError('No packs generated! Please go to Draft Management and generate packs first.');
       return;
     }
 
-    // Logic to detect Multiple Boxes
-    // 1. Group by Set Name
     const packsBySet: Record<string, Pack[]> = {};
     generatedPacks.forEach(p => {
       const key = p.setName;
@@ -146,20 +147,15 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
     });
 
     const boxes: { id: string, title: string, packs: Pack[], setCode: string, packCount: number }[] = [];
-
-    // Sort sets alphabetically
     Object.keys(packsBySet).sort().forEach(setName => {
       const setPacks = packsBySet[setName];
       const BOX_SIZE = 36;
-
-      // Split into chunks of 36
       for (let i = 0; i < setPacks.length; i += BOX_SIZE) {
         const chunk = setPacks.slice(i, i + BOX_SIZE);
         const boxNum = Math.floor(i / BOX_SIZE) + 1;
         const setCode = (chunk[0].cards[0]?.setCode || 'unk').toLowerCase();
-
         boxes.push({
-          id: `${setCode}-${boxNum}-${Date.now()}`, // Unique ID
+          id: `${setCode}-${boxNum}-${Date.now()}`,
           title: `${setName} - Box ${boxNum}`,
           packs: chunk,
           setCode: setCode,
@@ -168,164 +164,163 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
       }
     });
 
-    // Strategy: If we have multiple boxes, or if we have > 36 packs but maybe not multiple "boxes" (e.g. 50 packs of mixed),
-    // we should interpret them.
-    // The prompt says: "more than 1 box has been generated".
-    // If I generate 2 boxes (72 packs), `boxes` array will have length 2.
-    // If I generate 1 box (36 packs), `boxes` array will have length 1.
-
     if (boxes.length > 1) {
       setAvailableBoxes(boxes);
       setShowBoxSelection(true);
       return;
     }
 
-    // If only 1 box (or partial), just use all packs
     executeCreateRoom(generatedPacks);
   };
 
   const handleJoinRoom = async () => {
     if (!playerName) {
-      setError('Please enter your name');
+      setLocalError('Please enter your name');
       return;
     }
     if (!joinRoomId) {
-      setError('Please enter a Room ID');
+      setLocalError('Please enter a Room ID');
       return;
     }
 
     setLoading(true);
-    setError('');
+    setLocalError('');
     connect();
 
     try {
-      const response = await socketService.emitPromise('join_room', {
+      const response = await joinRoom({
         roomId: joinRoomId.toUpperCase(),
         playerId,
         playerName
       });
 
       if (response.success) {
-        setInitialDraftState(response.draftState || null);
-        setInitialGameState(response.gameState || null);
-        setActiveRoom(response.room);
+        // gameState and room are set by hook
+        if (response.draftState) {
+          // handled by event
+        }
+        // Explicitly set active room with tournament data if provided to avoid race conditions
+        if (response.room) {
+          const roomToSet = { ...response.room };
+          if (response.tournament) {
+            roomToSet.tournament = response.tournament;
+          }
+          setActiveRoom(roomToSet);
+        }
       } else {
-        setError(response.message || 'Failed to join room');
+        setLocalError(response.message || 'Failed to join room');
       }
     } catch (err: any) {
-      setError(err.message || 'Connection error');
+      setLocalError(err.message || 'Connection error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Persist session logic
-  React.useEffect(() => {
+  // Track if user is intentionally creating a new room (to skip auto-reconnect)
+  const [isCreatingNewRoom, setIsCreatingNewRoom] = useState(false);
+
+  // Reconnection Logic using Hook
+  useEffect(() => {
+    // Skip auto-reconnect if user is intentionally creating a new room
+    if (isCreatingNewRoom) {
+      console.log(`[LobbyManager] Skipping auto-reconnect - user is creating a new room`);
+      return;
+    }
+
+    const savedRoomId = localStorage.getItem('active_room_id');
+    if (savedRoomId && !activeRoom && playerId && isConnected) {
+      console.log(`[LobbyManager] Found saved session ${savedRoomId}. Rejoining...`);
+      setLoading(true);
+      rejoinRoom({ roomId: savedRoomId, playerId })
+        .then(response => {
+          if (response.success) {
+            // Server emits 'draft_update' manually to this socket on rejoin.
+            // Context listener should pick it up.
+            // Ensure we update activeRoom if response returns it, and MERGE tournament data if present
+            if (response.room) {
+              const roomToSet = { ...response.room };
+              if (response.tournament) {
+                roomToSet.tournament = response.tournament;
+              }
+              setActiveRoom(roomToSet);
+            }
+          } else {
+            // Clear invalid room reference to prevent future auto-reconnect attempts
+            console.log(`[LobbyManager] Rejoin failed: ${response.message}. Clearing saved room.`);
+            localStorage.removeItem('active_room_id');
+          }
+        })
+        .catch((err) => {
+          console.warn('[LobbyManager] Rejoin error:', err);
+          // On error, also clear to prevent stuck state
+          localStorage.removeItem('active_room_id');
+        })
+        .finally(() => setLoading(false));
+    } else if (savedRoomId && !isConnected) {
+      connect();
+      // Effect will re-run when isConnected becomes true
+    }
+  }, [isConnected, playerId, activeRoom, rejoinRoom, connect, isCreatingNewRoom]);
+
+  // Persist session
+  useEffect(() => {
     if (activeRoom) {
       localStorage.setItem('active_room_id', activeRoom.id);
     }
   }, [activeRoom]);
 
-  // Reconnection logic (Initial Mount)
-  React.useEffect(() => {
-    const savedRoomId = localStorage.getItem('active_room_id');
-
-    if (savedRoomId && !activeRoom && playerId) {
-      console.log(`[LobbyManager] Found saved session ${savedRoomId}. Attempting to reconnect...`);
-      setLoading(true);
-
-      const handleRejoin = async () => {
-        try {
-          console.log(`[LobbyManager] Emitting rejoin_room...`);
-          const response = await socketService.emitPromise('rejoin_room', { roomId: savedRoomId, playerId });
-
-          if (response.success) {
-            console.log("[LobbyManager] Rejoined session successfully");
-            setActiveRoom(response.room);
-            if (response.draftState) {
-              setInitialDraftState(response.draftState);
-            }
-            if (response.gameState) {
-              setInitialGameState(response.gameState);
-            }
-          } else {
-            console.warn("[LobbyManager] Rejoin failed by server: ", response.message);
-            // Only clear if explicitly rejected (e.g. Room closed), not connection error
-            if (response.message !== 'Connection error') {
-              localStorage.removeItem('active_room_id');
-            }
-            setLoading(false);
-          }
-        } catch (err: any) {
-          console.warn("[LobbyManager] Reconnection failed", err);
-          // Do not clear ID immediately on network error, allow retry
-          setLoading(false);
-        }
-      };
-
-      if (!socketService.socket.connected) {
-        console.log(`[LobbyManager] Socket not connected. Connecting...`);
-        connect();
-        socketService.socket.once('connect', handleRejoin);
-      } else {
-        handleRejoin();
-      }
-
-      return () => {
-        socketService.socket.off('connect', handleRejoin);
-      };
-    }
-  }, []); // Run once on mount
-
-  // Auto-Rejoin on Socket Reconnect (e.g. Server Restart)
-  React.useEffect(() => {
-    const socket = socketService.socket;
-
-    const onConnect = () => {
-      if (activeRoom && playerId) {
-        console.log("Socket reconnected. Attempting to restore session for room:", activeRoom.id);
-        socketService.emitPromise('rejoin_room', { roomId: activeRoom.id, playerId })
-          .then((response: any) => {
-            if (response.success) {
-              console.log("Session restored successfully.");
-            } else {
-              console.warn("Failed to restore session:", response.message);
-            }
-          })
-          .catch(err => console.error("Session restore error:", err));
-      }
-    };
-
-    socket.on('connect', onConnect);
-    return () => { socket.off('connect', onConnect); };
-  }, [activeRoom, playerId]);
-
-  // Listener for room updates to switch view
-  React.useEffect(() => {
-    const socket = socketService.socket;
-    const onRoomUpdate = (room: any) => {
-      if (room && room.players.find((p: any) => p.id === playerId)) {
-        setActiveRoom(room);
-        setLoading(false);
-      }
-    };
-    socket.on('room_update', onRoomUpdate);
-    return () => { socket.off('room_update', onRoomUpdate); };
-  }, [playerId]);
-
-
   const handleExitRoom = () => {
     if (activeRoom) {
-      socketService.socket.emit('leave_room', { roomId: activeRoom.id, playerId });
+      leaveRoom({ roomId: activeRoom.id, playerId });
     }
-    setActiveRoom(null);
-    setInitialDraftState(null);
-    setInitialGameState(null);
     localStorage.removeItem('active_room_id');
+    setGameState(null); // Clear game state from hook
+    setActiveRoom(null); // Clear room from hook
+  };
+
+  const handleRejoinExistingRoom = async (room: any) => {
+    setShowExistingRoomsDialog(false);
+    setIsCreatingNewRoom(false); // Reset flag since user chose to rejoin instead
+    setLoading(true);
+    setLocalError('');
+
+    try {
+      const response = await rejoinRoom({ roomId: room.id, playerId });
+      if (response.success) {
+        if (response.room) {
+          const roomToSet = { ...response.room };
+          if (response.tournament) {
+            roomToSet.tournament = response.tournament;
+          }
+          setActiveRoom(roomToSet);
+        }
+      } else {
+        setLocalError(response.message || 'Failed to rejoin room');
+      }
+    } catch (err: any) {
+      setLocalError(err.message || 'Connection error');
+    } finally {
+      setLoading(false);
+      setPendingRoomCreation(null);
+    }
+  };
+
+  const handleForceCreateNewRoom = () => {
+    setShowExistingRoomsDialog(false);
+    if (pendingRoomCreation) {
+      executeCreateRoom(pendingRoomCreation, true);
+    }
   };
 
   if (activeRoom) {
-    return <GameRoom room={activeRoom} currentPlayerId={playerId} onExit={handleExitRoom} initialDraftState={initialDraftState} initialGameState={initialGameState} />;
+    return <GameRoom
+      room={activeRoom}
+      currentPlayerId={playerId}
+      onExit={handleExitRoom}
+      initialGameState={gameState} // Pass hook state 
+      initialDraftState={draftState}
+    />;
   }
 
   return (
@@ -336,10 +331,10 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
         </h2>
         <p className="text-slate-400 mb-8">Create a private room for your draft or join an existing one.</p>
 
-        {error && (
+        {localError && (
           <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-xl mb-6 flex items-center gap-3">
             <AlertCircle className="w-5 h-5" />
-            {error}
+            {localError}
           </div>
         )}
 
@@ -352,9 +347,16 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               className="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 outline-none text-lg mb-4"
             >
               <option value="commander">Commander (EDH)</option>
-              <option value="draft">Draft Mode</option>
-              <option value="standard">Standard / Limited (No Commander)</option>
+              <option value="standard">Standard</option>
+              <option value="modern">Modern</option>
+              <option value="pioneer">Pioneer</option>
+              <option value="legacy">Legacy</option>
+              <option value="vintage">Vintage</option>
+              <option value="pauper">Pauper</option>
             </select>
+            <p className="text-xs text-slate-500 mb-4">
+              <span className="text-purple-400">Suggerimento:</span> Per avviare un draft, vai su <span className="font-bold">Draft Management</span> e genera i pack.
+            </p>
 
             <label className="block text-sm font-bold text-slate-300 mb-2">Your Name</label>
             {user ? (
@@ -375,62 +377,21 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4 border-t border-slate-700">
             {/* Create Room */}
-            <div className={`space-y-4 ${generatedPacks.length === 0 ? 'opacity-50' : ''}`}>
-              <div className="flex justify-between items-start">
-                <h3 className="text-xl font-bold text-white">Create Room</h3>
-                <h3 className="text-xl font-bold text-white">Create Room</h3>
-                {selectedFormat === 'draft' && (
-                  <div className="group relative">
-                    <AlertCircle className="w-5 h-5 text-slate-500 cursor-help hover:text-white transition-colors" />
-                    <div className="absolute w-64 right-0 bottom-full mb-2 bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl text-xs text-slate-300 hidden group-hover:block z-50">
-                      <strong className="block text-white mb-2 pb-1 border-b border-slate-700">Draft Rules (3 packs/player)</strong>
-                      <ul className="space-y-1">
-                        <li className={generatedPacks.length < 12 ? 'text-red-400' : 'text-slate-500'}>
-                          • &lt; 12 Packs: Not enough for draft
-                        </li>
-                        <li className={(generatedPacks.length >= 12 && generatedPacks.length < 18) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 12-17 Packs: 4 Players
-                        </li>
-                        <li className={(generatedPacks.length >= 18 && generatedPacks.length < 24) ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 18-23 Packs: 4 or 6 Players
-                        </li>
-                        <li className={generatedPacks.length >= 24 ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                          • 24+ Packs: 4, 6 or 8 Players
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-white">Create Room</h3>
 
               <div className="text-sm text-slate-400">
-                {selectedFormat === 'draft' ? (
-                  <>
-                    Start a new draft with your <span className="text-white font-bold">{generatedPacks.length}</span> generated packs.
-                    <div className="mt-1 text-xs">
-                      Supported Players: {' '}
-                      {generatedPacks.length < 12 && <span className="text-red-400 font-bold">None (Generate more packs)</span>}
-                      {generatedPacks.length >= 12 && generatedPacks.length < 18 && <span className="text-emerald-400 font-bold">4 Only</span>}
-                      {generatedPacks.length >= 18 && generatedPacks.length < 24 && <span className="text-emerald-400 font-bold">4 or 6</span>}
-                      {generatedPacks.length >= 24 && <span className="text-emerald-400 font-bold">4, 6 or 8</span>}
-                    </div>
-                  </>
-                ) : (
-                  <>Create a lobby for Constructed play. No packs required.</>
-                )}
+                Create a lobby for Constructed play. Players will select their decks matching the format.
               </div>
 
               <button
                 onClick={handleCreateRoom}
-                disabled={loading || (selectedFormat === 'draft' && generatedPacks.length === 0)}
+                disabled={loading}
                 className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl shadow-lg transform transition hover:scale-[1.02] flex justify-center items-center gap-2 disabled:cursor-not-allowed disabled:grayscale"
               >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <PlusCircle className="w-5 h-5" />}
                 {loading ? 'Creating...' : 'Create Private Room'}
               </button>
-              {selectedFormat === 'draft' && generatedPacks.length === 0 && (
-                <p className="text-xs text-amber-500 text-center font-bold">Requires packs from Draft Management tab.</p>
-              )}
             </div>
 
             {/* Join Room */}
@@ -457,6 +418,79 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
           </div>
         </div>
       </div>
+
+      {/* Existing Rooms Dialog */}
+      <Modal
+        isOpen={showExistingRoomsDialog}
+        onClose={() => {
+          setShowExistingRoomsDialog(false);
+          setPendingRoomCreation(null);
+          setIsCreatingNewRoom(false);
+        }}
+        title="Existing Open Rooms Found"
+        message="You have existing open rooms. Would you like to rejoin one of them or create a new room?"
+        type="warning"
+        maxWidth="max-w-3xl"
+      >
+        <div className="mt-6 space-y-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 max-h-64 overflow-y-auto custom-scrollbar">
+            <h3 className="text-sm font-bold text-slate-300 mb-3">Your Open Rooms:</h3>
+            <div className="space-y-2">
+              {existingRooms.map((room) => (
+                <div
+                  key={room.id}
+                  className="bg-slate-800 border border-slate-600 rounded-lg p-4 hover:border-purple-500 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-mono text-lg font-bold text-white">{room.id}</div>
+                      <div className="text-sm text-slate-400">
+                        Status: <span className="capitalize text-slate-300">{room.status}</span>
+                      </div>
+                      <div className="text-sm text-slate-400">
+                        Players: <span className="text-slate-300">{room.players.length}/{room.maxPlayers}</span>
+                      </div>
+                      {room.format && (
+                        <div className="text-sm text-slate-400">
+                          Format: <span className="capitalize text-slate-300">{room.format}</span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleRejoinExistingRoom(room)}
+                      disabled={loading}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? 'Rejoining...' : 'Rejoin'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+            <button
+              onClick={() => {
+                setShowExistingRoomsDialog(false);
+                setPendingRoomCreation(null);
+                setIsCreatingNewRoom(false);
+              }}
+              className="px-4 py-2 text-slate-400 hover:text-white transition-colors text-sm font-bold"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleForceCreateNewRoom}
+              disabled={loading}
+              className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Creating...' : 'Create New Room'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Box Selection Modal */}
       <Modal
         isOpen={showBoxSelection}
@@ -482,7 +516,6 @@ export const LobbyManager: React.FC<LobbyManagerProps> = ({ generatedPacks, avai
               {/* Box Graphic simulation */}
               <div className="w-24 h-32 mb-4 relative perspective-1000 group-hover:scale-105 transition-transform duration-300">
                 <div className="absolute inset-0 bg-slate-800 rounded border border-slate-600 transform rotate-y-12 translate-z-4 shadow-2xl flex items-center justify-center overflow-hidden">
-                  {/* Set Icon as Box art */}
                   <img
                     src={`https://svgs.scryfall.io/sets/${box.setCode}.svg?1734307200`}
                     alt={box.setCode}

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ManaIcon } from './ManaIcon';
-import { Feather } from 'lucide-react';
+import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye, Wind, Footprints, Heart, Crosshair, EyeOff, Swords, SwordIcon, AlertTriangle } from 'lucide-react';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
@@ -34,12 +34,18 @@ export type VisualCard = {
   type_line?: string;
   oracleText?: string;
   oracle_text?: string;
+  modifiers?: {
+    sourceId: string;
+    type: 'pt_boost' | 'set_pt' | 'ability_grant' | 'type_change';
+    value: any;
+    untilEndOfTurn: boolean;
+  }[];
   [key: string]: any; // Allow other properties loosely
 };
 
 interface CardVisualProps {
   card: VisualCard;
-  viewMode?: 'normal' | 'cutout' | 'large';
+  viewMode?: 'normal' | 'cutout' | 'large' | 'squared';
   isFoil?: boolean; // Explicit foil styling override
   className?: string;
   style?: React.CSSProperties;
@@ -64,52 +70,59 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
   const imageSrc = useMemo(() => {
     // Robustly resolve Image Source based on viewMode
-    // We prioritize Local Cache using Scryfall ID as per strict rules
+    // PRIORITY: Local Cache using Scryfall ID, then fallback to remote URIs
 
-    // Use top-level properties if available (common in DraftCard / Game Card objects)
-    const setCode = card.setCode || card.set || card.definition?.set;
-    const cardId = card.scryfallId || card.definition?.id;
+    // In the future if we support multi-faced cards in Redis properly, we might need face-specific local paths.
+    // For now, the doc says "local_path_full" and "local_path_crop" are on the root object.
 
-    // Detect Face
-    // If activeFaceIndex is present, we try to use it.
-    // However, Scryfall data structure for faces is: card.card_faces[i].image_uris
-    // Some cards have card_faces but share image_uris (e.g. Adventure), but Transform cards have separate image_uris.
-    // If definition exists, use it.
-    const faces = card.definition?.card_faces || card.card_faces;
-    const faceIndex = card.activeFaceIndex ?? 0;
+    if (viewMode === 'cutout' || viewMode === 'squared') {
+      // 1. Check Server-Provided Paths (Redis Sourced)
+      // PRIORITY: definition.local_path_crop
+      if (card.definition?.local_path_crop) return card.definition.local_path_crop;
+      if (card.imageArtCrop) return card.imageArtCrop;
 
-    // Check if we have specific face images
-    const activeFace = (faces && faces[faceIndex]) ? faces[faceIndex] : null;
-    const faceImageUris = activeFace?.image_uris;
+      // 2. FALLBACK: Remote Scryfall URIs
+      // If local paths are not available, fallback to remote art_crop
+      if (card.definition?.image_uris?.art_crop) return card.definition.image_uris.art_crop;
+      if (card.image_uris?.art_crop) return card.image_uris.art_crop;
+      if (card.card_faces?.[0]?.image_uris?.art_crop) return card.card_faces[0].image_uris.art_crop;
 
-    if (viewMode === 'cutout') {
-      if (setCode && cardId) {
-        // If back face, usually we don't have a simple cache path for back face crop unless we specifically index it.
-        // But our crop logic (server) might not support back faces yet.
-        // Fallback to scryfall 'art_crop' if faceIndex > 0
-        if (faceIndex > 0 && faceImageUris?.art_crop) {
-          return faceImageUris.art_crop;
-        }
-        return `/cards/images/${setCode}/crop/${cardId}.jpg`;
-      }
-      return faceImageUris?.art_crop || faceImageUris?.crop || card.image_uris?.art_crop || card.image_uris?.crop || card.imageArtCrop || card.imageUrl || '';
+      return '';
     } else {
       // Normal / Full View
-      if (setCode && cardId) {
-        // If back face, standard filename might be different or suffixed? 
-        // Standard cache typically only has front face?
-        // If it's a DFC, Scryfall usually provides `card_faces` array.
-        // If we want the back face, we should probably use the remote URL if we haven't cached activeFaceIndex locally.
-        // For now, prioritize the specific face URI if faceIndex > 0
-        if (faceIndex > 0 && faceImageUris?.normal) {
-          return faceImageUris.normal;
-        }
-        return `/cards/images/${setCode}/full/${cardId}.jpg`;
-      }
-      // Fallback
-      return faceImageUris?.normal || card.image_uris?.normal || card.imageUrl || '';
+      // 1. Check Server-Provided Paths (Redis Sourced)
+      // PRIORITY: definition.local_path_full
+      if (card.definition?.local_path_full) return card.definition.local_path_full;
+      if (card.imageUrl) return card.imageUrl;
+      // Some legacy or draft objects might still have 'image' prop, check it if it matches pattern
+      if (card.image && card.image.startsWith('/cards/images/')) return card.image;
+
+      // 2. FALLBACK: Remote Scryfall URIs
+      // If local paths are not available, fallback to remote normal/large/png
+      if (card.definition?.image_uris?.normal) return card.definition.image_uris.normal;
+      if (card.definition?.image_uris?.large) return card.definition.image_uris.large;
+      if (card.definition?.image_uris?.png) return card.definition.image_uris.png;
+      if (card.image_uris?.normal) return card.image_uris.normal;
+      if (card.image_uris?.large) return card.image_uris.large;
+      if (card.image_uris?.png) return card.image_uris.png;
+      if (card.card_faces?.[0]?.image_uris?.normal) return card.card_faces[0].image_uris.normal;
+      if (card.card_faces?.[0]?.image_uris?.large) return card.card_faces[0].image_uris.large;
+
+      return '';
     }
   }, [card, viewMode]);
+
+  // POST-PROCESSING: Force Full Image if viewMode demands it
+  const finalImageSrc = useMemo(() => {
+    if (!imageSrc) return '';
+    if (viewMode === 'normal' || viewMode === 'large') {
+      // If we accidentally got a crop path but wanted full
+      if (imageSrc.includes('/crop/')) {
+        return imageSrc.replace('/crop/', '/full/');
+      }
+    }
+    return imageSrc;
+  }, [imageSrc, viewMode]);
 
 
 
@@ -155,7 +168,11 @@ export const CardVisual: React.FC<CardVisualProps> = ({
     return Array.from(symbols);
   };
 
-  const isCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
+  const isNaturalCreature = (card.type_line || card.typeLine || '').toLowerCase().includes('creature');
+  const becameCreature = card.modifiers?.some((m: any) =>
+    m.type === 'type_change' && m.value?.addTypes?.includes('Creature')
+  );
+  const isCreature = isNaturalCreature || becameCreature;
   const isLand = (card.type_line || card.typeLine || '').toLowerCase().includes('land');
   const landSymbols = isLand ? getLandManaSymbols(card) : [];
 
@@ -165,12 +182,19 @@ export const CardVisual: React.FC<CardVisualProps> = ({
       style={style}
     >
       {!card.faceDown || forceFaceUp ? (
-        <img
-          src={imageSrc}
-          alt={card.name || 'Card'}
-          className="w-full h-full object-cover"
-          draggable={false}
-        />
+        imageSrc ? (
+          <img
+            src={finalImageSrc}
+            alt={card.name || 'Card'}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 border-2 border-slate-700 p-2 text-center text-slate-500">
+            <span className="text-[10px] font-bold">{card.name || 'Unknown'}</span>
+            <span className="text-[8px] italic mt-1">(No Image)</span>
+          </div>
+        )
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-slate-900 bg-opacity-90 bg-[url('/images/back.jpg')] bg-cover">
         </div>
@@ -186,40 +210,38 @@ export const CardVisual: React.FC<CardVisualProps> = ({
                 ? card.definition.card_faces[card.activeFaceIndex].name
                 : card.name}
             </span>
-            {(() => {
-              // Resolve Mana Cost
-              const faceIndex = card.activeFaceIndex || 0;
-              const faces = card.definition?.card_faces || card.card_faces;
-              const activeCost = (faces && faces[faceIndex]) ? faces[faceIndex].mana_cost : (card.mana_cost || card.manaCost);
-
-              if (!activeCost) return null;
-
-              return (
-                <span className="text-[10px] text-slate-200 font-serif tracking-tighter opacity-90 drop-shadow-md" style={{ textShadow: '0 1px 2px black' }}>
-                  {activeCost.replace(/[{}]/g, '')}
-                </span>
-              );
-            })()}
           </div>
 
           {/* Bottom Overlays based on Type */}
-          {isCreature && (card.power != null && card.toughness != null) && (
-            <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
-              <span className={
-                (Number(card.power) > (card.basePower ?? Number(card.power))) ? "text-blue-400" :
-                  (Number(card.power) < (card.basePower ?? Number(card.power))) ? "text-red-400" : "text-white"
-              }>
-                {card.power}
-              </span>
-              <span className="text-slate-400">/</span>
-              <span className={
-                (Number(card.toughness) > (card.baseToughness ?? Number(card.toughness))) ? "text-blue-400" :
-                  (Number(card.toughness) < (card.baseToughness ?? Number(card.toughness))) ? "text-red-400" : "text-white"
-              }>
-                {card.toughness}
-              </span>
-            </div>
-          )}
+          {(() => {
+            // Get P/T - either from card or from type_change modifier
+            const typeChangeMod = card.modifiers?.find((m: any) =>
+              m.type === 'type_change' && m.value?.addTypes?.includes('Creature')
+            );
+            const modBasePT = typeChangeMod?.value?.basePT;
+            const displayPower = card.power ?? modBasePT?.power;
+            const displayToughness = card.toughness ?? modBasePT?.toughness;
+
+            if (!isCreature || (displayPower == null && displayToughness == null)) return null;
+
+            return (
+              <div className="absolute bottom-0 right-0 z-10 bg-slate-900/90 text-[10px] font-bold px-1.5 py-0.5 rounded-tl-lg border-t border-l border-slate-600 shadow-lg flex items-center gap-0.5">
+                <span className={
+                  (Number(displayPower) > (card.basePower ?? Number(displayPower))) ? "text-blue-400" :
+                    (Number(displayPower) < (card.basePower ?? Number(displayPower))) ? "text-red-400" : "text-white"
+                }>
+                  {displayPower ?? 0}
+                </span>
+                <span className="text-slate-400">/</span>
+                <span className={
+                  (Number(displayToughness) > (card.baseToughness ?? Number(displayToughness))) ? "text-blue-400" :
+                    (Number(displayToughness) < (card.baseToughness ?? Number(displayToughness))) ? "text-red-400" : "text-white"
+                }>
+                  {displayToughness ?? 0}
+                </span>
+              </div>
+            );
+          })()}
 
           {!isCreature && isLand && landSymbols.length > 0 && (
             <div className="absolute bottom-1 inset-x-0 flex justify-center items-end z-10 pointer-events-none gap-0.5">
@@ -233,9 +255,18 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
           {/* Summoning Sickness Overlay */}
           {(() => {
-            const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-              card.oracleText?.toLowerCase().includes('haste');
+            const hasKeyword = (keyword: string) => {
+              const kw = keyword.toLowerCase();
+              // Check card.keywords array
+              if (card.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              // Check definition.keywords
+              if (card.definition?.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              // Check modifiers for granted abilities
+              if (card.modifiers?.some((m: any) => m.type === 'ability_grant' && String(m.value).toLowerCase() === kw)) return true;
+              return false;
+            };
+
+            const hasHaste = hasKeyword('haste');
 
             const isSick = isCreature &&
               currentTurn !== undefined &&
@@ -251,23 +282,52 @@ export const CardVisual: React.FC<CardVisualProps> = ({
                 </div>
               );
             }
-
-            // Flying Icon
-            const hasFlying = card.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
-              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
-              card.oracleText?.toLowerCase().includes('flying');
-
-            if (hasFlying && isCreature) {
-              return (
-                <div className="absolute top-10 left-1 z-20 pointer-events-none">
-                  <div className="bg-slate-900/80 rounded-full w-6 h-6 flex items-center justify-center border border-slate-600 shadow-md text-sky-300">
-                    <Feather size={14} strokeWidth={2.5} />
-                  </div>
-                </div>
-              );
-            }
-
             return null;
+          })()}
+
+          {/* Keyword Ability Icons */}
+          {(() => {
+            const hasKeyword = (keyword: string) => {
+              const kw = keyword.toLowerCase();
+              if (card.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              if (card.definition?.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              if (card.modifiers?.some((m: any) => m.type === 'ability_grant' && String(m.value).toLowerCase() === kw)) return true;
+              return false;
+            };
+
+            // Define keyword icons with their styling
+            const keywordIcons: { keyword: string; icon: React.ReactNode; color: string; title: string }[] = [
+              { keyword: 'flying', icon: <Feather size={12} strokeWidth={2.5} />, color: 'text-sky-300', title: 'Flying' },
+              { keyword: 'haste', icon: <Wind size={12} strokeWidth={2.5} />, color: 'text-orange-400', title: 'Haste' },
+              { keyword: 'trample', icon: <Footprints size={12} strokeWidth={2.5} />, color: 'text-green-400', title: 'Trample' },
+              { keyword: 'lifelink', icon: <Heart size={12} strokeWidth={2.5} />, color: 'text-pink-300', title: 'Lifelink' },
+              { keyword: 'deathtouch', icon: <Skull size={12} strokeWidth={2.5} />, color: 'text-lime-400', title: 'Deathtouch' },
+              { keyword: 'indestructible', icon: <Shield size={12} strokeWidth={2.5} />, color: 'text-amber-300', title: 'Indestructible' },
+              { keyword: 'hexproof', icon: <EyeOff size={12} strokeWidth={2.5} />, color: 'text-teal-300', title: 'Hexproof' },
+              { keyword: 'first strike', icon: <SwordIcon size={12} strokeWidth={2.5} />, color: 'text-red-400', title: 'First Strike' },
+              { keyword: 'double strike', icon: <Swords size={12} strokeWidth={2.5} />, color: 'text-red-300', title: 'Double Strike' },
+              { keyword: 'vigilance', icon: <Eye size={12} strokeWidth={2.5} />, color: 'text-yellow-300', title: 'Vigilance' },
+              { keyword: 'menace', icon: <AlertTriangle size={12} strokeWidth={2.5} />, color: 'text-purple-400', title: 'Menace' },
+              { keyword: 'reach', icon: <Crosshair size={12} strokeWidth={2.5} />, color: 'text-emerald-400', title: 'Reach' },
+            ];
+
+            const activeKeywords = keywordIcons.filter(ki => hasKeyword(ki.keyword));
+
+            if (activeKeywords.length === 0) return null;
+
+            return (
+              <div className="absolute top-6 left-1 z-20 pointer-events-none grid grid-cols-4 gap-0.5 max-w-[88px]">
+                {activeKeywords.slice(0, 8).map((ki) => (
+                  <div
+                    key={ki.keyword}
+                    className={`bg-slate-900/80 rounded-full w-5 h-5 flex items-center justify-center border border-slate-600 shadow-md ${ki.color}`}
+                    title={ki.title}
+                  >
+                    {ki.icon}
+                  </div>
+                ))}
+              </div>
+            );
           })()}
 
           {/* Inner Border/Frame for definition */}
@@ -277,7 +337,12 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
       {/* Foil Overlay */}
       {(isFoil || card.finish === 'foil') && !card.faceDown && (
-        <div className="absolute inset-0 pointer-events-none mix-blend-overlay bg-gradient-to-tr from-purple-500/30 via-transparent to-emerald-500/30 opacity-50" />
+        <div className="absolute inset-0 pointer-events-none rounded-lg overflow-hidden z-20">
+          {/* CSS-based Holographic Pattern */}
+          <div className="absolute inset-0 foil-holo" />
+          {/* Gaussian Circular Glare - Spinning Radial Gradient */}
+          <div className="absolute inset-[-50%] bg-[radial-gradient(circle_at_50%_50%,_rgba(255,255,255,0.25)_0%,_transparent_60%)] mix-blend-overlay opacity-25 animate-spin-slow" />
+        </div>
       )}
 
       {/* Counters */}
@@ -285,27 +350,77 @@ export const CardVisual: React.FC<CardVisualProps> = ({
         <div className="absolute top-16 left-1 flex flex-col gap-1 z-20 pointer-events-none">
           {card.counters.map((c: any, i: number) => {
             if (c.count <= 0) return null;
-            let bgColor = "bg-slate-700";
-            let textColor = "text-white";
-            let borderColor = "border-slate-500";
-            let label = c.type;
 
-            if (c.type === '+1/+1') {
-              bgColor = "bg-emerald-600";
-              borderColor = "border-emerald-400";
-              label = `+ ${c.count}`;
-            } else if (c.type === '-1/-1') {
-              bgColor = "bg-red-600";
-              borderColor = "border-red-400";
-              label = `- ${c.count}`;
-            } else {
-              // Generic
-              label = `${c.count} ${c.type}`;
-            }
+            // Counter styling configuration
+            const counterConfig: Record<string, { bg: string; border: string; icon?: React.ReactNode; format: (count: number) => string }> = {
+              '+1/+1': {
+                bg: 'bg-emerald-600',
+                border: 'border-emerald-400',
+                format: (count) => `+${count}/+${count}`
+              },
+              '-1/-1': {
+                bg: 'bg-red-600',
+                border: 'border-red-400',
+                format: (count) => `-${count}/-${count}`
+              },
+              'loyalty': {
+                bg: 'bg-violet-600',
+                border: 'border-violet-400',
+                icon: <Gem size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'defense': {
+                bg: 'bg-amber-600',
+                border: 'border-amber-400',
+                icon: <Shield size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'charge': {
+                bg: 'bg-sky-600',
+                border: 'border-sky-400',
+                icon: <Zap size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'poison': {
+                bg: 'bg-lime-600',
+                border: 'border-lime-400',
+                icon: <Skull size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'blood': {
+                bg: 'bg-rose-700',
+                border: 'border-rose-500',
+                icon: <Droplet size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'flame': {
+                bg: 'bg-orange-600',
+                border: 'border-orange-400',
+                icon: <Flame size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              },
+              'lore': {
+                bg: 'bg-amber-700',
+                border: 'border-amber-500',
+                icon: <Eye size={10} className="mr-0.5" />,
+                format: (count) => `${count}`
+              }
+            };
+
+            const config = counterConfig[c.type.toLowerCase()] || {
+              bg: 'bg-slate-700',
+              border: 'border-slate-500',
+              format: (count: number) => `${count} ${c.type}`
+            };
 
             return (
-              <div key={i} className={`${bgColor} ${textColor} text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${borderColor} shadow-md flex items-center justify-center min-w-[24px]`}>
-                {label}
+              <div
+                key={i}
+                className={`${config.bg} text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${config.border} shadow-md flex items-center justify-center min-w-[24px]`}
+                title={`${c.count} ${c.type} counter${c.count !== 1 ? 's' : ''}`}
+              >
+                {config.icon}
+                {config.format(c.count)}
               </div>
             );
           })}

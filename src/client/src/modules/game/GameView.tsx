@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useGameToast } from '../../components/GameToast';
+import { useToast } from '../../components/Toast';
 import { ManaIcon } from '../../components/ManaIcon';
 import { DndContext, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor, DragStartEvent, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -15,13 +15,17 @@ import { StackVisualizer } from './StackVisualizer';
 
 import { GestureManager } from './GestureManager';
 import { MulliganView } from './MulliganView';
+import { ChoiceModal } from './ChoiceModal';
 import { RadialMenu, RadialOption } from './RadialMenu';
 import { InspectorOverlay } from './InspectorOverlay';
 import { CreateTokenModal } from './CreateTokenModal'; // Import Modal
 import { TokenPickerModal } from './TokenPickerModal';
 import { DoubleFacedCardModal } from './DoubleFacedCardModal';
+import { GameOverScreen } from './GameOverScreen';
 import { SidePanelPreview } from '../../components/SidePanelPreview';
 import { calculateAutoTap } from '../../utils/manaUtils';
+import { useDebug } from '../../contexts/DebugContext';
+// DebugOverlay removed - using DebugPanel in sidebar instead
 
 // --- DnD Helpers ---
 const DraggableCardWrapper = ({ children, card, disabled }: { children: React.ReactNode, card: CardInstance, disabled?: boolean }) => {
@@ -61,10 +65,12 @@ interface GameViewProps {
   gameState: GameState;
   currentPlayerId: string;
   format?: string;
+  logHoveredCard?: { name: string; imageUrl?: string; imageArtCrop?: string; manaCost?: string; typeLine?: string; oracleText?: string } | null;
 }
 
-export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format }) => {
+const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format, logHoveredCard }) => {
   const hasPriority = gameState.priorityPlayerId === currentPlayerId;
+  const { highlightedCardIds, sourceCardId, debugEnabled } = useDebug();
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
   // If useGameSocket is not defined elsewhere, this will cause an error.
@@ -77,6 +83,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   const [radialOptions, setRadialOptions] = useState<RadialOption[] | null>(null);
   const [radialPosition, setRadialPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [isYielding, setIsYielding] = useState(false);
+  const [manualYield, setManualYield] = useState(() => {
+    // Load from localStorage, default to false (auto mode)
+    return localStorage.getItem('game_manualYield') === 'true';
+  });
 
   const [contextMenu, setContextMenu] = useState<ContextMenuRequest | null>(null);
   const [viewingZone, setViewingZone] = useState<string | null>(null);
@@ -122,35 +132,39 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
     }
   }, [isYielding, gameState.priorityPlayerId, gameState.step, currentPlayerId]);
 
-  // Auto-Yield Logic (Smart Yield against Bot)
-  const activePlayer = gameState.activePlayerId ? gameState.players[gameState.activePlayerId] : undefined;
-  const isBotTurn = activePlayer?.isBot;
+  // Auto-Pass Priority when in Auto mode and it's NOT my turn
+  const isMyTurn = gameState.activePlayerId === currentPlayerId;
+  useEffect(() => {
+    // Only auto-pass if:
+    // 1. I have priority
+    // 2. It's NOT my turn (opponent's turn)
+    // 3. manualYield is false (Auto mode)
+    // 4. Not in special combat declaration steps
+    if (
+      hasPriority &&
+      !isMyTurn &&
+      !manualYield &&
+      !['declare_attackers', 'declare_blockers'].includes(gameState.step || '')
+    ) {
+      console.log("[Auto Mode] Auto-passing priority (not my turn)...");
+      const timer = setTimeout(() => {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
+      }, 300); // Small delay for visual feedback
+      return () => clearTimeout(timer);
+    }
+  }, [hasPriority, isMyTurn, manualYield, gameState.step]);
 
-  // Ref to track turn changes to force reset yield
+  // Reset yield on turn change
   const prevActivePlayerId = useRef(gameState.activePlayerId);
 
   useEffect(() => {
-    // 1. Detect Turn Change (Active Player changed)
+    // Detect Turn Change (Active Player changed)
     if (prevActivePlayerId.current !== gameState.activePlayerId) {
       // Reset yield strictly on any turn change to prevent leakage
       setIsYielding(false);
       prevActivePlayerId.current = gameState.activePlayerId;
-      // Logic continues below to re-enable if it IS a bot turn...
     }
-
-    if (isBotTurn) {
-      // Enforce Yielding during Bot turn (except combat decisions)
-      if (['declare_attackers', 'declare_blockers'].includes(gameState.step || '')) {
-        // Must pause yield for decisions
-        setIsYielding(false);
-      } else {
-        setIsYielding(prev => {
-          if (prev) return prev; // already true
-          return true;
-        });
-      }
-    }
-  }, [gameState.activePlayerId, gameState.step, isBotTurn]);
+  }, [gameState.activePlayerId]);
 
   // Server-Side Stop State
   const stopRequested = gameState.players[currentPlayerId]?.stopRequested || false;
@@ -159,74 +173,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
     socketService.socket.emit('game_strict_action', { action: { type: 'TOGGLE_STOP' } });
   };
 
-  useEffect(() => {
-    // Smart Auto-Pass Logic for NAP
-    if (!gameState.activePlayerId) return;
-    const amActivePlayer = gameState.activePlayerId === currentPlayerId;
-    const amPriorityPlayer = gameState.priorityPlayerId === currentPlayerId;
-
-    // Condition: I am NAP, I have Priority, and I have NOT requested a stop.
-    // Logic: Auto-Pass.
-    if (!amActivePlayer && amPriorityPlayer && !stopRequested) {
-      if (gameState.step === 'declare_blockers') {
-        console.log("[Smart Auto-Pass] Skipped: Enforce manual blocking declaration.");
-        return; // Explicit wait for blockers
-      }
-
-      console.log("[Smart Auto-Pass] Auto-passing priority as NAP (No Suspend requested).Step:", gameState.step);
-      const timer = setTimeout(() => {
-        // Double check state hasn't changed in the timeout window
-        if (gameState.step === 'declare_blockers') return;
-        // Also check if we suddenly requested stop/suspend during timeout
-        // (Since effect re-runs on stopRequested change, this timeout will be cleared anyway, but safe check)
-
-        socketService.socket.emit('game_strict_action', { action: { type: 'PASS_PRIORITY' } });
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [gameState.activePlayerId, gameState.priorityPlayerId, stopRequested, currentPlayerId, gameState.step]);
-  // If I access `isYielding` inside `setIsYielding`, I don't need it in dependency.
-  // But wait, the `if (['declare_...'].includes)` logic needs to potentially set it false.
-  // setIsYielding(false) is fine.
-  // The logic seems sound without isYielding in dependency, assuming stable behavior.
-  // BUT: `prevActivePlayerId` check needs stable run.
-
-  // Let's keep `isYielding` in deps if I read it? 
-  // I replaced reads with functional updates or just strict sets?
-  // "if (isYielding) setIsYielding(false)" -> simply "setIsYielding(false)" is safer/idempotent if efficient.
-  // React state updates bail out if same value.
-
-  // BUT wait, if I remove `isYielding` from deps, and I toggle it manually...
-  // The effect WON'T run.
-  // If I toggle manual yield on My Turn. Effect doesn't run. Correct (we don't want it to interfere).
-
-  // If I am in Bot Turn, and I somehow toggle it false? (Button click).
-  // Effect doesn't run. isYielding stays false.
-  // Bot waits forever? No, bot logic (server) continues.
-  // Client just doesn't auto-pass.
-  // But we WANT to force it.
-  // So we SHOULD depend on `isYielding` so if user turns it off, we force it back on?
-  // No, if user turns it off, maybe they want to see?
-  // User Requirement: "Auto-Yield".
-  // If I rely on `isYielding` in deps, I risk the loop again.
-  // Let's try WITHOUT `isYielding` in deps first.
-  // This means if I turn it off, it stays off until next step change or phase change.
-  // Because `gameState.step` IS in deps.
-  // So if step advances, effect runs -> sees Bot Turn -> Forces True.
-  // This is good behavior. Re-enables each step.
-
-  // So, removing isYielding from dependencies seems robust.
-
-  // One catch: `['declare_attackers']`.
-  // If step is declare_attackers. Effect runs.
-  // Forces isYielding(false).
-  // User manually clicks yield (true).
-  // Effect doesn't run.
-  // isYielding stays true.
-  // This might be BAD if we want to enforce safety?
-  // If user yields in declare_attackers... they yield their chance to attack.
-  // That's on them.
-  // But the "Flickering" issue was us fighting them.
+  // Note: Auto-pass logic removed - manual play mode means players control their own priority
   // If we don't react to isYielding change, we won't fight.
   // This solves flickering definitively too.
 
@@ -263,6 +210,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   useEffect(() => {
     localStorage.setItem('game_sidebarCollapsed', isSidebarCollapsed.toString());
   }, [isSidebarCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem('game_manualYield', manualYield.toString());
+  }, [manualYield]);
 
   useEffect(() => {
     localStorage.setItem('game_sidebarWidth', sidebarWidth.toString());
@@ -325,6 +276,11 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
     const card = (type === 'card' && targetId) ? gameState.cards[targetId] : undefined;
 
+    // Don't show context menu for opponent's cards
+    if (type === 'card' && card && card.controllerId !== currentPlayerId) {
+      return;
+    }
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -343,6 +299,32 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
       const card = gameState.cards[payload.cardId];
       if (card) {
         setInspectedCard(card);
+      }
+      return;
+    }
+
+    if (actionType === 'REQUEST_PLAY') {
+      const cardId = payload.cardId;
+      const card = gameState.cards[cardId];
+      if (!card) return;
+
+      // 1. DFC Check
+      const faces = card.definition?.card_faces || card.card_faces;
+      if (card.isDoubleFaced && faces && faces.length > 1) {
+        setPendingPlayCard({ cardId });
+        setIsDFCModalOpen(true);
+        return;
+      }
+
+      // 2. Land Check
+      const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+        (card.typeLine?.toLowerCase().includes('land'));
+
+      if (isLand) {
+        socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId } });
+      } else {
+        // 3. Spell Check
+        socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: [] } });
       }
       return;
     }
@@ -512,8 +494,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
     setPendingPlayCard(null);
   };
-  //  const { showToast } = useToast();
-  const { showGameToast } = useGameToast();
+  const { showToast } = useToast();
   const { confirm } = useConfirm();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 10 } }),
@@ -523,9 +504,9 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
   // --- Blocker Notification ---
   useEffect(() => {
     if (gameState.step === 'declare_blockers' && hasPriority) {
-      showGameToast("Your Turn to Block!", 'info');
+      showToast("Your Turn to Block!", 'info');
     }
-  }, [gameState.step, hasPriority, showGameToast]);
+  }, [gameState.step, hasPriority, showToast]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const cardId = event.active.id as string;
@@ -589,7 +570,10 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
           return;
         }
 
-        if (card.typeLine?.includes('Land') || card.types?.includes('Land')) {
+        const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+          (card.typeLine?.toLowerCase().includes('land'));
+
+        if (isLand) {
           socketService.socket.emit('game_strict_action', { action: { type: 'PLAY_LAND', cardId } });
         } else {
           socketService.socket.emit('game_strict_action', { action: { type: 'CAST_SPELL', cardId, targets: [] } });
@@ -630,6 +614,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
       // Default Cast with Target
       if (card.zone === 'hand') {
+        const isLand = (card.types?.some(t => t.toLowerCase() === 'land')) ||
+          (card.typeLine?.toLowerCase().includes('land'));
+
+        if (isLand) {
+          console.warn("Cannot cast Land as spell with target.");
+          return;
+        }
+
         // DFC Check for targeted cast
         const faces = card.definition?.card_faces || card.card_faces;
         if (card.isDoubleFaced && faces && faces.length > 1) {
@@ -677,13 +669,34 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
           onAction={handleMenuAction}
         />
 
+        {/* Game Over Screen */}
+        {gameState.gameOver && (
+          <GameOverScreen
+            winnerId={gameState.winnerId}
+            winnerName={gameState.winnerName}
+            currentPlayerId={currentPlayerId}
+            endReason={gameState.endReason}
+            players={Object.values(gameState.players).map(p => ({
+              id: p.id,
+              name: p.name,
+              life: p.life
+            }))}
+            onRematch={() => {
+              socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
+            }}
+            onExitToLobby={() => {
+              window.location.href = '/';
+            }}
+          />
+        )}
+
         {
           viewingZone && (
             <ZoneOverlay
               zoneName={viewingZone}
               cards={getCards(currentPlayerId, viewingZone)}
               onClose={() => setViewingZone(null)}
-              onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId)}
+              onCardContextMenu={(e, cardId) => handleContextMenu(e, 'card', cardId, viewingZone)}
             />
           )
         }
@@ -703,6 +716,36 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                     type: 'MULLIGAN_DECISION',
                     keep,
                     cardsToBottom
+                  }
+                });
+              }}
+            />
+          )
+        }
+
+        {/* Choice Modal - for effects requiring player decisions */}
+        {
+          gameState.pendingChoice && (
+            gameState.pendingChoice.choosingPlayerId === currentPlayerId ||
+            gameState.pendingChoice.revealedCards?.length
+          ) && (
+            <ChoiceModal
+              choice={gameState.pendingChoice}
+              cards={gameState.cards}
+              currentPlayerId={currentPlayerId}
+              onCardHover={setHoveredCard}
+              onSubmit={(result) => {
+                socketService.socket.emit('game_strict_action', {
+                  action: {
+                    type: 'RESPOND_TO_CHOICE',
+                    choiceId: result.choiceId,
+                    choiceType: result.type,
+                    selectedOptionIds: result.selectedOptionIds,
+                    selectedCardIds: result.selectedCardIds,
+                    selectedPlayerId: result.selectedPlayerId,
+                    selectedValue: result.selectedValue,
+                    confirmed: result.confirmed,
+                    orderedIds: result.orderedIds
                   }
                 });
               }}
@@ -757,18 +800,28 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
 
               // Logic to set types properly for Rules Engine to place it in correct row
               const types = (token.type_line || "").split('—')[0].trim().split(' ');
-              const subtypes = (token.type_line.split('—')[1] || "").trim().split(' ');
+              const subtypes = (token.type_line?.split('—')[1] || "").trim().split(' ').filter(Boolean);
 
               const definition = {
                 name: token.name,
                 colors: token.colors || [],
                 types: types,
                 subtypes: subtypes,
-                power: token.power,
-                toughness: token.toughness,
-                imageUrl: token.image_uris?.normal || token.image_uris?.large || "",
-                // If no image, CardComponent will fallback.
-                // But server token object might have caching?
+                power: token.power || token.card_faces?.[0]?.power,
+                toughness: token.toughness || token.card_faces?.[0]?.toughness,
+                // Include type_line for CardVisual creature/land detection
+                type_line: token.type_line || token.card_faces?.[0]?.type_line,
+                // Include oracle_text and keywords for ability detection
+                oracle_text: token.oracle_text || token.card_faces?.[0]?.oracle_text || '',
+                keywords: token.keywords || token.card_faces?.[0]?.keywords || [],
+                // Include card_faces for double-faced tokens
+                card_faces: token.card_faces,
+                // Image paths
+                imageUrl: token.local_path_full || token.image_uris?.normal || token.image_uris?.large || "",
+                imageArtCrop: token.local_path_crop || token.image_uris?.art_crop || "",
+                local_path_full: token.local_path_full,
+                local_path_crop: token.local_path_crop,
+                image_uris: token.image_uris,
               };
 
               socketService.socket.emit('game_strict_action', {
@@ -787,7 +840,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
         {/* Zoom Sidebar */}
         <SidePanelPreview
           ref={sidebarRef}
-          card={hoveredCard}
+          card={hoveredCard || (logHoveredCard ? {
+            name: logHoveredCard.name,
+            imageUrl: logHoveredCard.imageUrl || '',
+            imageArtCrop: logHoveredCard.imageArtCrop,
+            manaCost: logHoveredCard.manaCost,
+            typeLine: logHoveredCard.typeLine,
+            oracleText: logHoveredCard.oracleText
+          } as CardInstance : null)}
           width={sidebarWidth}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={setIsSidebarCollapsed}
@@ -844,6 +904,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                   onDragEnd={() => { }}
                                   onMouseEnter={() => setHoveredCard(card)}
                                   onMouseLeave={() => setHoveredCard(null)}
+                                  isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                  debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                 />
                               </div>
                             ))}
@@ -901,14 +963,47 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                           }}
                         >
                           {(() => {
-                            // Organize Opponent Cards
-                            const oppLands = oppBattlefield.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                            const oppCreatures = oppBattlefield.filter(c => !c.types?.includes('Land') || c.types?.includes('Creature'));
+                            // Organize Opponent Cards - separate face-down cards
+                            const oppFaceDown = oppBattlefield.filter(c => c.faceDown);
+                            const oppFaceUp = oppBattlefield.filter(c => !c.faceDown);
+
+                            const oppLands = oppFaceUp.filter(c =>
+                              (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
+                              !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                            );
+                            const oppCreatures = oppFaceUp.filter(c =>
+                              !(c.types?.includes('Land') || c.typeLine?.includes('Land')) ||
+                              (c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                            );
 
                             return (
                               <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
-                                {/* Back Row: Lands (Top - Far Side) */}
+                                {/* Back Row: Lands + Face-Down Cards (Top - Far Side) */}
                                 <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
+                                  {/* Opponent's Face-Down Cards - Left of lands */}
+                                  {oppFaceDown.length > 0 && (
+                                    <div className="flex gap-2 items-start mr-4 pr-4 border-r border-slate-700/50">
+                                      {oppFaceDown.map(card => (
+                                        <div
+                                          key={card.instanceId}
+                                          className="relative transition-all duration-300 pointer-events-auto"
+                                        >
+                                          <CardComponent
+                                            card={card}
+                                            viewMode="cutout"
+                                            style={{}}
+                                            onClick={() => { }}
+                                            onContextMenu={() => { }}
+                                            onDragStart={() => { }}
+                                            onDragEnd={() => { }}
+                                            onMouseEnter={() => { }} // Don't show preview for opponent's face-down cards
+                                            onMouseLeave={() => { }}
+                                            className="w-24 h-24 rounded shadow-sm opacity-80"
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   {(() => {
                                     const oppLandGroups = oppLands.reduce((acc, card) => {
                                       const key = card.name || 'Unknown Land';
@@ -948,6 +1043,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                               onDragEnd={() => { }}
                                               onMouseEnter={() => setHoveredCard(card)}
                                               onMouseLeave={() => setHoveredCard(null)}
+                                              isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                              debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                             />
                                           </div>
                                         ))}
@@ -987,6 +1084,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                           ${isAttacking ? "ring-4 ring-red-600 shadow-[0_0_20px_rgba(220,38,38,0.6)]" : ""}
                                           ${isBlockedByMe ? "ring-4 ring-blue-500" : ""}
                                         `}
+                                          isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                          debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                                         />
                                         <DroppableZone id={card.instanceId} data={{ type: 'card' }} className="absolute inset-0 rounded-lg pointer-events-none" />
 
@@ -1031,9 +1130,19 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                       const attachments = myBattlefield.filter(c => c.attachedTo);
                       const unattached = myBattlefield.filter(c => !c.attachedTo);
 
-                      const creatures = unattached.filter(c => c.types?.includes('Creature'));
-                      const allLands = unattached.filter(c => c.types?.includes('Land') && !c.types?.includes('Creature'));
-                      const others = unattached.filter(c => !c.types?.includes('Creature') && !c.types?.includes('Land'));
+                      // Separate face-down cards first
+                      const faceDownCards = unattached.filter(c => c.faceDown);
+                      const faceUpUnattached = unattached.filter(c => !c.faceDown);
+
+                      const creatures = faceUpUnattached.filter(c => c.types?.includes('Creature') || c.typeLine?.includes('Creature'));
+                      const allLands = faceUpUnattached.filter(c =>
+                        (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
+                        !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
+                      );
+                      const others = faceUpUnattached.filter(c =>
+                        !(c.types?.includes('Creature') || c.typeLine?.includes('Creature')) &&
+                        !(c.types?.includes('Land') || c.typeLine?.includes('Land'))
+                      );
 
                       // Map Attachments to Hosts
                       const attachmentsMap = attachments.reduce((acc, c) => {
@@ -1079,15 +1188,19 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                             <DraggableCardWrapper card={card} disabled={!hasPriority}>
                               {/* Render Attachments UNDER the card */}
                               {attachedCards.length > 0 && (
-                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 hover:space-y-4 hover:bottom-[-200px] transition-all duration-300 z-[-1] hover:z-50">
+                                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center -space-y-16 z-[-1]">
                                   {attachedCards.map((att, idx) => (
-                                    <div key={att.instanceId} className="relative transition-transform hover:scale-110" style={{ zIndex: idx }}>
+                                    <div key={att.instanceId} className="relative" style={{ zIndex: idx }}>
                                       <CardComponent
                                         card={att}
                                         viewMode="cutout"
                                         onClick={() => { }}
                                         onDragStart={() => { }}
+                                        onMouseEnter={() => setHoveredCard(att)}
+                                        onMouseLeave={() => setHoveredCard(null)}
                                         className="w-16 h-16 opacity-90 hover:opacity-100 shadow-md border border-slate-600 rounded"
+                                        isDebugHighlighted={highlightedCardIds.has(att.instanceId) || sourceCardId === att.instanceId}
+                                        debugHighlightType={sourceCardId === att.instanceId ? 'source' : 'affected'}
                                       />
                                       {/* Allow dragging attachment off? Need separate Draggable wrapper for it OR handle logic */}
                                       {/* For now, just visual representation. Use main logic to drag OFF if needed, but nested dragging is complex.
@@ -1127,7 +1240,7 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                     if (isSick) {
                                       // TODO: Toast or Alert
                                       // alert(`${card.name} has Summoning Sickness!`);
-                                      showGameToast(`${card.name} has Summoning Sickness!`, 'warning');
+                                      showToast(`${card.name} has Summoning Sickness!`, 'warning');
                                       return;
                                     }
 
@@ -1186,6 +1299,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                   ${isAttacking ? "ring-4 ring-red-500 ring-offset-2 ring-offset-slate-900" : ""}
                                   ${blockingTargetId ? "ring-4 ring-blue-500 ring-offset-2 ring-offset-slate-900" : ""}
                                 `}
+                                isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                               />
                             </DraggableCardWrapper>
                             {blockingTargetId && (
@@ -1241,6 +1356,35 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                 ))}
                               </div>
                             ))}
+
+                            {/* Face-Down Cards Section - Bottom Left */}
+                            {faceDownCards.length > 0 && (
+                              <div className="ml-4 pl-4 border-l border-slate-700/50 flex flex-wrap gap-2 items-start">
+                                {faceDownCards.map(card => (
+                                  <DraggableCardWrapper key={card.instanceId} card={card} disabled={!hasPriority}>
+                                    <CardComponent
+                                      card={card}
+                                      viewMode="cutout"
+                                      currentTurn={gameState.turnCount ?? gameState.turn}
+                                      onDragStart={() => { }}
+                                      onClick={(id) => {
+                                        if (!hasPriority) return;
+                                        toggleTap(id);
+                                      }}
+                                      onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                      onMouseEnter={() => {
+                                        // Show face-up preview for owner's face-down cards
+                                        setHoveredCard({ ...card, faceDown: false });
+                                      }}
+                                      onMouseLeave={() => setHoveredCard(null)}
+                                      className="w-24 h-24 rounded shadow-sm"
+                                      isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                      debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
+                                    />
+                                  </DraggableCardWrapper>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </>
                       );
@@ -1265,6 +1409,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
               onYieldToggle={() => setIsYielding(!isYielding)}
               stopRequested={stopRequested}
               onToggleSuspend={onToggleSuspend}
+              manualYield={manualYield}
+              onManualYieldToggle={() => setManualYield(!manualYield)}
             />
           </div>
 
@@ -1414,6 +1560,8 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                                 style={{ transformOrigin: 'bottom center' }}
                                 onMouseEnter={() => setHoveredCard(card)}
                                 onMouseLeave={() => setHoveredCard(null)}
+                                isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
                               />
                             </DraggableCardWrapper>
                           </div>
@@ -1440,22 +1588,24 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
             {/* Right Controls: Exile / Life */}
             <div className="w-52 p-2 flex flex-col gap-2 items-center justify-between border-l border-white/10 py-2">
               <div className="text-center w-full relative">
-                <button
-                  className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
-                  title="Restart Game (Dev)"
-                  onClick={async () => {
-                    if (await confirm({
-                      title: 'Restart Game?',
-                      message: 'Are you sure you want to restart the game? The deck will remain, but the game state will reset.',
-                      confirmLabel: 'Restart',
-                      type: 'warning'
-                    })) {
-                      socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
-                    }
-                  }}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
+                {debugEnabled && (
+                  <button
+                    className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
+                    title="Restart Game (Dev)"
+                    onClick={async () => {
+                      if (await confirm({
+                        title: 'Restart Game?',
+                        message: 'Are you sure you want to restart the game? The deck will remain, but the game state will reset.',
+                        confirmLabel: 'Restart',
+                        type: 'warning'
+                      })) {
+                        socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
+                      }
+                    }}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
 
                 <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Your Life</div>
                 <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-700 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">
@@ -1477,7 +1627,6 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                 </div>
               </div>
 
-              {/* Mana Pool Display */}
               {/* Mana Pool Display */}
               <div className="w-full bg-slate-800/50 rounded-lg p-2 grid grid-cols-3 gap-x-1 gap-y-1 border border-white/5">
                 {['W', 'U', 'B', 'R', 'G', 'C'].map(color => {
@@ -1512,6 +1661,35 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
                 })}
               </div>
 
+              {/* I Lose Button - Shows when life is 0 or below */}
+              {(myPlayer?.life ?? 20) <= 0 && (
+                <button
+                  className="w-full mt-2 px-3 py-2 bg-red-700 hover:bg-red-600 border-2 border-red-500 rounded text-white text-xs font-bold uppercase tracking-wider transition-all animate-pulse"
+                  onClick={() => {
+                    socketService.socket.emit('game_strict_action', { action: { type: 'DECLARE_LOSS' } });
+                  }}
+                >
+                  I Lose (Life: {myPlayer?.life})
+                </button>
+              )}
+
+              {/* Surrender Button */}
+              <button
+                className="w-full mt-2 px-3 py-2 bg-red-900/30 hover:bg-red-700/50 border border-red-700 rounded text-red-400 hover:text-red-200 text-xs font-bold uppercase tracking-wider transition-all"
+                onClick={async () => {
+                  if (await confirm({
+                    title: 'Surrender?',
+                    message: 'Are you sure you want to concede this game?',
+                    confirmLabel: 'Surrender',
+                    type: 'warning'
+                  })) {
+                    socketService.socket.emit('game_strict_action', { action: { type: 'SURRENDER' } });
+                  }
+                }}
+              >
+                Surrender
+              </button>
+
             </div>
 
           </div>
@@ -1543,7 +1721,14 @@ export const GameView: React.FC<GameViewProps> = ({ gameState, currentPlayerId, 
             </div>
           ) : null}
         </DragOverlay>
+        {/* Debug Overlay - renders on top when debug mode is paused */}
+        {/* Debug panel is now in sidebar - no overlay needed */}
       </div>
     </DndContext>
   );
+};
+
+// GameView component - DebugProvider is now at GameRoom level
+export const GameView: React.FC<GameViewProps> = (props) => {
+  return <GameViewInner {...props} />;
 };

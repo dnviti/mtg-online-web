@@ -12,6 +12,8 @@ export interface ScryfallCardFace {
 export interface ScryfallCard {
   id: string;
   name: string;
+  local_path_full?: string;
+  local_path_crop?: string;
   rarity: string;
   set: string;
   set_name: string;

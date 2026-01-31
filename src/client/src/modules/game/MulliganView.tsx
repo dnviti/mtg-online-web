@@ -49,7 +49,7 @@ export const MulliganView: React.FC<MulliganViewProps> = ({ hand, mulliganCount,
           return (
             <div
               key={card.instanceId}
-              className={`relative transition-all duration-300 cursor-pointer ${isSelected ? 'translate-y-12 opacity-50 grayscale scale-90' : 'hover:-translate-y-4 hover:scale-105 hover:z-50'
+              className={`relative transition-all duration-300 cursor-pointer ${isSelected ? 'translate-y-12 opacity-50 grayscale scale-90' : 'hover:-translate-y-12 hover:scale-[1.75] hover:!z-[100]'
                 }`}
               style={{ zIndex: isSelected ? 0 : 10 + index }}
               onClick={() => mulliganCount > 0 && toggleSelection(card.instanceId)}

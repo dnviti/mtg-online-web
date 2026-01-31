@@ -1,597 +1,578 @@
-
-import { StrictGameState, PlayerState, CardObject } from '../game/types';
+import { StrictGameState } from '../game/types';
 import { RulesEngine } from '../game/RulesEngine';
-
+import { GameLifecycle } from './game/GameLifecycle';
+import { StateStoreManager } from './StateStoreManager';
+import { DebugManager } from '../game/engine/DebugManager';
+import { DebugPauseEvent, DebugStateEvent } from '../game/types/debug';
 import { EventEmitter } from 'events';
 
-// Augment EventEmitter to type the emit event if we could, but for now standard.
-// We expect SocketService to listen to 'game_update' from GameManager.
-
+/**
+ * GameManager - Manual Play Mode
+ *
+ * Manages game state and actions.
+ * All players handle their own actions manually.
+ */
 export class GameManager extends EventEmitter {
-  public games: Map<string, StrictGameState> = new Map();
 
-  // Helper to emit generic game notifications
-  public notify(roomId: string, message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', targetId?: string) {
-    this.emit('game_notification', roomId, { message, type, targetId });
+  private get store() {
+    const client = StateStoreManager.getInstance().store;
+    if (!client) throw new Error("State Store not initialized");
+    return client;
   }
 
-  createGame(gameId: string, players: { id: string; name: string; isBot?: boolean }[], format: string = 'standard'): StrictGameState {
+  // --- Redis Helpers ---
 
-    // Convert array to map
-    const playerRecord: Record<string, PlayerState> = {};
-    players.forEach(p => {
-      playerRecord[p.id] = {
-        id: p.id,
-        name: p.name,
-        isBot: p.isBot,
-        life: format === 'commander' ? 40 : 20,
-        poison: 0,
-        energy: 0,
-        isActive: false,
-        hasPassed: false,
-        manaPool: { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 }
-      };
-    });
+  private async getGameState(roomId: string): Promise<StrictGameState | null> {
+    const data = await this.store.get(`game:${roomId}`);
+    return data ? JSON.parse(data) : null;
+  }
 
-    const firstPlayerId = players.length > 0 ? players[0].id : '';
+  private async saveGameState(game: StrictGameState) {
+    await this.store.set(`game:${game.id}`, JSON.stringify(game));
+  }
 
-    const gameState: StrictGameState = {
-      roomId: gameId,
-      players: playerRecord,
-      cards: {}, // Populated later
-      stack: [],
-      format, // Store format
+  private async acquireLock(roomId: string): Promise<boolean> {
+    return this.store.acquireLock(`lock:game:${roomId}`, 5);
+  }
 
-      turnCount: 1,
+  private async releaseLock(roomId: string) {
+    await this.store.releaseLock(`lock:game:${roomId}`);
+  }
+
+  // --- Core Methods ---
+
+  async createGame(gameId: string, players: any[], format?: string, lobbyRoomId?: string): Promise<StrictGameState> {
+    const existingGame = await this.getGameState(gameId);
+    if (existingGame) {
+      console.warn(`[GameManager] Found existing game state for ${gameId}. Deleting old state.`);
+      await this.store.del(`game:${gameId}`);
+    }
+
+    const state: StrictGameState = {
+      id: gameId,
+      roomId: lobbyRoomId || gameId,
+      format,
+      players: {},
+      cards: {},
       turnOrder: players.map(p => p.id),
-      activePlayerId: firstPlayerId,
-      priorityPlayerId: firstPlayerId,
-
+      activePlayerId: players[0].id,
+      priorityPlayerId: players[0].id,
       phase: 'setup',
       step: 'mulligan',
-
+      turnCount: 1,
+      stack: [],
       passedPriorityCount: 0,
       landsPlayedThisTurn: 0,
-
-      maxZ: 100
+      attackersDeclared: false,
+      blockersDeclared: false,
+      maxZ: 100,
+      logs: []
     };
 
-    // Set First Player Active status
-    if (gameState.players[firstPlayerId]) {
-      gameState.players[firstPlayerId].isActive = true;
-    }
+    console.log(`[GameManager] Creating game ${gameId} with players: ${players.map(p => `${p.name} (${p.id})`).join(', ')}`);
 
-    this.games.set(gameId, gameState);
-    return gameState;
+    players.forEach(p => {
+      state.players[p.id] = { ...p, life: 20, poison: 0, manaPool: {}, handKept: false };
+    });
+
+    // Initialize debug session if DEV_MODE is enabled
+    DebugManager.initializeGameDebugSession(state);
+
+    await this.saveGameState(state);
+    return state;
   }
 
-  // Track rooms where a bot is currently "thinking" to avoid double-queuing
-  private thinkingRooms: Set<string> = new Set();
-  // Throttle logs
-  private lastBotLog: Record<string, number> = {};
-
-  // Helper to trigger bot actions if game is stuck or just started
-  public triggerBotCheck(roomId: string): StrictGameState | null {
-    const game = this.games.get(roomId);
-    if (!game) return null;
-
-    // specific hack for Mulligan phase synchronization
-    if (game.step === 'mulligan') {
-      Object.values(game.players).forEach(p => {
-        if (p.isBot && !p.handKept) {
-          const engine = new RulesEngine(game);
-          try { engine.resolveMulligan(p.id, true, []); } catch (e) { }
-        }
-      });
-      // If bots acted in mulligan, we might need to verify if game advances.
-      // But for Mulligan, we don't need delays as much because it's a hidden phase usually.
-      // Let's keep mulligan instant for simplicity, or we can delay it too?
-      // Let's keep instant for mulligan to "Start Game" faster.
-    }
-
-    const priorityId = game.priorityPlayerId;
-    const priorityPlayer = game.players[priorityId];
-
-    // If it is a Bot's turn to have priority, and we aren't already processing
-    if (priorityPlayer?.isBot && !this.thinkingRooms.has(roomId)) {
-      const now = Date.now();
-      if (!this.lastBotLog[roomId] || now - this.lastBotLog[roomId] > 5000) {
-        console.log(`[Bot Loop] Bot ${priorityPlayer.name} is thinking...`);
-        this.lastBotLog[roomId] = now;
-      }
-      this.thinkingRooms.add(roomId);
-
-      setTimeout(() => {
-        this.thinkingRooms.delete(roomId);
-        this.processBotActions(game);
-        // After processing one action, we trigger check again to see if we need to do more (e.g. Pass -> Pass -> My Turn)
-        // But we need to emit the update first! 
-        // processBotActions actually mutates state. 
-        // We should ideally emit 'game_update' here if we were outside the main socket loop.
-        // Since GameManager doesn't have the SocketService instance directly usually, 
-        // strictly speaking we need to rely on the caller to emit, OR GameManager should emit.
-        // GameManager extends EventEmitter. We can emit 'state_change'.
-        this.emit('game_update', roomId, game); // Force emit update
-
-        // Recursive check (will trigger next timeout if still bot's turn)
-        this.triggerBotCheck(roomId);
-      }, 1000);
-    }
-
-    return game;
-  }
-
-  getGame(roomId: string): StrictGameState | undefined {
-    return this.games.get(roomId);
-  }
-
-  // --- Strict Rules Action Handler ---
-  handleStrictAction(roomId: string, action: any, actorId: string): StrictGameState | null {
-    const game = this.games.get(roomId);
-    if (!game) return null;
-
-    const engine = new RulesEngine(game);
-
+  async startGame(roomId: string) {
+    if (!await this.acquireLock(roomId)) return null;
     try {
-      switch (action.type) {
-        case 'PASS_PRIORITY':
-          engine.passPriority(actorId);
-          break;
-        case 'TOGGLE_STOP':
-          engine.toggleStop(actorId);
-          break;
-        case 'PLAY_LAND':
-          engine.playLand(actorId, action.cardId, action.position, action.faceIndex);
-          break;
-        case 'ADD_MANA':
-          engine.addMana(actorId, action.mana); // action.mana = { color: 'R', amount: 1 }
-          break;
-        case 'CAST_SPELL':
-          const c = engine.state.cards[action.cardId];
-          console.log(`[DEBUG] CAST_SPELL: Name=${c?.name} DFC=${c?.isDoubleFaced} Faces=${(c as any)?.card_faces?.length} DefFaces=${(c.definition as any)?.card_faces?.length} FaceIdx=${action.faceIndex}`);
-          engine.castSpell(actorId, action.cardId, action.targets, action.position, action.faceIndex);
-          break;
-        case 'DECLARE_ATTACKERS':
-          try {
-            engine.declareAttackers(actorId, action.attackers);
-          } catch (err: any) {
-            console.error(`[DeclareAttackers Error] Actor: ${actorId}, Active: ${game.activePlayerId}, Priority: ${game.priorityPlayerId}, Step: ${game.step}`);
-            throw err; // Re-throw to catch block below
-          }
-          break;
-        case 'DECLARE_BLOCKERS':
-          engine.declareBlockers(actorId, action.blockers);
-          break;
-        case 'CREATE_TOKEN':
-          engine.createToken(actorId, action.definition, action.position);
-          break;
-        case 'MULLIGAN_DECISION':
-          engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);
-          break;
-        case 'DRAW_CARD':
-          // Strict validation: Must be Draw step, Must be Active Player
-          if (game.step !== 'draw') throw new Error("Can only draw in Draw Step.");
-          if (game.activePlayerId !== actorId) throw new Error("Only Active Player can draw.");
-
-          engine.drawCard(actorId);
-          // After drawing, 504.2 says AP gets priority.
-          engine.resetPriority(actorId);
-          break;
-        // TODO: Activate Ability
-        case 'ADD_COUNTER':
-          engine.addCounter(actorId, action.cardId, action.counterType, action.count || action.amount);
-          break;
-        default:
-          console.warn(`Unknown strict action: ${action.type}`);
-          return null;
-      }
-    } catch (e: any) {
-      console.error(`Rule Violation [${action?.type || 'UNKNOWN'}]: ${e.message}`);
-      // Notify the user (and others?) about the error
-      this.emit('game_error', roomId, { message: e.message, userId: actorId });
-      return null;
-    }
-
-    // Bot Cycle: Trigger Async Check (Instead of synchronous loop)
-    this.triggerBotCheck(roomId);
-
-    // Check Win Condition
-    this.checkWinCondition(game, roomId);
-
-    return game;
-  }
-
-  // Check if game is over
-  public checkWinCondition(game: StrictGameState, gameId: string) {
-    const alivePlayers = Object.values(game.players).filter(p => p.life > 0 && p.poison < 10);
-
-    // 1v1 Logic
-    if (alivePlayers.length === 1 && Object.keys(game.players).length > 1) {
-      // Winner found
-      const winner = alivePlayers[0];
-      // Only emit once
-      if (game.phase !== 'ending') {
-        console.log(`[GameManager] Game Over. Winner: ${winner.name}`);
-        this.emit('game_over', { gameId, winnerId: winner.id });
-        this.notify(gameId, `Game Over! ${winner.name} wins!`, 'success');
-        game.phase = 'ending'; // Mark as ending so we don't double emit
-      }
-    }
-  }
-
-  // --- Bot AI Logic ---
-  private processBotActions(game: StrictGameState) {
-    const engine = new RulesEngine(game);
-    const botId = game.priorityPlayerId;
-    const bot = game.players[botId];
-
-    if (!bot || !bot.isBot) return;
-
-    // 1. Mulligan: Always Keep (but check if we have cards?)
-    if (game.step === 'mulligan') {
-      const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
-      if (hand.length === 0 && !bot.handKept) {
-        // We have NO cards to keep? Something is wrong (deck didn't load?).
-        // Don't loop infinitely trying to keep an empty hand if that's invalid, 
-        // but technically "keeping" 0 cards is just accepting 0 cards.
-        // However, usually this means initialization failed.
-        // We'll log once and stop? Or just keep to unstuck the game?
-        // Let's try to keep.
-        // console.warn(`[Bot AI] ${bot.name} has 0 cards in hand during Mulligan. Initializing?`);
-      }
-      if (!bot.handKept) {
-        try { engine.resolveMulligan(botId, true, []); } catch (e) { }
-      }
-      return;
-    }
-
-    // 2. Play Land (Main Phase, empty stack)
-    if ((game.phase === 'main1' || game.phase === 'main2') && game.stack.length === 0) {
-      if (game.landsPlayedThisTurn < 1) {
-        const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
-        const land = hand.find(c => c.typeLine?.includes('Land') || c.types.includes('Land'));
-        if (land) {
-          console.log(`[Bot AI] ${bot.name} plays land ${land.name}`);
-          try {
-            engine.playLand(botId, land.instanceId);
-            return;
-          } catch (e) {
-            console.warn("Bot failed to play land:", e);
-          }
-        }
-      }
-    }
-
-    // 3. Play Spell (Main Phase, empty stack)
-    if ((game.phase === 'main1' || game.phase === 'main2') && game.stack.length === 0) {
-      const hand = Object.values(game.cards).filter(c => c.ownerId === botId && c.zone === 'hand');
-
-      // Filter candidates (non-lands)
-      const spells = hand.filter(c => !c.typeLine?.includes('Land') && !c.types.includes('Land'));
-
-      // Sort by CMC descending (Try to play biggest threat first)
-      // Note: c.manaCost might be string, need parsing or use c.cmc if available. 
-      // For now, heuristic: just try all of them.
-
-      for (const spell of spells) {
-        // Only cast creatures for now to be safe with targets
-        if (spell.types.includes('Creature')) {
-          try {
-            console.log(`[Bot AI] ${bot.name} attempting to cast ${spell.name}`);
-            engine.castSpell(botId, spell.instanceId, []);
-            // If successful, return immediately (Action taken)
-            return;
-          } catch (e: any) {
-            // Failed (likely mana). Continue to next card.
-            // console.warn(`[Bot AI] Failed to cast ${spell.name}: ${e.message}`);
-          }
-        }
-      }
-    }
-
-    // 4. Combat: Declare Attackers (Active Player only)
-    if (game.step === 'declare_attackers' && game.activePlayerId === botId && !game.attackersDeclared) {
-      const attackers = Object.values(game.cards).filter(c =>
-        c.controllerId === botId &&
-        c.zone === 'battlefield' &&
-        c.types.includes('Creature') &&
-        !c.tapped &&
-        !c.keywords.includes('Defender') // Simple check
-      );
-
-      const opponents = game.turnOrder.filter(pid => pid !== botId);
-      const targetId = opponents[0];
-
-      // Simple Heuristic: Attack with everything if we have profitable attacks?
-      // For now: Attack with everything that isn't summon sick or defender.
-      if (attackers.length > 0 && targetId) {
-        // Randomly decide to attack to simulate "thinking" or non-suicidal behavior? 
-        // For MVP: Aggro Bot - always attacks.
-        const declaration = attackers.map(c => ({ attackerId: c.instanceId, targetId }));
-        console.log(`[Bot AI] ${bot.name} attacks with ${attackers.length} creatures.`);
-        try {
-          engine.declareAttackers(botId, declaration);
-        } catch (e) {
-          console.warn(`[Bot AI] Attack failed: ${e}. Fallback to Skip Combat.`);
-          try { engine.declareAttackers(botId, []); } catch (e2) { }
-        }
-        return;
-      } else {
-        console.log(`[Bot AI] ${bot.name} skips combat.`);
-        try { engine.declareAttackers(botId, []); } catch (e) { }
-        return;
-      }
-    }
-
-    // 5. Combat: Declare Blockers (Defending Player)
-    if (game.step === 'declare_blockers' && game.activePlayerId !== botId && !game.blockersDeclared) {
-      // Identify attackers attacking ME
-      const attackers = Object.values(game.cards).filter(c => c.attacking === botId);
-
-      if (attackers.length > 0) {
-        // Identify my blockers
-        const blockers = Object.values(game.cards).filter(c =>
-          c.controllerId === botId &&
-          c.zone === 'battlefield' &&
-          c.types.includes('Creature') &&
-          !c.tapped
-        );
-
-        // Simple Heuristic: Block 1-to-1 if possible, just to stop damage.
-        // Don't double block.
-        const declaration: { blockerId: string, attackerId: string }[] = [];
-
-        blockers.forEach((blocker, idx) => {
-          if (idx < attackers.length) {
-            declaration.push({ blockerId: blocker.instanceId, attackerId: attackers[idx].instanceId });
-          }
-        });
-
-        if (declaration.length > 0) {
-          console.log(`[Bot AI] ${bot.name} declares ${declaration.length} blockers.`);
-          try { engine.declareBlockers(botId, declaration); } catch (e) { }
-          return;
-        }
-      }
-
-      // Default: No blocks
-      console.log(`[Bot AI] ${bot.name} declares no blockers.`);
-      try { engine.declareBlockers(botId, []); } catch (e) { }
-      return;
-    }
-
-    // 6. End Step / Cleanup -> Pass
-    if (game.phase === 'ending') {
-      try { engine.passPriority(botId); } catch (e) { }
-      return;
-    }
-
-    // 7. Default: Pass Priority (Catch-all for response windows, or empty stack)
-    // Add artificial delay logic here? Use setTimeout? 
-    // We can't easily wait in this synchronous loop. The loop relies on state updating.
-    // If we want delay, we should likely return from the loop and use `setTimeout` to call `triggerBotCheck` again?
-    // But `handleStrictAction` expects immediate return.
-    // Ideally, the BOT actions should happen asynchronously if we want delay.
-    // For now, we accept instant-speed bots.
-
-    // console.log(`[Bot AI] ${bot.name} passes priority.`);
-    try { engine.passPriority(botId); } catch (e) {
-      console.warn("Bot failed to pass priority", e);
-      // Force break loop if we are stuck?
-      // RulesEngine.passPriority usually always succeeds if it's your turn.
-    }
-  }
-
-
-  // --- Legacy Sandbox Action Handler (for Admin/Testing) ---
-  handleAction(roomId: string, action: any, actorId: string): StrictGameState | null {
-    const game = this.games.get(roomId);
-    if (!game) return null;
-
-    // Basic Validation: Ensure actor exists in game (or is host/admin?)
-    if (!game.players[actorId]) {
-      console.warn(`handleAction: Player ${actorId} not found in room ${roomId}`);
-      return null;
-    }
-
-    console.log(`[GameManager] Handling Action: ${action.type} for ${roomId} by ${actorId}`);
-
-    try {
-      switch (action.type) {
-        case 'UPDATE_LIFE':
-          if (game.players[actorId]) {
-            game.players[actorId].life += (action.amount || 0);
-          }
-          break;
-        case 'MOVE_CARD':
-          this.moveCard(game, action, actorId);
-          break;
-        case 'TAP_CARD':
-          this.tapCard(game, action, actorId);
-          break;
-        case 'DRAW_CARD':
-          const engine = new RulesEngine(game);
-          engine.drawCard(actorId);
-          break;
-        case 'RESTART_GAME':
-          this.restartGame(roomId);
-          break;
-        case 'ADD_COUNTER':
-          const engineForCounter = new RulesEngine(game);
-          engineForCounter.addCounter(actorId, action.cardId, action.counterType, action.count || action.amount);
-          break;
-      }
-    } catch (e: any) {
-      console.error(`Legacy Action Error [${action?.type}]: ${e.message}`);
-      this.emit('game_error', roomId, { message: e.message, userId: actorId });
-      return null;
-    }
-
-    return game;
-  }
-
-  // ... Legacy methods refactored to use StrictGameState types ...
-
-  private moveCard(game: StrictGameState, action: any, actorId: string) {
-    const card = game.cards[action.cardId];
-    if (card) {
-      if (card.controllerId !== actorId) return;
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
 
       const engine = new RulesEngine(game);
-      // Use the engine method which handles cleanup (counters, modifiers, P/T reset)
-      engine.moveCardToZone(action.cardId, action.toZone, false, action.position);
+      engine.startGame();
+
+      await this.saveGameState(game);
+      return game;
+    } finally {
+      await this.releaseLock(roomId);
     }
   }
 
-  private tapCard(game: StrictGameState, action: any, actorId: string) {
-    const card = game.cards[action.cardId];
-    if (card && card.controllerId === actorId) {
-      const wuzUntapped = !card.tapped;
-      card.tapped = !card.tapped;
+  async getGame(gameId: string): Promise<StrictGameState | null> {
+    return this.getGameState(gameId);
+  }
 
-      // Auto-Add Mana for Basic Lands if we just tapped it
-      // Auto-Add Mana for Lands (Universal Support)
-      if (wuzUntapped && card.tapped) {
-        const engine = new RulesEngine(game);
-        // Use shared logic to find production capability
-        const colors = engine.getAvailableManaColors(card);
+  /**
+   * Delete game state from Redis
+   */
+  async deleteGame(gameId: string): Promise<boolean> {
+    console.log(`[GameManager] Deleting game state for ${gameId}`);
+    await this.store.del(`game:${gameId}`);
+    return true;
+  }
 
-        if (colors.length > 0) {
-          // Heuristic: If multiple colors (e.g. Command Tower), just return the first one for manual tap.
-          // This is a QoL feature. Ideally, UI asks user. But for speed, default is better than nothing.
-          engine.addMana(actorId, { color: colors[0], amount: 1 });
+  // --- Facade Methods ---
+
+  async addCardToGame(roomId: string, cardData: any) {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
+
+      const card = GameLifecycle.addCardToGame(game, cardData);
+
+      await this.saveGameState(game);
+      return card;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Cache tokens for a game
+   */
+  async cacheTokensForGame(roomId: string, setCode: string, tokens: any[]) {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
+
+      game.setCode = setCode;
+      game.cachedTokens = tokens;
+
+      await this.saveGameState(game);
+      console.log(`[GameManager] Cached ${tokens.length} tokens for game ${roomId} (set: ${setCode})`);
+      return game;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async restartGame(roomId: string) {
+    if (!await this.acquireLock(roomId)) return null;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) return null;
+
+      GameLifecycle.restartGame(game);
+
+      await this.saveGameState(game);
+      return game;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  async handleAction(roomId: string, action: any, actorId: string) {
+    return this.handleStrictAction(roomId, action, actorId);
+  }
+
+  /**
+   * Handle player action.
+   */
+  async handleStrictAction(
+    roomId: string,
+    action: any,
+    actorId: string,
+    skipDebugPause: boolean = false
+  ): Promise<StrictGameState | { debugPause: DebugPauseEvent } | null> {
+    console.log(`[GameManager] Handling action: ${action.type} for room ${roomId} by ${actorId}`);
+    if (!await this.acquireLock(roomId)) {
+      console.warn(`[GameManager] Failed to acquire lock for ${roomId}`);
+      return null;
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) {
+        console.warn(`[GameManager] Game state not found for room ${roomId}`);
+        return null;
+      }
+
+      // Check for debug mode pause
+      if (!skipDebugPause && DebugManager.isEnabled(roomId)) {
+        const pauseEvent = DebugManager.createSnapshot(game, action, actorId);
+        if (pauseEvent) {
+          console.log(`[GameManager] Debug pause: ${pauseEvent.description}`);
+          return { debugPause: pauseEvent };
         }
       }
+
+      game.pendingLogs = [];
+
+      const engine = new RulesEngine(game);
+      console.log(`[GameManager] Current Phase: ${game.phase}, Step: ${game.step}`);
+
+      try {
+        const normalizedType = action.type.toLowerCase();
+        switch (normalizedType) {
+          case 'pass_priority':
+            engine.passPriority(actorId);
+            break;
+          case 'play_land':
+            engine.playLand(actorId, action.cardId);
+            break;
+          case 'cast_spell':
+            engine.castSpell(actorId, action.cardId, action.targets);
+            break;
+          case 'declare_attackers':
+            engine.declareAttackers(actorId, action.attackers);
+            break;
+          case 'declare_blockers':
+            engine.declareBlockers(actorId, action.blockers);
+            break;
+          case 'shuffle_library':
+            engine.shuffleLibrary(actorId);
+            break;
+          case 'resolve_mulligan':
+          case 'mulligan_decision':
+            console.log(`[GameManager] Resolving mulligan for ${actorId}. Keep: ${action.keep}`);
+            engine.resolveMulligan(actorId, action.keep, action.cardsToBottom);
+            break;
+          case 'create_token':
+            engine.createToken(actorId, action.definition, action.position);
+            break;
+          case 'add_mana':
+            const manaData = action.mana || { color: action.color, amount: action.amount || 1 };
+            engine.addMana(actorId, { color: manaData.color, amount: manaData.amount });
+            break;
+          case 'tap_card':
+            engine.tapCard(actorId, action.cardId);
+            break;
+          case 'activate_ability':
+            engine.activateAbility(actorId, action.sourceId, action.abilityIndex, action.targets);
+            break;
+          case 'add_trigger':
+            // Manual trigger placement for manual play mode
+            engine.addTriggerToStack(actorId, action.sourceId, action.triggerName, action.triggerText, action.targets);
+            break;
+          case 'toggle_stop':
+            if (game.players[actorId]) {
+              game.players[actorId].stopRequested = !game.players[actorId].stopRequested;
+              console.log(`[GameManager] Player ${actorId} stopRequested: ${game.players[actorId].stopRequested}`);
+            }
+            break;
+          case 'draw_card':
+            engine.drawCard(actorId);
+            break;
+          case 'change_life':
+          case 'life_change':
+          case 'update_life':
+            engine.changeLife(actorId, action.amount);
+            break;
+          case 'move_card':
+            engine.moveCardToZone(action.cardId, action.toZone, action.faceDown ?? false, action.position, action.faceIndex);
+            break;
+          case 'flip_card':
+            const cardToFlip = game.cards[action.cardId];
+            if (cardToFlip && cardToFlip.zone === 'battlefield') {
+              cardToFlip.faceDown = !cardToFlip.faceDown;
+              console.log(`[GameManager] ${cardToFlip.name} flipped ${cardToFlip.faceDown ? 'face down' : 'face up'}`);
+            }
+            break;
+          case 'add_counter':
+            engine.addCounter(actorId, action.cardId, action.counterType, action.amount || 1);
+            break;
+          case 'remove_counter':
+            engine.addCounter(actorId, action.cardId, action.counterType, -(action.amount || 1));
+            break;
+          case 'delete_card':
+            const cardToDelete = game.cards[action.cardId];
+            if (cardToDelete && cardToDelete.isToken) {
+              delete game.cards[action.cardId];
+              console.log(`[GameManager] Token ${cardToDelete.name} deleted by ${actorId}`);
+            } else {
+              console.warn(`[GameManager] Cannot delete non-token card: ${action.cardId}`);
+            }
+            break;
+          case 'restart_game':
+            GameLifecycle.restartGame(game);
+            break;
+          case 'surrender':
+            const surrenderingPlayer = game.players[actorId];
+            if (surrenderingPlayer) {
+              surrenderingPlayer.life = 0;
+              console.log(`[GameManager] Player ${actorId} (${surrenderingPlayer.name}) surrendered`);
+
+              const remainingPlayersAfterSurrender = Object.values(game.players).filter(p => p.life > 0);
+              if (remainingPlayersAfterSurrender.length <= 1) {
+                game.gameOver = true;
+                game.winnerId = remainingPlayersAfterSurrender[0]?.id;
+                game.winnerName = remainingPlayersAfterSurrender[0]?.name;
+                game.endReason = 'surrender';
+                game.gameEndedAt = Date.now();
+                console.log(`[GameManager] Game over! Winner: ${game.winnerName}`);
+              }
+            }
+            break;
+          case 'declare_loss':
+            const losingPlayer = game.players[actorId];
+            if (losingPlayer) {
+              console.log(`[GameManager] Player ${actorId} (${losingPlayer.name}) declared loss`);
+
+              const remainingPlayersAfterLoss = Object.values(game.players).filter(p => p.id !== actorId && p.life > 0);
+              game.gameOver = true;
+              if (remainingPlayersAfterLoss.length === 1) {
+                game.winnerId = remainingPlayersAfterLoss[0].id;
+                game.winnerName = remainingPlayersAfterLoss[0].name;
+              } else if (remainingPlayersAfterLoss.length === 0) {
+                // Draw scenario - no winner
+                game.endReason = 'draw';
+              }
+              game.endReason = game.endReason || 'life_loss';
+              game.gameEndedAt = Date.now();
+              console.log(`[GameManager] Game over! Winner: ${game.winnerName || 'Draw'}`);
+            }
+            break;
+          case 'modify_card':
+            const cardToModify = game.cards[action.cardId];
+            if (!cardToModify || cardToModify.zone !== 'battlefield') {
+              console.warn(`[GameManager] Cannot modify card: ${action.cardId}`);
+              break;
+            }
+
+            if (!cardToModify.modifiers) cardToModify.modifiers = [];
+            const mod = action.modification;
+
+            if (mod.type === 'clear_all') {
+              cardToModify.modifiers = [];
+              cardToModify.power = cardToModify.basePower;
+              cardToModify.toughness = cardToModify.baseToughness;
+              cardToModify.keywords = cardToModify.definition?.keywords || [];
+              console.log(`[GameManager] Cleared all modifications from ${cardToModify.name}`);
+            } else if (mod.type === 'pt_boost') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'pt_boost',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              cardToModify.power = (cardToModify.power ?? 0) + mod.value.power;
+              cardToModify.toughness = (cardToModify.toughness ?? 0) + mod.value.toughness;
+              console.log(`[GameManager] ${cardToModify.name} got ${mod.value.power >= 0 ? '+' : ''}${mod.value.power}/${mod.value.toughness >= 0 ? '+' : ''}${mod.value.toughness}`);
+            } else if (mod.type === 'ability_grant') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'ability_grant',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              if (!cardToModify.keywords) cardToModify.keywords = [];
+              if (!cardToModify.keywords.includes(mod.value)) {
+                cardToModify.keywords.push(mod.value);
+              }
+              console.log(`[GameManager] ${cardToModify.name} gained ${mod.value}`);
+            } else if (mod.type === 'type_change') {
+              cardToModify.modifiers.push({
+                sourceId: 'manual',
+                type: 'type_change',
+                value: mod.value,
+                untilEndOfTurn: action.untilEndOfTurn ?? true
+              });
+              if (mod.value.addTypes) {
+                cardToModify.types = [...new Set([...(cardToModify.types || []), ...mod.value.addTypes])];
+              }
+              if (mod.value.basePT) {
+                cardToModify.basePower = mod.value.basePT.power;
+                cardToModify.baseToughness = mod.value.basePT.toughness;
+                cardToModify.power = mod.value.basePT.power;
+                cardToModify.toughness = mod.value.basePT.toughness;
+              }
+              console.log(`[GameManager] ${cardToModify.name} type changed to: ${cardToModify.types?.join(', ')}`);
+            } else if (mod.type === 'remove_type_change') {
+              // Remove type_change modifiers and restore original types
+              cardToModify.modifiers = cardToModify.modifiers.filter((m: any) => m.type !== 'type_change');
+
+              // Restore original types from definition
+              const originalTypes = cardToModify.definition?.type_line?.split('—')[0].trim().split(' ').filter(Boolean) || [];
+              cardToModify.types = originalTypes;
+
+              // Remove P/T if card wasn't originally a creature
+              const wasCreature = originalTypes.some((t: string) => t.toLowerCase() === 'creature');
+              if (!wasCreature) {
+                delete (cardToModify as any).power;
+                delete (cardToModify as any).toughness;
+                delete (cardToModify as any).basePower;
+                delete (cardToModify as any).baseToughness;
+              }
+              console.log(`[GameManager] ${cardToModify.name} type restored to: ${cardToModify.types?.join(', ')}`);
+            }
+            break;
+          default:
+            console.warn(`[GameManager] Unknown action type: ${normalizedType}`);
+        }
+
+        await this.saveGameState(game);
+        return game;
+
+      } catch (e) {
+        console.error(`[GameManager] Error executing action:`, e);
+        return null;
+      }
+    } finally {
+      await this.releaseLock(roomId);
     }
   }
 
-  // Helper to add cards (e.g. at game start)
-  addCardToGame(roomId: string, cardData: Partial<CardObject>) {
-    const game = this.games.get(roomId);
-    if (!game) return;
+  // ============================================
+  // DEBUG MODE METHODS
+  // ============================================
 
-    // @ts-ignore - aligning types roughly
-    const cardDataAny = cardData as any;
-    const card: CardObject = {
-      instanceId: cardData.instanceId || Math.random().toString(36).substring(7),
-      zone: cardDataAny.isCommander ? 'command' : 'library',
-      tapped: false,
-      faceDown: true,
-      counters: [],
-      keywords: [], // Default empty
-      modifiers: [],
-      colors: [],
-      types: [],
-      subtypes: [],
-      supertypes: [],
-      power: 0,
-      toughness: 0,
-      basePower: 0,
-      baseToughness: 0,
-      imageUrl: cardData.imageUrl || '',
-      controllerId: '',
-      ownerId: '',
-      oracleId: '',
-      scryfallId: cardData.scryfallId || '',
-      setCode: cardData.setCode || '',
-      name: '',
-      ...cardData,
-      isDoubleFaced: ((cardData.definition as any)?.card_faces?.length || 0) > 1 || (cardData.name || '').includes('//'),
-      damageMarked: 0,
-      controlledSinceTurn: 0, // Will be updated on draw/play
-      definition: cardData.definition // Ensure definition is passed
-    };
-
-    // Auto-Parse Types if missing
-    if (card.types.length === 0 && card.typeLine) {
-      const [typePart, subtypePart] = card.typeLine.split('—').map(s => s.trim());
-      const typeWords = typePart.split(' ');
-
-      const supertypeList = ['Legendary', 'Basic', 'Snow', 'World'];
-      const typeList = ['Land', 'Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Instant', 'Sorcery', 'Tribal', 'Battle', 'Kindred']; // Kindred = Tribal
-
-      card.supertypes = typeWords.filter(w => supertypeList.includes(w));
-      card.types = typeWords.filter(w => typeList.includes(w));
-
-      if (subtypePart) {
-        card.subtypes = subtypePart.split(' ');
-      }
+  /**
+   * Continue execution after a debug pause.
+   */
+  async handleDebugContinue(roomId: string, snapshotId: string): Promise<{
+    state: StrictGameState;
+  } | null> {
+    const pendingAction = DebugManager.continueExecution(roomId, snapshotId);
+    if (!pendingAction) {
+      console.warn(`[GameManager] No pending action to continue for snapshot ${snapshotId}`);
+      return null;
     }
 
-    // Auto-Parse P/T from cardData if provided specifically as strings or numbers, ensuring numbers
-    if (cardData.power !== undefined) card.basePower = Number(cardData.power);
-    if (cardData.toughness !== undefined) card.baseToughness = Number(cardData.toughness);
+    const result = await this.handleStrictAction(roomId, pendingAction.action, pendingAction.actorId, true);
 
-    // Set current values to base
-    card.power = card.basePower;
-    card.toughness = card.baseToughness;
+    if (!result) {
+      console.warn(`[GameManager] Action execution failed for snapshot ${snapshotId}`);
+      return null;
+    }
 
-    game.cards[card.instanceId] = card;
+    if ('debugPause' in result) {
+      const currentState = await this.getGame(roomId);
+      if (currentState) {
+        DebugManager.commitSnapshot(roomId, snapshotId, currentState);
+        return { state: currentState };
+      }
+      return null;
+    }
+
+    DebugManager.commitSnapshot(roomId, snapshotId, result);
+    return { state: result };
   }
 
-  private restartGame(roomId: string) {
-    const game = this.games.get(roomId);
-    if (!game) return;
+  /**
+   * Cancel a pending debug action.
+   */
+  async handleDebugCancel(roomId: string, snapshotId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
 
-    // 1. Reset Game Global State
-    game.turnCount = 1;
-    game.phase = 'setup';
-    game.step = 'mulligan';
-    game.stack = [];
-    game.activePlayerId = game.turnOrder[0];
-    game.priorityPlayerId = game.activePlayerId;
-    game.passedPriorityCount = 0;
-    game.landsPlayedThisTurn = 0;
-    game.attackersDeclared = false;
-    game.blockersDeclared = false;
-    game.maxZ = 100;
-
-    // 2. Reset Players
-    Object.keys(game.players).forEach(pid => {
-      const p = game.players[pid];
-      p.life = 20;
-      p.poison = 0;
-      p.energy = 0;
-      p.isActive = (pid === game.activePlayerId);
-      p.hasPassed = false;
-      p.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-      p.handKept = false;
-      p.mulliganCount = 0;
-    });
-
-    // 3. Reset Cards
-    const tokensToRemove: string[] = [];
-    Object.values(game.cards).forEach(c => {
-      if (c.oracleId.startsWith('token-')) {
-        tokensToRemove.push(c.instanceId);
-      } else {
-        // Move to Library
-        c.zone = 'library';
-        c.tapped = false;
-        c.faceDown = true;
-        c.counters = [];
-        c.modifiers = [];
-        c.damageMarked = 0;
-        c.controlledSinceTurn = 0;
-        c.power = c.basePower;
-        c.toughness = c.baseToughness;
-        c.attachedTo = undefined;
-        c.blocking = undefined;
-        c.attacking = undefined;
-        // Reset position?
-        c.position = undefined;
+    try {
+      const game = await this.getGameState(roomId);
+      if (!game) {
+        return null;
       }
-    });
 
-    // Remove tokens
-    tokensToRemove.forEach(id => {
-      delete game.cards[id];
-    });
+      const debugState = DebugManager.cancelAction(roomId, snapshotId, game);
+      if (!debugState) {
+        return null;
+      }
 
-    console.log(`Game ${roomId} restarted.`);
+      await this.saveGameState(game);
+      return { state: game, debugState };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
 
-    // 4. Trigger Start Game (Draw Hands via Rules Engine)
-    const engine = new RulesEngine(game);
-    engine.startGame();
+  /**
+   * Undo the last executed action.
+   */
+  async handleDebugUndo(roomId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    const undoResult = DebugManager.undo(roomId);
+    if (!undoResult) {
+      return null;
+    }
+
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
+
+    try {
+      await this.saveGameState(undoResult.restoredState);
+      return { state: undoResult.restoredState, debugState: undoResult.event };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Redo an undone action.
+   */
+  async handleDebugRedo(roomId: string): Promise<{ state: StrictGameState; debugState: DebugStateEvent } | null> {
+    const redoResult = DebugManager.redo(roomId);
+    if (!redoResult) {
+      return null;
+    }
+
+    if (!await this.acquireLock(roomId)) {
+      return null;
+    }
+
+    try {
+      await this.saveGameState(redoResult.restoredState);
+      return { state: redoResult.restoredState, debugState: redoResult.event };
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Toggle debug mode for a game.
+   */
+  async handleDebugToggle(roomId: string, enabled: boolean): Promise<DebugStateEvent> {
+    if (!await this.acquireLock(roomId)) {
+      return DebugManager.toggleDebugMode(roomId, enabled);
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      const debugState = DebugManager.toggleDebugMode(roomId, enabled, game || undefined);
+
+      if (game) {
+        await this.saveGameState(game);
+      }
+
+      return debugState;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Clear debug history for a game.
+   */
+  async handleDebugClearHistory(roomId: string): Promise<DebugStateEvent> {
+    if (!await this.acquireLock(roomId)) {
+      return DebugManager.clearHistory(roomId);
+    }
+
+    try {
+      const game = await this.getGameState(roomId);
+      const debugState = DebugManager.clearHistory(roomId, game || undefined);
+
+      if (game) {
+        await this.saveGameState(game);
+      }
+
+      return debugState;
+    } finally {
+      await this.releaseLock(roomId);
+    }
+  }
+
+  /**
+   * Get current debug state for a game.
+   */
+  getDebugState(roomId: string): DebugStateEvent {
+    return DebugManager.getDebugState(roomId);
+  }
+
+  /**
+   * Check if debug mode is paused for a game.
+   */
+  isDebugPaused(roomId: string): boolean {
+    return DebugManager.isPaused(roomId);
   }
 }
