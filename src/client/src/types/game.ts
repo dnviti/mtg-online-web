@@ -66,6 +66,12 @@ export interface CardInstance {
   keywords?: string[];
   card_faces?: any[];
   isToken?: boolean; // Tokens can be deleted and cease to exist when leaving battlefield
+  modifiers?: {
+    sourceId: string;
+    type: 'pt_boost' | 'set_pt' | 'ability_grant' | 'type_change';
+    value: any;
+    untilEndOfTurn: boolean;
+  }[];
 }
 
 export interface PlayerState {

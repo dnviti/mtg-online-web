@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { ManaIcon } from './ManaIcon';
-import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye } from 'lucide-react';
+import { Feather, Shield, Gem, Skull, Zap, Droplet, Flame, Eye, Wind, Footprints, Heart, Crosshair, ShieldOff, EyeOff, Swords, SwordIcon, AlertTriangle } from 'lucide-react';
 
 // Union type to support both Game cards and Draft cards
 // Union type to support both Game cards and Draft cards
@@ -34,6 +34,12 @@ export type VisualCard = {
   type_line?: string;
   oracleText?: string;
   oracle_text?: string;
+  modifiers?: {
+    sourceId: string;
+    type: 'pt_boost' | 'set_pt' | 'ability_grant' | 'type_change';
+    value: any;
+    untilEndOfTurn: boolean;
+  }[];
   [key: string]: any; // Allow other properties loosely
 };
 
@@ -200,20 +206,6 @@ export const CardVisual: React.FC<CardVisualProps> = ({
                 ? card.definition.card_faces[card.activeFaceIndex].name
                 : card.name}
             </span>
-            {(() => {
-              // Resolve Mana Cost
-              const faceIndex = card.activeFaceIndex || 0;
-              const faces = card.definition?.card_faces || card.card_faces;
-              const activeCost = (faces && faces[faceIndex]) ? faces[faceIndex].mana_cost : (card.mana_cost || card.manaCost);
-
-              if (!activeCost) return null;
-
-              return (
-                <span className="text-[10px] text-slate-200 font-serif tracking-tighter opacity-90 drop-shadow-md" style={{ textShadow: '0 1px 2px black' }}>
-                  {activeCost.replace(/[{}]/g, '')}
-                </span>
-              );
-            })()}
           </div>
 
           {/* Bottom Overlays based on Type */}
@@ -247,9 +239,18 @@ export const CardVisual: React.FC<CardVisualProps> = ({
 
           {/* Summoning Sickness Overlay */}
           {(() => {
-            const hasHaste = card.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'haste') ||
-              card.oracleText?.toLowerCase().includes('haste');
+            const hasKeyword = (keyword: string) => {
+              const kw = keyword.toLowerCase();
+              // Check card.keywords array
+              if (card.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              // Check definition.keywords
+              if (card.definition?.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              // Check modifiers for granted abilities
+              if (card.modifiers?.some((m: any) => m.type === 'ability_grant' && String(m.value).toLowerCase() === kw)) return true;
+              return false;
+            };
+
+            const hasHaste = hasKeyword('haste');
 
             const isSick = isCreature &&
               currentTurn !== undefined &&
@@ -265,23 +266,52 @@ export const CardVisual: React.FC<CardVisualProps> = ({
                 </div>
               );
             }
-
-            // Flying Icon
-            const hasFlying = card.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
-              card.definition?.keywords?.some((k: string) => k.toLowerCase() === 'flying') ||
-              card.oracleText?.toLowerCase().includes('flying');
-
-            if (hasFlying && isCreature) {
-              return (
-                <div className="absolute top-10 left-1 z-20 pointer-events-none">
-                  <div className="bg-slate-900/80 rounded-full w-6 h-6 flex items-center justify-center border border-slate-600 shadow-md text-sky-300">
-                    <Feather size={14} strokeWidth={2.5} />
-                  </div>
-                </div>
-              );
-            }
-
             return null;
+          })()}
+
+          {/* Keyword Ability Icons */}
+          {(() => {
+            const hasKeyword = (keyword: string) => {
+              const kw = keyword.toLowerCase();
+              if (card.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              if (card.definition?.keywords?.some((k: string) => k.toLowerCase() === kw)) return true;
+              if (card.modifiers?.some((m: any) => m.type === 'ability_grant' && String(m.value).toLowerCase() === kw)) return true;
+              return false;
+            };
+
+            // Define keyword icons with their styling
+            const keywordIcons: { keyword: string; icon: React.ReactNode; color: string; title: string }[] = [
+              { keyword: 'flying', icon: <Feather size={12} strokeWidth={2.5} />, color: 'text-sky-300', title: 'Flying' },
+              { keyword: 'haste', icon: <Wind size={12} strokeWidth={2.5} />, color: 'text-orange-400', title: 'Haste' },
+              { keyword: 'trample', icon: <Footprints size={12} strokeWidth={2.5} />, color: 'text-green-400', title: 'Trample' },
+              { keyword: 'lifelink', icon: <Heart size={12} strokeWidth={2.5} />, color: 'text-pink-300', title: 'Lifelink' },
+              { keyword: 'deathtouch', icon: <Skull size={12} strokeWidth={2.5} />, color: 'text-lime-400', title: 'Deathtouch' },
+              { keyword: 'indestructible', icon: <Shield size={12} strokeWidth={2.5} />, color: 'text-amber-300', title: 'Indestructible' },
+              { keyword: 'hexproof', icon: <EyeOff size={12} strokeWidth={2.5} />, color: 'text-teal-300', title: 'Hexproof' },
+              { keyword: 'first strike', icon: <SwordIcon size={12} strokeWidth={2.5} />, color: 'text-red-400', title: 'First Strike' },
+              { keyword: 'double strike', icon: <Swords size={12} strokeWidth={2.5} />, color: 'text-red-300', title: 'Double Strike' },
+              { keyword: 'vigilance', icon: <Eye size={12} strokeWidth={2.5} />, color: 'text-yellow-300', title: 'Vigilance' },
+              { keyword: 'menace', icon: <AlertTriangle size={12} strokeWidth={2.5} />, color: 'text-purple-400', title: 'Menace' },
+              { keyword: 'reach', icon: <Crosshair size={12} strokeWidth={2.5} />, color: 'text-emerald-400', title: 'Reach' },
+            ];
+
+            const activeKeywords = keywordIcons.filter(ki => hasKeyword(ki.keyword));
+
+            if (activeKeywords.length === 0) return null;
+
+            return (
+              <div className="absolute top-6 left-1 z-20 pointer-events-none grid grid-cols-4 gap-0.5 max-w-[88px]">
+                {activeKeywords.slice(0, 8).map((ki) => (
+                  <div
+                    key={ki.keyword}
+                    className={`bg-slate-900/80 rounded-full w-5 h-5 flex items-center justify-center border border-slate-600 shadow-md ${ki.color}`}
+                    title={ki.title}
+                  >
+                    {ki.icon}
+                  </div>
+                ))}
+              </div>
+            );
           })()}
 
           {/* Inner Border/Frame for definition */}

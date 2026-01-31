@@ -153,6 +153,24 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
                   <MenuItem label="First Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'First strike' }, untilEndOfTurn: true })} />
                   <MenuItem label="Double Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Double strike' }, untilEndOfTurn: true })} />
                   <MenuItem label="Vigilance" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Vigilance' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Menace" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Menace' }, untilEndOfTurn: true })} />
+                  <MenuItem label="Reach" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Reach' }, untilEndOfTurn: true })} />
+
+                  <div className="px-3 py-1 font-bold text-xs text-emerald-400 uppercase tracking-widest border-b border-slate-800 mt-2 mb-1">
+                    Grant Abilities (Permanent)
+                  </div>
+                  <MenuItem label="Flying" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Flying' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Haste" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Haste' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Trample" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Trample' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Lifelink" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Lifelink' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Deathtouch" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Deathtouch' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Indestructible" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Indestructible' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Hexproof" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Hexproof' }, untilEndOfTurn: false })} />
+                  <MenuItem label="First Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'First strike' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Double Strike" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Double strike' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Vigilance" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Vigilance' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Menace" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Menace' }, untilEndOfTurn: false })} />
+                  <MenuItem label="Reach" onClick={() => handleAction('MODIFY_CARD', { cardId: card.instanceId, modification: { type: 'ability_grant', value: 'Reach' }, untilEndOfTurn: false })} />
 
                   <div className="h-px bg-slate-800 my-1 mx-2"></div>
                   <MenuItem
