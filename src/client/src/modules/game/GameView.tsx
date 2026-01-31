@@ -963,20 +963,47 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
                           }}
                         >
                           {(() => {
-                            // Organize Opponent Cards
-                            const oppLands = oppBattlefield.filter(c =>
+                            // Organize Opponent Cards - separate face-down cards
+                            const oppFaceDown = oppBattlefield.filter(c => c.faceDown);
+                            const oppFaceUp = oppBattlefield.filter(c => !c.faceDown);
+
+                            const oppLands = oppFaceUp.filter(c =>
                               (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
                               !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
                             );
-                            const oppCreatures = oppBattlefield.filter(c =>
+                            const oppCreatures = oppFaceUp.filter(c =>
                               !(c.types?.includes('Land') || c.typeLine?.includes('Land')) ||
                               (c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
                             );
 
                             return (
                               <div className="w-full h-full flex flex-col justify-between pt-4 pb-4">
-                                {/* Back Row: Lands (Top - Far Side) */}
+                                {/* Back Row: Lands + Face-Down Cards (Top - Far Side) */}
                                 <div className="flex justify-end items-start gap-2 pr-8 opacity-90 scale-90 origin-top-right">
+                                  {/* Opponent's Face-Down Cards - Left of lands */}
+                                  {oppFaceDown.length > 0 && (
+                                    <div className="flex gap-2 items-start mr-4 pr-4 border-r border-slate-700/50">
+                                      {oppFaceDown.map(card => (
+                                        <div
+                                          key={card.instanceId}
+                                          className="relative transition-all duration-300 pointer-events-auto"
+                                        >
+                                          <CardComponent
+                                            card={card}
+                                            viewMode="cutout"
+                                            style={{}}
+                                            onClick={() => { }}
+                                            onContextMenu={() => { }}
+                                            onDragStart={() => { }}
+                                            onDragEnd={() => { }}
+                                            onMouseEnter={() => { }} // Don't show preview for opponent's face-down cards
+                                            onMouseLeave={() => { }}
+                                            className="w-24 h-24 rounded shadow-sm opacity-80"
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                   {(() => {
                                     const oppLandGroups = oppLands.reduce((acc, card) => {
                                       const key = card.name || 'Unknown Land';
@@ -1103,12 +1130,16 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
                       const attachments = myBattlefield.filter(c => c.attachedTo);
                       const unattached = myBattlefield.filter(c => !c.attachedTo);
 
-                      const creatures = unattached.filter(c => c.types?.includes('Creature') || c.typeLine?.includes('Creature'));
-                      const allLands = unattached.filter(c =>
+                      // Separate face-down cards first
+                      const faceDownCards = unattached.filter(c => c.faceDown);
+                      const faceUpUnattached = unattached.filter(c => !c.faceDown);
+
+                      const creatures = faceUpUnattached.filter(c => c.types?.includes('Creature') || c.typeLine?.includes('Creature'));
+                      const allLands = faceUpUnattached.filter(c =>
                         (c.types?.includes('Land') || c.typeLine?.includes('Land')) &&
                         !(c.types?.includes('Creature') || c.typeLine?.includes('Creature'))
                       );
-                      const others = unattached.filter(c =>
+                      const others = faceUpUnattached.filter(c =>
                         !(c.types?.includes('Creature') || c.typeLine?.includes('Creature')) &&
                         !(c.types?.includes('Land') || c.typeLine?.includes('Land'))
                       );
@@ -1325,6 +1356,35 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
                                 ))}
                               </div>
                             ))}
+
+                            {/* Face-Down Cards Section - Bottom Left */}
+                            {faceDownCards.length > 0 && (
+                              <div className="ml-4 pl-4 border-l border-slate-700/50 flex flex-wrap gap-2 items-start">
+                                {faceDownCards.map(card => (
+                                  <DraggableCardWrapper key={card.instanceId} card={card} disabled={!hasPriority}>
+                                    <CardComponent
+                                      card={card}
+                                      viewMode="cutout"
+                                      currentTurn={gameState.turnCount ?? gameState.turn}
+                                      onDragStart={() => { }}
+                                      onClick={(id) => {
+                                        if (!hasPriority) return;
+                                        toggleTap(id);
+                                      }}
+                                      onContextMenu={(id, e) => handleContextMenu(e, 'card', id)}
+                                      onMouseEnter={() => {
+                                        // Show face-up preview for owner's face-down cards
+                                        setHoveredCard({ ...card, faceDown: false });
+                                      }}
+                                      onMouseLeave={() => setHoveredCard(null)}
+                                      className="w-24 h-24 rounded shadow-sm"
+                                      isDebugHighlighted={highlightedCardIds.has(card.instanceId) || sourceCardId === card.instanceId}
+                                      debugHighlightType={sourceCardId === card.instanceId ? 'source' : 'affected'}
+                                    />
+                                  </DraggableCardWrapper>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </>
                       );
