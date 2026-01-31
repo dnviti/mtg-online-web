@@ -152,6 +152,15 @@ if (cluster.isPrimary) {
 
   app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
+  // Dynamic ads.txt for AdSense verification (loaded from env var to keep ID private in open source)
+  app.get('/ads.txt', (_req: Request, res: Response) => {
+    const adsTxtContent = process.env.ADSENSE_ADS_TXT;
+    if (!adsTxtContent) {
+      return res.status(404).send('# ads.txt not configured - set ADSENSE_ADS_TXT in .env');
+    }
+    res.type('text/plain').send(adsTxtContent);
+  });
+
   // API Routes
   app.use('/api', apiRoutes);
 
