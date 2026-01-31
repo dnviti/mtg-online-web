@@ -249,8 +249,8 @@ export class ActionHandler {
 
   /**
    * Resolves the top item on the stack.
-   * In manual mode, permanents go to battlefield, instants/sorceries go to graveyard.
-   * All effects must be applied manually by players.
+   * All cards go to battlefield after resolution - players manage zones manually.
+   * Instants/sorceries stay on battlefield until players move them to graveyard/exile.
    */
   static resolveTopStack(state: StrictGameState) {
     const item = state.stack.pop();
@@ -307,9 +307,9 @@ export class ActionHandler {
             }
           }
         } else {
-          // Instant/sorcery - goes to graveyard after "resolving"
-          // Players apply effects manually
-          this.moveCardToZone(state, card.instanceId, 'graveyard');
+          // Instant/sorcery - goes to battlefield for manual handling
+          // Players move to graveyard/exile manually after applying effects
+          this.moveCardToZone(state, card.instanceId, 'battlefield', false, item.resolutionPosition);
         }
       }
     } else if (item.type === 'ability') {

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ChevronRight, Zap } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { CardInstance } from '../../types/game';
 
 export interface ContextMenuRequest {
@@ -9,50 +9,6 @@ export interface ContextMenuRequest {
   targetId?: string; // cardId or zoneName
   card?: CardInstance;
   zone?: string; // 'library', 'graveyard', 'exile', 'hand'
-}
-
-// Simple ability parser for client-side display
-interface ParsedAbility {
-  index: number;
-  costText: string;
-  effectText: string;
-  isManaAbility: boolean;
-}
-
-function parseActivatedAbilities(oracleText: string): ParsedAbility[] {
-  if (!oracleText) return [];
-
-  const abilities: ParsedAbility[] = [];
-  const paragraphs = oracleText.split(/\n\n|\n(?=[•\-])/);
-
-  let index = 0;
-  for (const paragraph of paragraphs) {
-    const trimmed = paragraph.trim().replace(/^[•\-]\s*/, '');
-    if (!trimmed) continue;
-
-    // Check for activated ability: [Cost]: [Effect]
-    const activatedMatch = trimmed.match(/^(.+?):\s*(.+)$/s);
-    if (activatedMatch) {
-      const costText = activatedMatch[1].trim();
-      const effectText = activatedMatch[2].trim();
-
-      // Check if it looks like a cost (has mana symbols, tap, sacrifice, etc.)
-      const looksLikeCost = /\{[WUBRGCXTQ\d]+\}|^tap$|^sacrifice\b|^discard\b|^pay\s+\d+\s+life/i.test(costText);
-
-      if (looksLikeCost || costText.length < 50) {
-        const isManaAbility = /add\s+(\{[WUBRGC]\}|one mana|mana)/i.test(effectText) && !/target/i.test(effectText);
-
-        abilities.push({
-          index: index++,
-          costText,
-          effectText: effectText.substring(0, 60) + (effectText.length > 60 ? '...' : ''),
-          isManaAbility
-        });
-      }
-    }
-  }
-
-  return abilities;
 }
 
 interface GameContextMenuProps {
@@ -136,44 +92,6 @@ export const GameContextMenu: React.FC<GameContextMenuProps> = ({ request, onClo
           <>
             <MenuItem label="Tap / Untap" onClick={() => handleAction('TAP_CARD', { cardId: card.instanceId })} />
             <MenuItem label={card.faceDown ? "Flip Face Up" : "Flip Face Down"} onClick={() => handleAction('FLIP_CARD', { cardId: card.instanceId })} />
-
-            {/* Activated Abilities */}
-            {(() => {
-              const abilities = parseActivatedAbilities(card.oracleText || '');
-              if (abilities.length > 0) {
-                return (
-                  <div className="relative group">
-                    <MenuItem label="Activate Ability" hasSubmenu />
-                    <div className="absolute left-full top-0 pl-1 hidden group-hover:block z-50 w-64">
-                      <div className="bg-slate-900 border border-slate-700 rounded shadow-lg max-h-80 overflow-y-auto">
-                        <div className="px-3 py-1 font-bold text-xs text-amber-500 uppercase tracking-widest border-b border-slate-800 mb-1 flex items-center gap-1">
-                          <Zap size={12} />
-                          Abilities
-                        </div>
-                        {abilities.map((ability) => (
-                          <div
-                            key={ability.index}
-                            className="px-3 py-2 hover:bg-amber-600/20 hover:text-amber-300 cursor-pointer transition-colors border-b border-slate-800/50 last:border-0"
-                            onClick={() => handleAction('ACTIVATE_ABILITY', {
-                              sourceId: card.instanceId,
-                              abilityIndex: ability.index,
-                              targets: []
-                            })}
-                          >
-                            <div className="text-xs text-amber-400 font-mono mb-1">{ability.costText}</div>
-                            <div className="text-xs text-slate-300">{ability.effectText}</div>
-                            {ability.isManaAbility && (
-                              <div className="text-[10px] text-emerald-400 mt-1">Mana Ability (instant)</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
 
             <div className="relative group">
               <MenuItem label="Add Counter" hasSubmenu />
