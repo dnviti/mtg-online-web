@@ -44,6 +44,13 @@ export class GameLifecycle {
     game.pendingLogs = [];
     game.maxZ = 100;
 
+    // Reset game-over state
+    game.gameOver = false;
+    game.winnerId = undefined;
+    game.winnerName = undefined;
+    game.endReason = undefined;
+    game.gameEndedAt = undefined;
+
     // Reset players
     Object.values(game.players).forEach((p, index) => {
       p.life = 20;

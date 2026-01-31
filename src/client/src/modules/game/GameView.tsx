@@ -70,7 +70,7 @@ interface GameViewProps {
 
 const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, format, logHoveredCard }) => {
   const hasPriority = gameState.priorityPlayerId === currentPlayerId;
-  const { highlightedCardIds, sourceCardId } = useDebug();
+  const { highlightedCardIds, sourceCardId, debugEnabled } = useDebug();
   // Assuming useGameSocket is a custom hook that provides game state and player info
   // This line was added based on the provided snippet, assuming it's part of the intended context.
   // If useGameSocket is not defined elsewhere, this will cause an error.
@@ -1588,22 +1588,24 @@ const GameViewInner: React.FC<GameViewProps> = ({ gameState, currentPlayerId, fo
             {/* Right Controls: Exile / Life */}
             <div className="w-52 p-2 flex flex-col gap-2 items-center justify-between border-l border-white/10 py-2">
               <div className="text-center w-full relative">
-                <button
-                  className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
-                  title="Restart Game (Dev)"
-                  onClick={async () => {
-                    if (await confirm({
-                      title: 'Restart Game?',
-                      message: 'Are you sure you want to restart the game? The deck will remain, but the game state will reset.',
-                      confirmLabel: 'Restart',
-                      type: 'warning'
-                    })) {
-                      socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
-                    }
-                  }}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
+                {debugEnabled && (
+                  <button
+                    className="absolute top-0 right-0 p-1 text-slate-600 hover:text-white transition-colors"
+                    title="Restart Game (Dev)"
+                    onClick={async () => {
+                      if (await confirm({
+                        title: 'Restart Game?',
+                        message: 'Are you sure you want to restart the game? The deck will remain, but the game state will reset.',
+                        confirmLabel: 'Restart',
+                        type: 'warning'
+                      })) {
+                        socketService.socket.emit('game_action', { action: { type: 'RESTART_GAME' } });
+                      }
+                    }}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
 
                 <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Your Life</div>
                 <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-b from-emerald-400 to-emerald-700 drop-shadow-[0_2px_10px_rgba(16,185,129,0.3)]">
