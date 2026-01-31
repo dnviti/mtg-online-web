@@ -102,7 +102,7 @@ export const registerTournamentHandlers = (io: Server, socket: Socket) => {
             await gameManager.createGame(matchId, [
               { id: p1.id, name: p1.name },
               { id: p2.id, name: p2.name }
-            ]);
+            ], undefined, room.id);
 
             const d1 = deck1 && deck1.length > 0 ? deck1 : (p1.deck || []);
             const d2 = deck2 && deck2.length > 0 ? deck2 : (p2.deck || []);

@@ -68,12 +68,13 @@ export const useGameSocket = (): GameSocketHook => {
         // CRITICAL: Validate that this game update is for the current room
         // This prevents game state from old rooms bleeding into new rooms
         const currentRoomId = activeRoomIdRef.current;
+        console.log('[useGameSocket] game_update received. Game ID:', game.id, 'Game roomId:', game.roomId, 'Current roomId:', currentRoomId);
         if (currentRoomId && game.roomId && game.roomId !== currentRoomId) {
           console.warn(`[useGameSocket] Ignoring game_update for different room. Current: ${currentRoomId}, Received: ${game.roomId}`);
           return;
         }
 
-        console.log('[useGameSocket] Game Update Received', game.turnCount, game.phase, game.step);
+        console.log('[useGameSocket] Game Update Accepted', game.turnCount, game.phase, game.step);
         setGameState(game);
       } else {
         console.warn('[useGameSocket] Received invalid game update', arg1, arg2);

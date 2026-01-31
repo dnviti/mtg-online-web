@@ -18,7 +18,8 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg'],
         devOptions: {
-          enabled: true
+          enabled: true,
+          suppressWarnings: true
         },
         manifest: {
           name: 'MTGate',

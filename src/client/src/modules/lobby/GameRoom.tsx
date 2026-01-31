@@ -280,7 +280,8 @@ const GameRoomContent: React.FC<GameRoomProps> = ({ currentPlayerId, onExit }) =
     socket.on('tournament_update', handleTournamentUpdate);
     socket.on('tournament_finished', handleTournamentFinished);
 
-    socket.on('match_start', () => {
+    socket.on('match_start', (data: any) => {
+      console.log('[GameRoom] match_start received', data);
       setPreparingMatchId(null);
     });
 

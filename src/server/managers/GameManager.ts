@@ -28,7 +28,7 @@ export class GameManager extends EventEmitter {
   }
 
   private async saveGameState(game: StrictGameState) {
-    await this.store.set(`game:${game.roomId}`, JSON.stringify(game));
+    await this.store.set(`game:${game.id}`, JSON.stringify(game));
   }
 
   private async acquireLock(roomId: string): Promise<boolean> {
@@ -41,7 +41,7 @@ export class GameManager extends EventEmitter {
 
   // --- Core Methods ---
 
-  async createGame(gameId: string, players: any[], format?: string): Promise<StrictGameState> {
+  async createGame(gameId: string, players: any[], format?: string, lobbyRoomId?: string): Promise<StrictGameState> {
     const existingGame = await this.getGameState(gameId);
     if (existingGame) {
       console.warn(`[GameManager] Found existing game state for ${gameId}. Deleting old state.`);
@@ -50,7 +50,7 @@ export class GameManager extends EventEmitter {
 
     const state: StrictGameState = {
       id: gameId,
-      roomId: gameId,
+      roomId: lobbyRoomId || gameId,
       format,
       players: {},
       cards: {},
